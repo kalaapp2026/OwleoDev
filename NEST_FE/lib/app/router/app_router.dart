@@ -5,6 +5,7 @@ import 'package:nest_fe/core/auth/session_controller.dart';
 import 'package:nest_fe/core/auth/session_state.dart';
 import 'package:nest_fe/core/widgets/owleo_wordmark.dart';
 import 'package:nest_fe/features/academy/presentation/academy_info_screen.dart';
+import 'package:nest_fe/features/academy/presentation/academy_onboarding_screen.dart';
 import 'package:nest_fe/features/attendance/presentation/attendance_screen.dart';
 import 'package:nest_fe/features/auth/presentation/login_screen.dart';
 import 'package:nest_fe/features/curriculum/presentation/course_management_screen.dart';
@@ -39,6 +40,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/erp/events/new', builder: (context, state) => const EventCreateScreen()),
       GoRoute(path: '/erp/syllabus', builder: (context, state) => const SyllabusScreen()),
       GoRoute(path: '/erp/academy', builder: (context, state) => const AcademyInfoScreen()),
+      GoRoute(path: '/erp/academies/new', builder: (context, state) => const AcademyOnboardingScreen()),
       GoRoute(path: '/erp/scheduling', builder: (context, state) => const SchedulingScreen()),
       GoRoute(path: '/erp/scheduling/reschedule', builder: (context, state) => const RescheduleScreen()),
       GoRoute(path: '/erp/attendance', builder: (context, state) => const AttendanceScreen()),

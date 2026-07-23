@@ -1,4 +1,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Flutter's template only declares INTERNET in the debug/profile manifests (for hot reload),
+         NOT here in main - so RELEASE builds ship with no network access at all and every API call
+         fails instantly with "could not reach the server". Declared here so release APKs can talk
+         to the backend too. -->
+    <uses-permission android:name="android.permission.INTERNET"/>
     <application
         android:label="nest_fe"
         android:name="${applicationName}"

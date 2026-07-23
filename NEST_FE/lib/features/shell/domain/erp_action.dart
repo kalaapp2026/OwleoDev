@@ -9,6 +9,7 @@ class ErpAction {
   final int? erpTabIndex;
   final String? requiredFeature;
   final bool adminOnly;
+  final bool superAdminOnly;
 
   const ErpAction({
     required this.icon,
@@ -17,12 +18,21 @@ class ErpAction {
     this.erpTabIndex,
     this.requiredFeature,
     this.adminOnly = false,
+    this.superAdminOnly = false,
   });
 
   bool visibleFor(UserProfile user) {
-    if (adminOnly) return user.isSuperAdmin || user.isActiveAcademyAdmin;
+    // Cross-tenant platform actions (academy onboarding) - only a Super Admin, who has no academy
+    // membership of their own, ever sees these.
+    if (superAdminOnly) return user.isSuperAdmin;
+
+    // Everything else operates INSIDE one academy the caller belongs to. A Super Admin has no such
+    // membership, so none of these apply to them - showing them would just surface tiles that fail
+    // the moment they're tapped (no active academy to scope the request to).
+    if (user.isSuperAdmin) return false;
+    if (adminOnly) return user.isActiveAcademyAdmin;
     if (requiredFeature == null) return true;
-    return user.isSuperAdmin || user.isActiveAcademyAdmin || user.hasFeature(requiredFeature!);
+    return user.isActiveAcademyAdmin || user.hasFeature(requiredFeature!);
   }
 }
 
@@ -30,6 +40,7 @@ class ErpAction {
 /// tile grid and the More bottom sheet render from this same list, so they can never drift.
 /// PRD 3.1: the ERP home screen only ever shows tiles the caller's role+feature grants allow.
 const kErpActions = <ErpAction>[
+  ErpAction(icon: Icons.add_business_outlined, label: 'Academy Onboarding', route: '/erp/academies/new', superAdminOnly: true),
   ErpAction(icon: Icons.celebration_outlined, label: 'Event Creation', route: '/erp/events/new', requiredFeature: FeatureKeys.eventManagement),
   // No requiredFeature - every Student/Trainer/Admin can open this to read/download; the screen
   // itself gates create/edit/delete on SYLLABUS_EDIT internally (see SyllabusScreen's canEdit).
