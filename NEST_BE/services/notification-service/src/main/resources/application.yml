@@ -1,0 +1,21 @@
+server:
+  port: 8090
+
+spring:
+  application:
+    name: notification-service
+
+nest:
+  jwt:
+    secret: ${NEST_JWT_SECRET:dev-only-change-me-dev-only-change-me-32b}
+    issuer: nest
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info

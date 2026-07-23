@@ -1,0 +1,51 @@
+server:
+  port: 8081
+
+spring:
+  application:
+    name: identity-service
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5433}/${DB_NAME:nest_identity}
+    username: ${DB_USER:nest}
+    password: ${DB_PASSWORD:nest}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    properties:
+      hibernate:
+        format_sql: false
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+
+nest:
+  jwt:
+    secret: ${NEST_JWT_SECRET:dev-only-change-me-dev-only-change-me-32b}
+    issuer: nest
+    access-token-expiry-minutes: 15
+    refresh-token-expiry-days: 30
+  crypto:
+    key: ${NEST_CRYPTO_KEY:ZGV2LW9ubHktY2hhbmdlLW1lLTMyLWJ5dGVzLWtleSE=}
+    hmac-key: ${NEST_CRYPTO_HMAC_KEY:ZGV2LW9ubHktaG1hYy1rZXktZGV2LW9ubHktMzJieQ==}
+  internal-api:
+    key: ${NEST_INTERNAL_API_KEY:dev-only-internal-key-change-me}
+    header-name: X-Internal-Api-Key
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+logging:
+  level:
+    com.nest: INFO

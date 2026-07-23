@@ -1,0 +1,54 @@
+name: nest_fe
+description: "Owleo Nest - Academy ERP + Social"
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.12.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  cupertino_icons: ^1.0.8
+
+  # State management
+  flutter_riverpod: ^2.6.1
+
+  # Navigation - URL-based, works the same on web and mobile
+  go_router: ^14.6.2
+
+  # Networking
+  dio: ^5.7.0
+
+  # Secure token storage (Keychain/Keystore on mobile, localStorage on web)
+  flutter_secure_storage: ^9.2.2
+
+  intl: ^0.19.0
+  fl_chart: ^0.69.2
+
+  # Profile picture picker (works on web + Android + iOS with the same API)
+  image_picker: ^1.1.2
+
+  # In-app audio playback for stream-only course-material songs
+  audioplayers: ^6.1.0
+
+  # General file picker (PDF/image material attachments, audio song uploads) - image_picker only
+  # covers photos/videos from the gallery, not arbitrary file types like PDFs or MP3s.
+  file_picker: ^11.0.2
+
+  # Opens PDFs/images/downloadable songs (browser handles preview/download) - works on web + Android + iOS
+  url_launcher: ^6.3.1
+
+  # Saves/shares generated files (the fees CSV report download) - one API for web's Save As and
+  # Android's native share sheet, no manual per-platform branching.
+  share_plus: ^10.1.4
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true

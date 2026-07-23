@@ -1,0 +1,116 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:nest_fe/app/theme/theme_controller.dart';
+import 'package:nest_fe/core/auth/session_controller.dart';
+import 'package:nest_fe/core/widgets/app_notice.dart';
+
+class ProfileScreen extends ConsumerWidget {
+  const ProfileScreen({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final user = ref.watch(sessionControllerProvider).user;
+    final themeMode = ref.watch(themeModeProvider);
+    final colorScheme = Theme.of(context).colorScheme;
+
+    if (user == null) return const SizedBox.shrink();
+
+    return ListView(
+      padding: const EdgeInsets.all(20),
+      children: [
+        Center(
+          child: CircleAvatar(
+            radius: 40,
+            backgroundColor: colorScheme.primary.withValues(alpha: 0.15),
+            child: Text(
+              user.fullName.isNotEmpty ? user.fullName[0].toUpperCase() : '?',
+              style: TextStyle(fontSize: 28, fontWeight: FontWeight.w700, color: colorScheme.primary),
+            ),
+          ),
+        ),
+        const SizedBox(height: 14),
+        Center(child: Text(user.fullName, style: Theme.of(context).textTheme.titleLarge)),
+        Center(
+          child: Text('@${user.username}',
+              style: TextStyle(color: colorScheme.onSurface.withValues(alpha: 0.55), fontSize: 13)),
+        ),
+        const SizedBox(height: 6),
+        Center(
+          child: Chip(
+            label: Text(user.role.replaceAll('_', ' ')),
+            visualDensity: VisualDensity.compact,
+          ),
+        ),
+        const SizedBox(height: 28),
+
+        if (user.memberships.isNotEmpty) ...[
+          const _SectionLabel('Academy memberships'),
+          ...user.memberships.map((m) => Card(
+                child: ListTile(
+                  leading: const Icon(Icons.account_balance_outlined),
+                  title: Text(m.academyName ?? m.academyId),
+                  subtitle: Text('${m.roleType.replaceAll('_', ' ')} · ${m.status}'),
+                  trailing: m.membershipId == user.activeMembershipId
+                      ? Icon(Icons.check_circle, color: colorScheme.primary, size: 20)
+                      : null,
+                  onTap: () => ref.read(sessionControllerProvider.notifier).switchActiveMembership(m.membershipId),
+                ),
+              )),
+          const SizedBox(height: 20),
+        ],
+
+        const _SectionLabel('Appearance'),
+        Card(
+          child: RadioGroup<ThemeMode>(
+            groupValue: themeMode,
+            onChanged: (m) => ref.read(themeModeProvider.notifier).setThemeMode(m!),
+            child: const Column(
+              children: [
+                RadioListTile<ThemeMode>(title: Text('System'), value: ThemeMode.system),
+                RadioListTile<ThemeMode>(title: Text('Light'), value: ThemeMode.light),
+                RadioListTile<ThemeMode>(title: Text('Dark'), value: ThemeMode.dark),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 28),
+
+        OutlinedButton.icon(
+          onPressed: () async {
+            final confirmed = await AppNotice.confirm(
+              context,
+              title: 'Log out',
+              message: "You'll need to log in again to continue.",
+              confirmLabel: 'Log out',
+            );
+            if (confirmed) await ref.read(sessionControllerProvider.notifier).logout();
+          },
+          icon: Icon(Icons.logout, color: colorScheme.error),
+          label: Text('Log out', style: TextStyle(color: colorScheme.error)),
+          style: OutlinedButton.styleFrom(side: BorderSide(color: colorScheme.error.withValues(alpha: 0.4))),
+        ),
+      ],
+    );
+  }
+}
+
+class _SectionLabel extends StatelessWidget {
+  const _SectionLabel(this.text);
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8, top: 4),
+      child: Text(
+        text.toUpperCase(),
+        style: TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 0.6,
+          color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5),
+        ),
+      ),
+    );
+  }
+}

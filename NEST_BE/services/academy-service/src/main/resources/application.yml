@@ -1,0 +1,38 @@
+server:
+  port: 8082
+
+spring:
+  application:
+    name: academy-service
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5433}/${DB_NAME:nest_academy}
+    username: ${DB_USER:nest}
+    password: ${DB_PASSWORD:nest}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+
+nest:
+  jwt:
+    secret: ${NEST_JWT_SECRET:dev-only-change-me-dev-only-change-me-32b}
+    issuer: nest
+  internal-api:
+    key: ${NEST_INTERNAL_API_KEY:dev-only-internal-key-change-me}
+    header-name: X-Internal-Api-Key
+  services:
+    identity:
+      base-url: http://${IDENTITY_SERVICE_HOST:localhost}:${IDENTITY_SERVICE_PORT:8081}
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info

@@ -1,0 +1,21 @@
+server:
+  port: 8086
+
+spring:
+  application:
+    name: attendance-service
+
+nest:
+  jwt:
+    secret: ${NEST_JWT_SECRET:dev-only-change-me-dev-only-change-me-32b}
+    issuer: nest
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
