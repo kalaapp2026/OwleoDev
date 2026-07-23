@@ -94,5 +94,14 @@
 
     <build>
         <finalName>nest-monolith</finalName>
+        <plugins>
+            <!-- Not needed for `mvn spring-boot:run` (dev loop all session), but `mvn package`
+                 without this only produces a thin jar with no dependencies and no main-class
+                 manifest - the Dockerfile's `java -jar app.jar` needs the repackaged fat jar. -->
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+            </plugin>
+        </plugins>
     </build>
 </project>
