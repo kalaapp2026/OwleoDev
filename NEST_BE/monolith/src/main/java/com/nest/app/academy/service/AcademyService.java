@@ -74,6 +74,13 @@ public class AcademyService {
                 .orElseThrow(() -> new ResourceNotFoundException("Academy not found: " + id));
     }
 
+    /** Super Admin's full tenant list - backs both the broadcast console's academy picker and the
+     * suspend/reactivate management screen. Includes SUSPENDED academies (that's the whole point). */
+    @Transactional(readOnly = true)
+    public java.util.List<AcademyResponse> listAll() {
+        return academyRepository.findAll().stream().map(this::toResponse).toList();
+    }
+
     @Transactional
     @Auditable(action = "ACADEMY_STATUS_CHANGED", entityType = "academy")
     public AcademyResponse setStatus(UUID id, AcademyStatus status) {

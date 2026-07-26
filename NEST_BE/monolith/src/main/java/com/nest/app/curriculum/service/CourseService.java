@@ -101,6 +101,7 @@ public class CourseService {
             throw new ForbiddenException("That membership does not belong to the active academy");
         }
         Set<UUID> courseIds = courseMapRepository.findByMembershipId(membershipId).stream()
+                .filter(cm -> cm.isActive())
                 .map(cm -> cm.getCourseId()).collect(Collectors.toSet());
         return courseRepository.findAllById(courseIds).stream().map(this::toResponse).collect(Collectors.toList());
     }

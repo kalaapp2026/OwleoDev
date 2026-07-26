@@ -16,6 +16,10 @@ public interface AcademyMembershipRepository extends JpaRepository<AcademyMember
 
     Optional<AcademyMembership> findByUserIdAndAcademyId(UUID userId, UUID academyId);
 
+    /** Every membership in an academy - the Super Admin broadcast console's "notify one academy"
+     * audience resolves to the distinct user ids behind these rows. */
+    List<AcademyMembership> findByAcademyId(UUID academyId);
+
     boolean existsByUserIdAndAcademyIdAndStatusNot(UUID userId, UUID academyId, MembershipStatus status);
 
     /** The batch trainer-picker's "Academy Admin is also a trainer" source - an Admin isn't ever

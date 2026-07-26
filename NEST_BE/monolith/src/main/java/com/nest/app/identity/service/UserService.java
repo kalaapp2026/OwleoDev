@@ -1,6 +1,7 @@
 package com.nest.app.identity.service;
 
 import com.nest.app.identity.dto.UserProfileResponse;
+import com.nest.app.identity.dto.UserSearchResult;
 import com.nest.app.identity.entity.ThemePreference;
 import com.nest.app.identity.entity.User;
 import com.nest.app.identity.repository.RefreshTokenRepository;
@@ -10,13 +11,16 @@ import com.nest.common.audit.Auditable;
 import com.nest.common.exception.BadRequestException;
 import com.nest.common.exception.ResourceNotFoundException;
 import com.nest.common.security.TenantContext;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 public class UserService {
@@ -37,6 +41,20 @@ public class UserService {
         this.tempPasswordGenerator = tempPasswordGenerator;
         this.refreshTokenRepository = refreshTokenRepository;
         this.fileStorageService = fileStorageService;
+    }
+
+    /** Social "Search" tab - up to 20 matches, name/photo only (no PII). Blank/short queries
+     * return nothing rather than the whole user table. */
+    @Transactional(readOnly = true)
+    public List<UserSearchResult> search(String query) {
+        String q = query == null ? "" : query.trim();
+        if (q.length() < 2) {
+            return List.of();
+        }
+        return userRepository.findByUsernameContainingIgnoreCaseOrFullNameContainingIgnoreCase(q, q, PageRequest.of(0, 20))
+                .stream()
+                .map(u -> new UserSearchResult(u.getId(), u.getUsername(), u.getFullName(), u.getProfileImageUrl()))
+                .collect(Collectors.toList());
     }
 
     @Transactional(readOnly = true)

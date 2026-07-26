@@ -73,6 +73,11 @@ public class User {
     private String city;
     private String state;
 
+    /** Trainer-specific; null for every other role - lives on the shared table anyway (same
+     * pattern as dob/address/city/state, which are Student-specific and equally optional here). */
+    @Column(name = "years_of_experience")
+    private Integer yearsOfExperience;
+
     /** Relative URL under the static upload serving path (e.g. "/uploads/profile-images/xyz.jpg") -
      * null means no photo was ever uploaded, in which case the UI falls back to the first letter
      * of {@link #fullName}. */

@@ -12,6 +12,7 @@ import com.nest.app.identity.entity.AcademyMembership;
 import com.nest.app.identity.entity.User;
 import com.nest.app.identity.repository.AcademyMembershipRepository;
 import com.nest.app.identity.repository.UserRepository;
+import com.nest.app.identity.service.CourseFeatureGuard;
 import com.nest.app.scheduling.entity.ClassInstanceStatus;
 import com.nest.app.scheduling.repository.ClassInstanceRepository;
 import com.nest.app.scheduling.repository.ScheduleRepository;
@@ -19,6 +20,7 @@ import com.nest.common.audit.Auditable;
 import com.nest.common.exception.ConflictException;
 import com.nest.common.exception.ForbiddenException;
 import com.nest.common.exception.ResourceNotFoundException;
+import com.nest.common.security.FeatureKey;
 import com.nest.common.security.TenantContext;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -41,21 +43,26 @@ public class BatchService {
     private final UserRepository userRepository;
     private final ScheduleRepository scheduleRepository;
     private final ClassInstanceRepository classInstanceRepository;
+    private final CourseFeatureGuard courseFeatureGuard;
 
     public BatchService(BatchRepository batchRepository, BatchMemberRepository batchMemberRepository,
                          AcademyMembershipRepository membershipRepository, UserRepository userRepository,
-                         ScheduleRepository scheduleRepository, ClassInstanceRepository classInstanceRepository) {
+                         ScheduleRepository scheduleRepository, ClassInstanceRepository classInstanceRepository,
+                         CourseFeatureGuard courseFeatureGuard) {
         this.batchRepository = batchRepository;
         this.batchMemberRepository = batchMemberRepository;
         this.membershipRepository = membershipRepository;
         this.userRepository = userRepository;
         this.scheduleRepository = scheduleRepository;
         this.classInstanceRepository = classInstanceRepository;
+        this.courseFeatureGuard = courseFeatureGuard;
     }
 
     @Transactional
     @Auditable(action = "BATCH_CREATED", entityType = "batch")
     public BatchResponse create(CreateBatchRequest request) {
+        // Per-course enforcement: a Trainer must hold BATCH_CREATION on THIS course (Admins bypass).
+        courseFeatureGuard.assertCourseFeature(request.courseId(), FeatureKey.BATCH_CREATION);
         Batch batch = Batch.builder()
                 .courseId(request.courseId())
                 .name(request.name())

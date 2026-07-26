@@ -45,6 +45,8 @@ class BatchServiceTest {
     private ScheduleRepository scheduleRepository;
     @Mock
     private ClassInstanceRepository classInstanceRepository;
+    @Mock
+    private com.nest.app.identity.service.CourseFeatureGuard courseFeatureGuard;
 
     private BatchService batchService;
 
@@ -54,7 +56,7 @@ class BatchServiceTest {
     @BeforeEach
     void setUp() {
         batchService = new BatchService(batchRepository, batchMemberRepository, membershipRepository, userRepository,
-                scheduleRepository, classInstanceRepository);
+                scheduleRepository, classInstanceRepository, courseFeatureGuard);
     }
 
     @Test

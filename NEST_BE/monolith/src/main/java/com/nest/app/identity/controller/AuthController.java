@@ -8,6 +8,7 @@ import com.nest.app.identity.dto.LoginRequest;
 import com.nest.app.identity.dto.OtpRequestDto;
 import com.nest.app.identity.dto.OtpVerifyRequest;
 import com.nest.app.identity.dto.RefreshRequest;
+import com.nest.app.identity.dto.SignupRequest;
 import com.nest.common.security.TenantContext;
 import com.nest.app.identity.entity.OtpPurpose;
 import com.nest.app.identity.service.AuthService;
@@ -40,6 +41,13 @@ public class AuthController {
     @PostMapping("/auth/login")
     public AuthResponse login(@Valid @RequestBody LoginRequest request) {
         return authService.loginWithPassword(request.username(), request.password());
+    }
+
+    /** Public self-signup - always creates a GUEST account and logs them straight in. Becoming an
+     * Artist is a separate step afterward (POST /artist-applications). */
+    @PostMapping("/auth/signup")
+    public AuthResponse signup(@Valid @RequestBody SignupRequest request) {
+        return authService.signup(request.username(), request.password(), request.fullName(), request.phone(), request.email());
     }
 
     @PostMapping("/auth/otp/request")

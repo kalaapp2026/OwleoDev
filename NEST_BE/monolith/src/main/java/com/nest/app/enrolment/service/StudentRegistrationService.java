@@ -5,8 +5,10 @@ import com.nest.app.curriculum.repository.CourseRepository;
 import com.nest.app.enrolment.dto.ConfirmMembershipRequest;
 import com.nest.app.enrolment.dto.CourseFeeSelection;
 import com.nest.app.enrolment.dto.RegisterStudentRequest;
+import com.nest.app.enrolment.dto.StudentDetailResponse;
 import com.nest.app.enrolment.dto.StudentResponse;
 import com.nest.app.enrolment.dto.StudentSummaryResponse;
+import com.nest.app.enrolment.dto.UpdateStudentRequest;
 import com.nest.app.identity.entity.AcademyMembership;
 import com.nest.app.identity.entity.CourseMap;
 import com.nest.app.identity.entity.MembershipStatus;
@@ -16,7 +18,9 @@ import com.nest.app.identity.repository.AcademyMembershipRepository;
 import com.nest.app.identity.repository.CourseMapRepository;
 import com.nest.app.identity.repository.UserRepository;
 import com.nest.app.identity.service.IdentityRegistrationService;
+import com.nest.app.identity.service.UserWithTempPassword;
 import com.nest.app.identity.service.OtpService;
+import com.nest.app.notification.entity.NotificationModule;
 import com.nest.app.notification.entity.NotificationType;
 import com.nest.app.notification.service.NotificationService;
 import com.nest.common.audit.Auditable;
@@ -78,22 +82,25 @@ public class StudentRegistrationService {
         this.notificationService = notificationService;
     }
 
-    /** Roster picker source for batch creation/editing - every ACTIVE Student membership in the
-     * active academy that's mapped to this course, with a real name attached instead of a UUID. */
+    /** Roster source for batch creation/editing and the Users management screen - every Student
+     * membership in the active academy mapped to this course, name attached. {@code includeInactive}
+     * false (batch picker) drops course-deactivated students; true (management view) keeps them,
+     * flagged, so an admin can reactivate them. */
     @Transactional(readOnly = true)
-    public List<StudentSummaryResponse> listStudentsForCourse(UUID courseId) {
+    public List<StudentSummaryResponse> listStudentsForCourse(UUID courseId, boolean includeInactive) {
         UUID academyId = TenantContext.currentAcademyId();
 
-        Set<UUID> membershipIds = courseMapRepository.findByCourseId(courseId).stream()
-                .map(CourseMap::getMembershipId).collect(Collectors.toSet());
-        if (membershipIds.isEmpty()) {
+        Map<UUID, Boolean> activeByMembership = courseMapRepository.findByCourseId(courseId).stream()
+                .collect(Collectors.toMap(CourseMap::getMembershipId, CourseMap::isActive));
+        if (activeByMembership.isEmpty()) {
             return List.of();
         }
 
-        List<AcademyMembership> memberships = membershipRepository.findAllById(membershipIds).stream()
+        List<AcademyMembership> memberships = membershipRepository.findAllById(activeByMembership.keySet()).stream()
                 .filter(m -> m.getAcademyId().equals(academyId))
                 .filter(m -> m.getRoleType() == Role.STUDENT)
                 .filter(m -> m.getStatus() == MembershipStatus.ACTIVE)
+                .filter(m -> includeInactive || activeByMembership.getOrDefault(m.getId(), true))
                 .collect(Collectors.toList());
 
         Map<UUID, User> usersById = userRepository.findAllById(
@@ -103,9 +110,28 @@ public class StudentRegistrationService {
         return memberships.stream()
                 .map(m -> {
                     User u = usersById.get(m.getUserId());
-                    return new StudentSummaryResponse(m.getId(), u.getId(), u.getUsername(), u.getFullName());
+                    return new StudentSummaryResponse(m.getId(), u.getId(), u.getUsername(), u.getFullName(),
+                            activeByMembership.getOrDefault(m.getId(), true));
                 })
                 .collect(Collectors.toList());
+    }
+
+    /** Academy Admin (or a Trainer with STUDENT_REGISTRATION) flips a person's per-course enrolment
+     * on/off. Generic over role - works for a student's enrolment or a trainer's course mapping,
+     * since both live in course_map. Scoped to the active academy so no cross-tenant toggling. */
+    @Transactional
+    @Auditable(action = "COURSE_MEMBER_ACTIVE_TOGGLED", entityType = "course_map")
+    public void setCourseMemberActive(UUID courseId, UUID membershipId, boolean active) {
+        UUID academyId = TenantContext.currentAcademyId();
+        AcademyMembership membership = membershipRepository.findById(membershipId)
+                .orElseThrow(() -> new ResourceNotFoundException("Membership not found: " + membershipId));
+        if (!membership.getAcademyId().equals(academyId)) {
+            throw new com.nest.common.exception.ForbiddenException("That membership does not belong to the active academy");
+        }
+        CourseMap courseMap = courseMapRepository.findByMembershipIdAndCourseId(membershipId, courseId)
+                .orElseThrow(() -> new ResourceNotFoundException("That person is not enrolled in this course"));
+        courseMap.setActive(active);
+        courseMapRepository.save(courseMap);
     }
 
     @Transactional
@@ -119,13 +145,15 @@ public class StudentRegistrationService {
         Map<UUID, BigDecimal> courseFees = resolveCourseFees(request.courses());
 
         if (existingUser.isEmpty()) {
-            User student = identityRegistrationService.createOtpOnlyUser(
+            UserWithTempPassword created = identityRegistrationService.createStudentWithPassword(
                     request.username(), request.fullName(), request.phone(), request.email(),
                     request.dob(), request.address(), request.city(), request.state(), Role.STUDENT);
+            User student = created.user();
             AcademyMembership membership = identityRegistrationService.createMembership(
                     student.getId(), academyId, academyName, Role.STUDENT, MembershipStatus.ACTIVE, registeredBy);
             identityRegistrationService.addCourseMap(membership.getId(), courseFees);
-            return new StudentResponse(student.getId(), membership.getId(), student.getUsername(), student.getFullName(), courseFees, false);
+            return new StudentResponse(student.getId(), membership.getId(), student.getUsername(), student.getFullName(),
+                    courseFees, false, created.temporaryPassword());
         }
 
         User student = existingUser.get();
@@ -135,11 +163,11 @@ public class StudentRegistrationService {
             AcademyMembership membership = existingMembership.get();
             if (isVisibleToCurrentActor(membership)) {
                 identityRegistrationService.addCourseMap(membership.getId(), courseFees);
-                return new StudentResponse(student.getId(), membership.getId(), student.getUsername(), student.getFullName(), courseFees, false);
+                return new StudentResponse(student.getId(), membership.getId(), student.getUsername(), student.getFullName(), courseFees, false, null);
             }
             identityRegistrationService.stagePendingCourseGrant(membership.getId(), courseFees);
             sendMembershipConfirmationOtp(student, membership.getId(), courseFees, academyName);
-            return new StudentResponse(student.getId(), membership.getId(), student.getUsername(), student.getFullName(), courseFees, true);
+            return new StudentResponse(student.getId(), membership.getId(), student.getUsername(), student.getFullName(), courseFees, true, null);
         }
 
         // Existing NEST user, brand new academy - needs their own OTP confirmation (PRD 7.4).
@@ -148,7 +176,21 @@ public class StudentRegistrationService {
         identityRegistrationService.stagePendingCourseGrant(membership.getId(), courseFees);
         sendMembershipConfirmationOtp(student, membership.getId(), courseFees, academyName);
 
-        return new StudentResponse(student.getId(), membership.getId(), student.getUsername(), student.getFullName(), courseFees, true);
+        return new StudentResponse(student.getId(), membership.getId(), student.getUsername(), student.getFullName(), courseFees, true, null);
+    }
+
+    /** Admin "reset password" for a student in the active academy - issues a fresh temp password to
+     * hand over (also the answer for existing students whose backfilled password they've forgotten). */
+    @Transactional
+    @Auditable(action = "STUDENT_PASSWORD_RESET", entityType = "user")
+    public String resetStudentPassword(UUID membershipId) {
+        UUID academyId = TenantContext.currentAcademyId();
+        AcademyMembership membership = membershipRepository.findById(membershipId)
+                .orElseThrow(() -> new ResourceNotFoundException("Membership not found: " + membershipId));
+        if (!membership.getAcademyId().equals(academyId)) {
+            throw new com.nest.common.exception.ForbiddenException("That membership does not belong to the active academy");
+        }
+        return identityRegistrationService.resetPassword(membership.getUserId());
     }
 
     /** Completes either flavour of the flow above - the student reads the OTP they received (in
@@ -172,7 +214,44 @@ public class StudentRegistrationService {
         Map<UUID, BigDecimal> courseFees = new HashMap<>();
         courseRepository.findAllById(courseIdsFor(confirmed.getId())).forEach(c -> courseFees.put(c.getId(), c.getDefaultFee()));
 
-        return new StudentResponse(student.getId(), confirmed.getId(), student.getUsername(), student.getFullName(), courseFees, false);
+        return new StudentResponse(student.getId(), confirmed.getId(), student.getUsername(), student.getFullName(), courseFees, false, null);
+    }
+
+    /** Pre-fills the student edit form: profile + the current per-course agreed fees. */
+    @Transactional(readOnly = true)
+    public StudentDetailResponse getStudentDetail(UUID membershipId) {
+        AcademyMembership membership = studentInActiveAcademy(membershipId);
+        User student = userRepository.findById(membership.getUserId())
+                .orElseThrow(() -> new ResourceNotFoundException("No account for this membership"));
+        Map<UUID, BigDecimal> courseFees = new HashMap<>();
+        courseMapRepository.findByMembershipId(membershipId).forEach(cm -> courseFees.put(cm.getCourseId(), cm.getAgreedFee()));
+        return new StudentDetailResponse(student.getId(), membership.getId(), student.getUsername(), student.getFullName(),
+                student.getPhone(), student.getEmail(), student.getDob(), student.getAddress(), student.getCity(),
+                student.getState(), courseFees);
+    }
+
+    @Transactional
+    @Auditable(action = "STUDENT_UPDATED", entityType = "user")
+    public StudentResponse updateStudent(UUID membershipId, UpdateStudentRequest request) {
+        AcademyMembership membership = studentInActiveAcademy(membershipId);
+        identityRegistrationService.updateStudentProfile(membership.getUserId(), request.fullName(), request.phone(),
+                request.email(), request.dob(), request.address(), request.city(), request.state());
+
+        Map<UUID, BigDecimal> courseFees = resolveCourseFees(request.courses());
+        identityRegistrationService.reconcileCourseMap(membershipId, courseFees);
+
+        User student = userRepository.findById(membership.getUserId()).orElseThrow();
+        return new StudentResponse(student.getId(), membership.getId(), student.getUsername(), student.getFullName(),
+                courseFees, false, null);
+    }
+
+    private AcademyMembership studentInActiveAcademy(UUID membershipId) {
+        AcademyMembership membership = membershipRepository.findById(membershipId)
+                .orElseThrow(() -> new ResourceNotFoundException("Student not found: " + membershipId));
+        if (!membership.getAcademyId().equals(TenantContext.currentAcademyId()) || membership.getRoleType() != Role.STUDENT) {
+            throw new com.nest.common.exception.ForbiddenException("That student does not belong to the active academy");
+        }
+        return membership;
     }
 
     /** True when the CURRENT actor (whoever's calling /students right now) already has legitimate
@@ -191,7 +270,8 @@ public class StudentRegistrationService {
         String code = otpService.requestOtp(student.getPhone(), OtpPurpose.MEMBERSHIP_CONFIRMATION, membershipId);
         String courseNames = courseRepository.findAllById(courseFees.keySet()).stream()
                 .map(Course::getName).collect(Collectors.joining(", "));
-        notificationService.notify(student.getId(), NotificationType.MEMBERSHIP_CONFIRMATION, "Confirm your enrolment",
+        notificationService.notify(student.getId(), NotificationModule.ERP, NotificationType.MEMBERSHIP_CONFIRMATION,
+                "Confirm your enrolment",
                 "Someone at " + academyName + " wants to add you to " + courseNames
                         + ". Share this code with them to confirm it's really you: " + code,
                 code);

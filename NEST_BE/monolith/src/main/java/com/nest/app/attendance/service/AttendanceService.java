@@ -5,8 +5,15 @@ import com.nest.app.attendance.dto.AttendanceResponse;
 import com.nest.app.attendance.dto.SubmitAttendanceSheetRequest;
 import com.nest.app.attendance.entity.Attendance;
 import com.nest.app.attendance.repository.AttendanceRepository;
+import com.nest.app.enrolment.entity.Batch;
+import com.nest.app.enrolment.repository.BatchRepository;
+import com.nest.app.identity.service.CourseFeatureGuard;
+import com.nest.app.scheduling.entity.ClassInstance;
+import com.nest.app.scheduling.repository.ClassInstanceRepository;
 import com.nest.common.audit.Auditable;
 import com.nest.common.exception.ForbiddenException;
+import com.nest.common.exception.ResourceNotFoundException;
+import com.nest.common.security.FeatureKey;
 import com.nest.common.security.Role;
 import com.nest.common.security.TenantContext;
 import org.springframework.stereotype.Service;
@@ -24,18 +31,36 @@ import java.util.stream.Collectors;
 public class AttendanceService {
 
     private final AttendanceRepository attendanceRepository;
+    private final ClassInstanceRepository classInstanceRepository;
+    private final BatchRepository batchRepository;
+    private final CourseFeatureGuard courseFeatureGuard;
 
-    public AttendanceService(AttendanceRepository attendanceRepository) {
+    public AttendanceService(AttendanceRepository attendanceRepository, ClassInstanceRepository classInstanceRepository,
+                             BatchRepository batchRepository, CourseFeatureGuard courseFeatureGuard) {
         this.attendanceRepository = attendanceRepository;
+        this.classInstanceRepository = classInstanceRepository;
+        this.batchRepository = batchRepository;
+        this.courseFeatureGuard = courseFeatureGuard;
     }
 
     @Transactional
     @Auditable(action = "ATTENDANCE_SUBMITTED", entityType = "attendance")
     public List<AttendanceResponse> submitSheet(UUID classInstanceId, SubmitAttendanceSheetRequest request) {
+        // Per-course enforcement: a Trainer must hold ATTENDANCE on the course this class belongs to
+        // (class -> batch -> course), not merely on some course. Admins bypass inside the guard.
+        courseFeatureGuard.assertCourseFeature(courseIdOf(classInstanceId), FeatureKey.ATTENDANCE);
         UUID markedBy = TenantContext.currentUserId();
         return request.entries().stream()
                 .map(entry -> upsert(classInstanceId, entry, markedBy))
                 .collect(Collectors.toList());
+    }
+
+    private UUID courseIdOf(UUID classInstanceId) {
+        ClassInstance instance = classInstanceRepository.findById(classInstanceId)
+                .orElseThrow(() -> new ResourceNotFoundException("Class not found: " + classInstanceId));
+        Batch batch = batchRepository.findById(instance.getBatchId())
+                .orElseThrow(() -> new ResourceNotFoundException("Batch not found: " + instance.getBatchId()));
+        return batch.getCourseId();
     }
 
     @Transactional(readOnly = true)

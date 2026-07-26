@@ -18,11 +18,13 @@ import com.nest.app.enrolment.repository.BatchRepository;
 import com.nest.app.identity.entity.AcademyMembership;
 import com.nest.app.identity.repository.AcademyMembershipRepository;
 import com.nest.app.identity.repository.CourseMapRepository;
+import com.nest.app.identity.service.CourseFeatureGuard;
 import com.nest.app.storage.FileStorageService;
 import com.nest.common.audit.Auditable;
 import com.nest.common.exception.BadRequestException;
 import com.nest.common.exception.ForbiddenException;
 import com.nest.common.exception.ResourceNotFoundException;
+import com.nest.common.security.FeatureKey;
 import com.nest.common.security.TenantContext;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -53,11 +55,13 @@ public class SyllabusService {
     private final BatchRepository batchRepository;
     private final BatchMemberRepository batchMemberRepository;
     private final FileStorageService fileStorageService;
+    private final CourseFeatureGuard courseFeatureGuard;
 
     public SyllabusService(SyllabusUnitRepository syllabusUnitRepository, TrackRepository trackRepository,
                             MaterialAttachmentRepository materialAttachmentRepository, CourseMapRepository courseMapRepository,
                             AcademyMembershipRepository membershipRepository, BatchRepository batchRepository,
-                            BatchMemberRepository batchMemberRepository, FileStorageService fileStorageService) {
+                            BatchMemberRepository batchMemberRepository, FileStorageService fileStorageService,
+                            CourseFeatureGuard courseFeatureGuard) {
         this.syllabusUnitRepository = syllabusUnitRepository;
         this.trackRepository = trackRepository;
         this.materialAttachmentRepository = materialAttachmentRepository;
@@ -66,11 +70,19 @@ public class SyllabusService {
         this.batchRepository = batchRepository;
         this.batchMemberRepository = batchMemberRepository;
         this.fileStorageService = fileStorageService;
+        this.courseFeatureGuard = courseFeatureGuard;
+    }
+
+    /** Per-course enforcement for every syllabus mutation - a Trainer must hold SYLLABUS_EDIT on
+     * the unit's own course, not just on some course (Admins bypass inside the guard). */
+    private void assertCanEdit(UUID courseId) {
+        courseFeatureGuard.assertCourseFeature(courseId, FeatureKey.SYLLABUS_EDIT);
     }
 
     @Transactional
     @Auditable(action = "SYLLABUS_UNIT_CREATED", entityType = "syllabus_unit")
     public SyllabusUnitResponse createUnit(SyllabusUnitRequest request) {
+        assertCanEdit(request.courseId());
         SyllabusUnit unit = SyllabusUnit.builder()
                 .courseId(request.courseId())
                 .batchIds(request.batchIds() == null ? new HashSet<>() : new HashSet<>(request.batchIds()))
@@ -86,6 +98,7 @@ public class SyllabusService {
     @Auditable(action = "SYLLABUS_UNIT_UPDATED", entityType = "syllabus_unit")
     public SyllabusUnitResponse updateUnit(UUID unitId, UpdateSyllabusUnitRequest request) {
         SyllabusUnit unit = findOrThrow(unitId);
+        assertCanEdit(unit.getCourseId());
         unit.setTitle(request.title());
         unit.setDescription(request.description());
         unit.setBatchIds(request.batchIds() == null ? new HashSet<>() : new HashSet<>(request.batchIds()));
@@ -101,6 +114,7 @@ public class SyllabusService {
     @Auditable(action = "SYLLABUS_UNIT_DELETED", entityType = "syllabus_unit")
     public void deleteUnit(UUID unitId) {
         SyllabusUnit unit = findOrThrow(unitId);
+        assertCanEdit(unit.getCourseId());
         trackRepository.deleteBySyllabusUnitId(unitId);
         materialAttachmentRepository.deleteBySyllabusUnitId(unitId);
         syllabusUnitRepository.delete(unit);
@@ -111,7 +125,7 @@ public class SyllabusService {
     @Transactional
     @Auditable(action = "SYLLABUS_MATERIAL_ATTACHMENT_ADDED", entityType = "syllabus_unit")
     public MaterialAttachmentResponse addAttachment(UUID unitId, MultipartFile file) {
-        findOrThrow(unitId); // 404s cleanly instead of orphaning a file upload against a missing unit
+        assertCanEdit(findOrThrow(unitId).getCourseId()); // 404s cleanly + blocks off-course trainers before the upload
         String contentType = file.getContentType();
         String url = fileStorageService.store(file, "course-materials", MATERIAL_CONTENT_TYPES, MATERIAL_MAX_BYTES);
         MaterialAttachment attachment = MaterialAttachment.builder()
@@ -133,6 +147,7 @@ public class SyllabusService {
     @Transactional
     @Auditable(action = "SYLLABUS_MATERIAL_ATTACHMENT_DELETED", entityType = "syllabus_unit")
     public void deleteAttachment(UUID unitId, UUID attachmentId) {
+        assertCanEdit(findOrThrow(unitId).getCourseId());
         MaterialAttachment attachment = materialAttachmentRepository.findById(attachmentId)
                 .orElseThrow(() -> new ResourceNotFoundException("Attachment not found: " + attachmentId));
         if (!attachment.getSyllabusUnitId().equals(unitId)) {
@@ -176,6 +191,7 @@ public class SyllabusService {
     @Auditable(action = "SYLLABUS_UNIT_STATUS_CHANGED", entityType = "syllabus_unit")
     public SyllabusUnitResponse setUnitStatus(UUID unitId, SyllabusUnitStatus status) {
         SyllabusUnit unit = findOrThrow(unitId);
+        assertCanEdit(unit.getCourseId());
         unit.setStatus(status);
         return toResponse(syllabusUnitRepository.save(unit));
     }
@@ -183,7 +199,7 @@ public class SyllabusService {
     @Transactional
     @Auditable(action = "TRACK_ADDED", entityType = "track")
     public TrackResponse addTrack(UUID syllabusUnitId, String title, boolean streamOnly, MultipartFile file) {
-        findOrThrow(syllabusUnitId); // 404s cleanly instead of orphaning a file upload against a missing unit
+        assertCanEdit(findOrThrow(syllabusUnitId).getCourseId()); // 404s cleanly + blocks off-course trainers
         if (title == null || title.isBlank()) {
             throw new BadRequestException("A song needs a title");
         }
@@ -201,6 +217,7 @@ public class SyllabusService {
     @Transactional
     @Auditable(action = "TRACK_DELETED", entityType = "track")
     public void deleteTrack(UUID syllabusUnitId, UUID trackId) {
+        assertCanEdit(findOrThrow(syllabusUnitId).getCourseId());
         Track track = trackRepository.findById(trackId)
                 .orElseThrow(() -> new ResourceNotFoundException("Track not found: " + trackId));
         if (!track.getSyllabusUnitId().equals(syllabusUnitId)) {

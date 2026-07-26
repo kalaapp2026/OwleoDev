@@ -20,6 +20,8 @@ import com.nest.app.identity.repository.UserRepository;
 import com.nest.common.audit.Auditable;
 import com.nest.common.exception.ResourceNotFoundException;
 import com.nest.common.security.Role;
+import com.nest.app.identity.service.CourseFeatureGuard;
+import com.nest.common.security.FeatureKey;
 import com.nest.common.security.TenantContext;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -50,16 +52,19 @@ public class FeesService {
     private final CourseRepository courseRepository;
     private final AcademyMembershipRepository membershipRepository;
     private final UserRepository userRepository;
+    private final CourseFeatureGuard courseFeatureGuard;
 
     public FeesService(FeeTransactionRepository feeTransactionRepository, CourseMapRepository courseMapRepository,
                         FeeSlipRepository feeSlipRepository, CourseRepository courseRepository,
-                        AcademyMembershipRepository membershipRepository, UserRepository userRepository) {
+                        AcademyMembershipRepository membershipRepository, UserRepository userRepository,
+                        CourseFeatureGuard courseFeatureGuard) {
         this.feeTransactionRepository = feeTransactionRepository;
         this.courseMapRepository = courseMapRepository;
         this.feeSlipRepository = feeSlipRepository;
         this.courseRepository = courseRepository;
         this.membershipRepository = membershipRepository;
         this.userRepository = userRepository;
+        this.courseFeatureGuard = courseFeatureGuard;
     }
 
     /** closePeriod=true ("Close") writes off whatever's left unpaid in this period for good -
@@ -69,6 +74,9 @@ public class FeesService {
     @Transactional
     @Auditable(action = "FEE_ENTRY_RECORDED", entityType = "fee_transaction")
     public FeeTransactionResponse recordEntry(RecordFeeEntryRequest request) {
+        // Per-course enforcement: a Trainer must hold FEES_ENTRY on THIS course, not just some course
+        // (the coarse @RequiresFeature only checked the union). Admins bypass inside the guard.
+        courseFeatureGuard.assertCourseFeature(request.courseId(), FeatureKey.FEES_ENTRY);
         FeeTransaction tx = FeeTransaction.builder()
                 .membershipId(request.membershipId())
                 .courseId(request.courseId())

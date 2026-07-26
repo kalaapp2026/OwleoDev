@@ -5,6 +5,11 @@ import com.nest.app.attendance.dto.SubmitAttendanceSheetRequest;
 import com.nest.app.attendance.entity.Attendance;
 import com.nest.app.attendance.entity.AttendanceStatus;
 import com.nest.app.attendance.repository.AttendanceRepository;
+import com.nest.app.enrolment.entity.Batch;
+import com.nest.app.enrolment.repository.BatchRepository;
+import com.nest.app.identity.service.CourseFeatureGuard;
+import com.nest.app.scheduling.entity.ClassInstance;
+import com.nest.app.scheduling.repository.ClassInstanceRepository;
 import com.nest.common.exception.ForbiddenException;
 import com.nest.common.security.MembershipClaim;
 import com.nest.common.security.NestPrincipal;
@@ -34,15 +39,33 @@ class AttendanceServiceTest {
 
     @Mock
     private AttendanceRepository attendanceRepository;
+    @Mock
+    private ClassInstanceRepository classInstanceRepository;
+    @Mock
+    private BatchRepository batchRepository;
+    @Mock
+    private CourseFeatureGuard courseFeatureGuard;
 
     private AttendanceService attendanceService;
 
     private final UUID classInstanceId = UUID.randomUUID();
+    private final UUID batchId = UUID.randomUUID();
+    private final UUID courseId = UUID.randomUUID();
     private final UUID membershipId = UUID.randomUUID();
 
     @AfterEach
     void tearDown() {
         TenantContext.clear();
+    }
+
+    /** Builds the service and stubs the class -> batch -> course resolution submitSheet now does
+     * (the CourseFeatureGuard itself is a no-op mock, so it never blocks these tests). */
+    private void newService() {
+        attendanceService = new AttendanceService(attendanceRepository, classInstanceRepository, batchRepository, courseFeatureGuard);
+        when(classInstanceRepository.findById(classInstanceId))
+                .thenReturn(Optional.of(ClassInstance.builder().id(classInstanceId).batchId(batchId).build()));
+        when(batchRepository.findById(batchId))
+                .thenReturn(Optional.of(Batch.builder().id(batchId).courseId(courseId).build()));
     }
 
     private void actingAs(Role roleType) {
@@ -53,7 +76,7 @@ class AttendanceServiceTest {
 
     @Test
     void trainerCannotEditYesterdaysAttendance() {
-        attendanceService = new AttendanceService(attendanceRepository);
+        newService();
         actingAs(Role.TRAINER);
 
         Attendance yesterday = Attendance.builder().id(UUID.randomUUID()).classInstanceId(classInstanceId)
@@ -70,7 +93,7 @@ class AttendanceServiceTest {
 
     @Test
     void adminCanEditAttendanceFromAnyDay() {
-        attendanceService = new AttendanceService(attendanceRepository);
+        newService();
         actingAs(Role.ACADEMY_ADMIN);
 
         Attendance yesterday = Attendance.builder().id(UUID.randomUUID()).classInstanceId(classInstanceId)
@@ -87,7 +110,7 @@ class AttendanceServiceTest {
 
     @Test
     void trainerCanEditWithinTheSameDay() {
-        attendanceService = new AttendanceService(attendanceRepository);
+        newService();
         actingAs(Role.TRAINER);
 
         Attendance today = Attendance.builder().id(UUID.randomUUID()).classInstanceId(classInstanceId)

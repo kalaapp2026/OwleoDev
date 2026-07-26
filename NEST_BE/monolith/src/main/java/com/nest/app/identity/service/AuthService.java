@@ -48,10 +48,12 @@ public class AuthService {
     private final JwtTokenProvider tokenProvider;
     private final PrincipalAssembler principalAssembler;
     private final OtpService otpService;
+    private final IdentityRegistrationService identityRegistrationService;
 
     public AuthService(UserRepository userRepository, RefreshTokenRepository refreshTokenRepository, PiiHasher hasher,
                         PasswordEncoder passwordEncoder, JwtTokenProvider tokenProvider,
-                        PrincipalAssembler principalAssembler, OtpService otpService) {
+                        PrincipalAssembler principalAssembler, OtpService otpService,
+                        IdentityRegistrationService identityRegistrationService) {
         this.userRepository = userRepository;
         this.refreshTokenRepository = refreshTokenRepository;
         this.hasher = hasher;
@@ -59,6 +61,18 @@ public class AuthService {
         this.tokenProvider = tokenProvider;
         this.principalAssembler = principalAssembler;
         this.otpService = otpService;
+        this.identityRegistrationService = identityRegistrationService;
+    }
+
+    /** Public self-signup (PRD 7.4 addendum) - always creates a GUEST account with the password
+     * the person chose themselves, then logs them straight in (same shape as loginWithPassword)
+     * so signup doesn't need a second round-trip. Becoming an Artist is a separate step afterward
+     * (POST /artist-applications), reviewed by Super Admin. */
+    @Transactional
+    @Auditable(action = "GUEST_SIGNED_UP", entityType = "user")
+    public AuthResponse signup(String username, String rawPassword, String fullName, String phone, String email) {
+        User user = identityRegistrationService.createGuestWithPassword(username, rawPassword, fullName, phone, email);
+        return issueTokens(user);
     }
 
     /**

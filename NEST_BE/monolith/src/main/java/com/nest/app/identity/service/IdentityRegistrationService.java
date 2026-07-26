@@ -1,11 +1,13 @@
 package com.nest.app.identity.service;
 
 import com.nest.app.identity.entity.AcademyMembership;
+import com.nest.app.identity.entity.CourseFeatureGrant;
 import com.nest.app.identity.entity.CourseMap;
 import com.nest.app.identity.entity.FeatureGrant;
 import com.nest.app.identity.entity.MembershipStatus;
 import com.nest.app.identity.entity.User;
 import com.nest.app.identity.repository.AcademyMembershipRepository;
+import com.nest.app.identity.repository.CourseFeatureGrantRepository;
 import com.nest.app.identity.repository.CourseMapRepository;
 import com.nest.app.identity.repository.FeatureGrantRepository;
 import com.nest.app.identity.repository.UserRepository;
@@ -38,17 +40,20 @@ public class IdentityRegistrationService {
     private final UserRepository userRepository;
     private final AcademyMembershipRepository membershipRepository;
     private final FeatureGrantRepository featureGrantRepository;
+    private final CourseFeatureGrantRepository courseFeatureGrantRepository;
     private final CourseMapRepository courseMapRepository;
     private final PiiHasher hasher;
     private final PasswordEncoder passwordEncoder;
     private final TempPasswordGenerator tempPasswordGenerator;
 
     public IdentityRegistrationService(UserRepository userRepository, AcademyMembershipRepository membershipRepository,
-                                        FeatureGrantRepository featureGrantRepository, CourseMapRepository courseMapRepository,
+                                        FeatureGrantRepository featureGrantRepository, CourseFeatureGrantRepository courseFeatureGrantRepository,
+                                        CourseMapRepository courseMapRepository,
                                         PiiHasher hasher, PasswordEncoder passwordEncoder, TempPasswordGenerator tempPasswordGenerator) {
         this.userRepository = userRepository;
         this.membershipRepository = membershipRepository;
         this.featureGrantRepository = featureGrantRepository;
+        this.courseFeatureGrantRepository = courseFeatureGrantRepository;
         this.courseMapRepository = courseMapRepository;
         this.hasher = hasher;
         this.passwordEncoder = passwordEncoder;
@@ -92,12 +97,15 @@ public class IdentityRegistrationService {
         return new UserWithTempPassword(userRepository.save(user), tempPassword);
     }
 
-    /** Student/Guest path - OTP-only login, no password (PRD 3.4 manual entry fields have none). */
+    /** Student/Guest path - now password-based like every other role (unified login): the account
+     * gets a generated temp password to change on first login, and the full manual-entry profile
+     * (dob/address/city/state) that {@link #createUserWithPassword} doesn't carry. */
     @Transactional
-    public User createOtpOnlyUser(String username, String fullName, String phone, String email, LocalDate dob,
-                                   String address, String city, String state, Role role) {
+    public UserWithTempPassword createStudentWithPassword(String username, String fullName, String phone, String email,
+                                                          LocalDate dob, String address, String city, String state, Role role) {
         assertUsernameAndEmailAreFree(username, email);
 
+        String tempPassword = tempPasswordGenerator.generate();
         User user = User.builder()
                 .username(username)
                 .fullName(fullName)
@@ -108,9 +116,71 @@ public class IdentityRegistrationService {
                 .city(city)
                 .state(state)
                 .role(role)
+                .passwordHash(passwordEncoder.encode(tempPassword))
+                .temporaryPassword(true)
                 .build();
         user.setDob(dob);
+        return new UserWithTempPassword(userRepository.save(user), tempPassword);
+    }
+
+    /** Guest self-signup (PRD 7.4 addendum) - unlike every other creation path, the person sets
+     * their OWN password right away (no generated temp password to change later), since this is a
+     * genuine self-service account, not one an Admin/Trainer is provisioning on someone's behalf. */
+    @Transactional
+    public User createGuestWithPassword(String username, String rawPassword, String fullName, String phone, String email) {
+        assertUsernameAndEmailAreFree(username, email);
+
+        User user = User.builder()
+                .username(username)
+                .fullName(fullName)
+                .phone(phone)
+                .phoneHash(hasher.hash(phone))
+                .email(email)
+                .role(Role.GUEST)
+                .passwordHash(passwordEncoder.encode(rawPassword))
+                .temporaryPassword(false)
+                .build();
         return userRepository.save(user);
+    }
+
+    /** Trainer path - same shape as {@link #createStudentWithPassword} (dob/address/city/state)
+     * plus yearsOfExperience, which is trainer-specific. */
+    @Transactional
+    public UserWithTempPassword createTrainerWithPassword(String username, String fullName, String phone, String email,
+                                                          LocalDate dob, String address, String city, String state,
+                                                          Integer yearsOfExperience, Role role) {
+        assertUsernameAndEmailAreFree(username, email);
+
+        String tempPassword = tempPasswordGenerator.generate();
+        User user = User.builder()
+                .username(username)
+                .fullName(fullName)
+                .phone(phone)
+                .phoneHash(hasher.hash(phone))
+                .email(email)
+                .address(address)
+                .city(city)
+                .state(state)
+                .yearsOfExperience(yearsOfExperience)
+                .role(role)
+                .passwordHash(passwordEncoder.encode(tempPassword))
+                .temporaryPassword(true)
+                .build();
+        user.setDob(dob);
+        return new UserWithTempPassword(userRepository.save(user), tempPassword);
+    }
+
+    /** Issues a fresh temp password for any user (Admin "reset password" action, forgot-password).
+     * Returns the plaintext temp once so it can be handed over - only the hash is ever stored. */
+    @Transactional
+    public String resetPassword(UUID userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found: " + userId));
+        String tempPassword = tempPasswordGenerator.generate();
+        user.setPasswordHash(passwordEncoder.encode(tempPassword));
+        user.setTemporaryPassword(true);
+        userRepository.save(user);
+        return tempPassword;
     }
 
     @Transactional
@@ -136,12 +206,99 @@ public class IdentityRegistrationService {
                 FeatureGrant.builder().membershipId(membershipId).featureKey(key).grantedBy(grantedBy).build()));
     }
 
+    /** Per-course version (unified trainer model): replaces a trainer's whole feature checklist,
+     * scoped course-by-course. {@code courseFeatures} maps courseId -&gt; the features granted on
+     * that course (an entry with an empty set means "mapped to the course, no features"). */
+    @Transactional
+    public void replaceCourseFeatureGrants(UUID membershipId, Map<UUID, Set<String>> courseFeatures, UUID grantedBy) {
+        courseFeatureGrantRepository.deleteByMembershipId(membershipId);
+        courseFeatures.forEach((courseId, features) -> features.forEach(key ->
+                courseFeatureGrantRepository.save(CourseFeatureGrant.builder()
+                        .membershipId(membershipId).courseId(courseId).featureKey(key).grantedBy(grantedBy).build())));
+    }
+
     /** @param courseFees courseId -> agreed fee (null for Trainer mappings, which have no fee concept) */
     @Transactional
     public void replaceCourseMap(UUID membershipId, Map<UUID, BigDecimal> courseFees) {
         courseMapRepository.deleteByMembershipId(membershipId);
         courseFees.forEach((courseId, fee) -> courseMapRepository.save(
                 CourseMap.builder().membershipId(membershipId).courseId(courseId).agreedFee(fee).build()));
+    }
+
+    /** Edit-time reconcile that (unlike {@link #replaceCourseMap}) PRESERVES the per-course active
+     * flag on courses that survive the edit: adds newly-picked courses, drops de-selected ones,
+     * and just updates the agreed fee on the ones that stay. Used by trainer/student edit so
+     * changing someone's courses never silently reactivates one an admin had deactivated. */
+    @Transactional
+    public void reconcileCourseMap(UUID membershipId, Map<UUID, BigDecimal> desired) {
+        Map<UUID, CourseMap> existing = new java.util.HashMap<>();
+        courseMapRepository.findByMembershipId(membershipId).forEach(cm -> existing.put(cm.getCourseId(), cm));
+
+        // Drop courses no longer selected.
+        existing.forEach((courseId, cm) -> {
+            if (!desired.containsKey(courseId)) {
+                courseMapRepository.delete(cm);
+            }
+        });
+        // Add new, update fee on survivors (leaving their active flag untouched).
+        desired.forEach((courseId, fee) -> {
+            CourseMap cm = existing.get(courseId);
+            if (cm == null) {
+                courseMapRepository.save(CourseMap.builder().membershipId(membershipId).courseId(courseId).agreedFee(fee).build());
+            } else {
+                cm.setAgreedFee(fee);
+                courseMapRepository.save(cm);
+            }
+        });
+    }
+
+    /** Trainer profile edit - name/phone/email/dob/address/city/state/yearsOfExperience. Phone
+     * re-hashes for lookup; a changed email is re-checked for uniqueness (ignoring this same user). */
+    @Transactional
+    public void updateTrainerProfile(UUID userId, String fullName, String phone, String email, LocalDate dob,
+                                     String address, String city, String state, Integer yearsOfExperience) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found: " + userId));
+        assertEmailFreeForOther(userId, email);
+        user.setFullName(fullName);
+        user.setPhone(phone);
+        user.setPhoneHash(hasher.hash(phone));
+        user.setEmail(email);
+        user.setDob(dob);
+        user.setAddress(address);
+        user.setCity(city);
+        user.setState(state);
+        user.setYearsOfExperience(yearsOfExperience);
+        userRepository.save(user);
+    }
+
+    /** Student profile edit - the fuller manual-entry field set. */
+    @Transactional
+    public void updateStudentProfile(UUID userId, String fullName, String phone, String email, LocalDate dob,
+                                     String address, String city, String state) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found: " + userId));
+        assertEmailFreeForOther(userId, email);
+        user.setFullName(fullName);
+        user.setPhone(phone);
+        user.setPhoneHash(hasher.hash(phone));
+        user.setEmail(email);
+        user.setDob(dob);
+        user.setAddress(address);
+        user.setCity(city);
+        user.setState(state);
+        userRepository.save(user);
+    }
+
+    private void assertEmailFreeForOther(UUID userId, String email) {
+        if (email == null || email.isBlank()) {
+            return;
+        }
+        userRepository.findByEmailIgnoreCase(email.trim()).ifPresent(existing -> {
+            if (!existing.getId().equals(userId)) {
+                throw new ConflictException("This email already has a NEST account: " + email);
+            }
+        });
     }
 
     /** Additive version of {@link #replaceCourseMap} - used when a student who's ALREADY active

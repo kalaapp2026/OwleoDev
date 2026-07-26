@@ -22,6 +22,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
@@ -47,6 +48,8 @@ class TrainerRegistrationServiceTest {
     private AcademyMembershipRepository membershipRepository;
     @Mock
     private UserRepository userRepository;
+    @Mock
+    private com.nest.app.identity.repository.CourseFeatureGrantRepository courseFeatureGrantRepository;
 
     private TrainerRegistrationService trainerRegistrationService;
 
@@ -70,11 +73,12 @@ class TrainerRegistrationServiceTest {
     @Test
     void trainerCannotDelegateASuperiorFeatureSet() {
         trainerRegistrationService = new TrainerRegistrationService(identityRegistrationService, courseMapRepository,
-                membershipRepository, userRepository);
+                membershipRepository, userRepository, courseFeatureGrantRepository);
         actingAsTrainerWithFeatures(Set.of(FeatureKey.ATTENDANCE, FeatureKey.BATCH_SCHEDULING));
 
         var request = new RegisterTrainerRequest("junior", "Junior Trainer", "9000000001", "junior@example.com",
-                Set.of(FeatureKey.ATTENDANCE, FeatureKey.BATCH_SCHEDULING, FeatureKey.FEES_DASHBOARD), Set.of(UUID.randomUUID()));
+                java.time.LocalDate.of(1995, 1, 1), null, null, null, null,
+                Map.of(UUID.randomUUID(), Set.of(FeatureKey.ATTENDANCE, FeatureKey.BATCH_SCHEDULING, FeatureKey.FEES_DASHBOARD)));
 
         assertThatThrownBy(() -> trainerRegistrationService.registerTrainer(request))
                 .isInstanceOf(ForbiddenException.class)
@@ -84,32 +88,35 @@ class TrainerRegistrationServiceTest {
     @Test
     void trainerCanDelegateExactlyTheirOwnFeatureSet() {
         trainerRegistrationService = new TrainerRegistrationService(identityRegistrationService, courseMapRepository,
-                membershipRepository, userRepository);
+                membershipRepository, userRepository, courseFeatureGrantRepository);
         actingAsTrainerWithFeatures(Set.of(FeatureKey.ATTENDANCE, FeatureKey.BATCH_SCHEDULING, FeatureKey.RESCHEDULE));
 
         User createdUser = User.builder().id(UUID.randomUUID()).username("junior").build();
-        when(identityRegistrationService.createUserWithPassword(eq("junior"), any(), any(), any(), eq(Role.TRAINER)))
+        when(identityRegistrationService.createTrainerWithPassword(
+                eq("junior"), any(), any(), any(), any(), any(), any(), any(), any(), eq(Role.TRAINER)))
                 .thenReturn(new UserWithTempPassword(createdUser, "TempPass1"));
         when(identityRegistrationService.createMembership(any(), any(), any(), eq(Role.TRAINER), eq(MembershipStatus.ACTIVE), any()))
                 .thenReturn(AcademyMembership.builder().id(UUID.randomUUID()).build());
 
         var request = new RegisterTrainerRequest("junior", "Junior Trainer", "9000000001", "junior@example.com",
-                Set.of(FeatureKey.ATTENDANCE, FeatureKey.BATCH_SCHEDULING, FeatureKey.RESCHEDULE), Set.of(UUID.randomUUID()));
+                java.time.LocalDate.of(1995, 1, 1), null, null, null, null,
+                Map.of(UUID.randomUUID(), Set.of(FeatureKey.ATTENDANCE, FeatureKey.BATCH_SCHEDULING, FeatureKey.RESCHEDULE)));
 
         var response = trainerRegistrationService.registerTrainer(request);
 
-        assertThat(response.features()).containsExactlyInAnyOrder(
+        assertThat(response.courseFeatures().values().stream().flatMap(Set::stream).toList()).containsExactlyInAnyOrder(
                 FeatureKey.ATTENDANCE, FeatureKey.BATCH_SCHEDULING, FeatureKey.RESCHEDULE);
     }
 
     @Test
     void academyAdminCannotDelegateNonDelegableFeatures() {
         trainerRegistrationService = new TrainerRegistrationService(identityRegistrationService, courseMapRepository,
-                membershipRepository, userRepository);
+                membershipRepository, userRepository, courseFeatureGrantRepository);
         actingAsAcademyAdmin();
 
         var request = new RegisterTrainerRequest("ravi", "Ravi", "9000000002", "ravi@example.com",
-                Set.of(FeatureKey.COURSE_MANAGEMENT), Set.of(UUID.randomUUID()));
+                java.time.LocalDate.of(1990, 1, 1), null, null, null, null,
+                Map.of(UUID.randomUUID(), Set.of(FeatureKey.COURSE_MANAGEMENT)));
 
         assertThatThrownBy(() -> trainerRegistrationService.registerTrainer(request))
                 .isInstanceOf(ForbiddenException.class)
@@ -119,20 +126,23 @@ class TrainerRegistrationServiceTest {
     @Test
     void academyAdminCanGrantAnyDelegableFeatureDespiteHoldingNoFeatureGrantsThemselves() {
         trainerRegistrationService = new TrainerRegistrationService(identityRegistrationService, courseMapRepository,
-                membershipRepository, userRepository);
+                membershipRepository, userRepository, courseFeatureGrantRepository);
         actingAsAcademyAdmin();
 
         User createdUser = User.builder().id(UUID.randomUUID()).username("ravi").build();
-        when(identityRegistrationService.createUserWithPassword(eq("ravi"), any(), any(), any(), eq(Role.TRAINER)))
+        when(identityRegistrationService.createTrainerWithPassword(
+                eq("ravi"), any(), any(), any(), any(), any(), any(), any(), any(), eq(Role.TRAINER)))
                 .thenReturn(new UserWithTempPassword(createdUser, "TempPass2"));
         when(identityRegistrationService.createMembership(any(), any(), any(), eq(Role.TRAINER), eq(MembershipStatus.ACTIVE), any()))
                 .thenReturn(AcademyMembership.builder().id(UUID.randomUUID()).build());
 
         var request = new RegisterTrainerRequest("ravi", "Ravi", "9000000002", "ravi@example.com",
-                Set.of(FeatureKey.FEES_ENTRY, FeatureKey.FEES_DASHBOARD), Set.of(UUID.randomUUID()));
+                java.time.LocalDate.of(1990, 1, 1), null, null, null, null,
+                Map.of(UUID.randomUUID(), Set.of(FeatureKey.FEES_ENTRY, FeatureKey.FEES_DASHBOARD)));
 
         var response = trainerRegistrationService.registerTrainer(request);
 
-        assertThat(response.features()).containsExactlyInAnyOrder(FeatureKey.FEES_ENTRY, FeatureKey.FEES_DASHBOARD);
+        assertThat(response.courseFeatures().values().stream().flatMap(Set::stream).toList())
+                .containsExactlyInAnyOrder(FeatureKey.FEES_ENTRY, FeatureKey.FEES_DASHBOARD);
     }
 }

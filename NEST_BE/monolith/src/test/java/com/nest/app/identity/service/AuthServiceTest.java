@@ -56,6 +56,8 @@ class AuthServiceTest {
     private PrincipalAssembler principalAssembler;
     @Mock
     private OtpService otpService;
+    @Mock
+    private IdentityRegistrationService identityRegistrationService;
 
     private JwtTokenProvider tokenProvider;
     private AuthService authService;
@@ -66,7 +68,7 @@ class AuthServiceTest {
     void setUp() {
         tokenProvider = new JwtTokenProvider(new JwtProperties());
         authService = new AuthService(userRepository, refreshTokenRepository, hasher, passwordEncoder,
-                tokenProvider, principalAssembler, otpService);
+                tokenProvider, principalAssembler, otpService, identityRegistrationService);
     }
 
     private User adminUser() {
@@ -249,5 +251,19 @@ class AuthServiceTest {
         assertThatThrownBy(() -> authService.identify("9876543210"))
                 .isInstanceOf(com.nest.common.exception.BadRequestException.class)
                 .hasMessageContaining("username");
+    }
+
+    @Test
+    void signupCreatesAGuestAndLogsThemStraightIn() {
+        User guest = User.builder().id(UUID.randomUUID()).username("newartist").role(Role.GUEST)
+                .fullName("New Artist").phone("9111111111").build();
+        when(identityRegistrationService.createGuestWithPassword("newartist", "secret1", "New Artist", "9111111111", "new@example.com"))
+                .thenReturn(guest);
+        stubAssembly();
+
+        var response = authService.signup("newartist", "secret1", "New Artist", "9111111111", "new@example.com");
+
+        assertThat(response.accessToken()).isNotBlank();
+        verify(refreshTokenRepository).save(any(RefreshToken.class));
     }
 }

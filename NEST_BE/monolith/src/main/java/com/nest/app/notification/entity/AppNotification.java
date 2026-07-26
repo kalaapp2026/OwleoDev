@@ -42,6 +42,11 @@ public class AppNotification {
     @Column(name = "user_id", nullable = false)
     private UUID userId;
 
+    /** Which bell shows this - see {@link NotificationModule}. */
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private NotificationModule module;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private NotificationType type;

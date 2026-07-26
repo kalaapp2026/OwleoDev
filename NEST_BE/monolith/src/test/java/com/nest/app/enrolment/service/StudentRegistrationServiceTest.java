@@ -13,6 +13,7 @@ import com.nest.app.identity.repository.CourseMapRepository;
 import com.nest.app.identity.repository.UserRepository;
 import com.nest.app.identity.service.IdentityRegistrationService;
 import com.nest.app.identity.service.OtpService;
+import com.nest.app.notification.entity.NotificationModule;
 import com.nest.app.notification.entity.NotificationType;
 import com.nest.app.notification.service.NotificationService;
 import com.nest.common.exception.BadRequestException;
@@ -106,16 +107,17 @@ class StudentRegistrationServiceTest {
         actingAsAdmin();
         when(identityRegistrationService.findByEmail("new@example.com")).thenReturn(Optional.empty());
         User created = User.builder().id(UUID.randomUUID()).username("student1").fullName("New Student").build();
-        when(identityRegistrationService.createOtpOnlyUser(any(), any(), any(), any(), any(), any(), any(), any(), eq(Role.STUDENT)))
-                .thenReturn(created);
+        when(identityRegistrationService.createStudentWithPassword(any(), any(), any(), any(), any(), any(), any(), any(), eq(Role.STUDENT)))
+                .thenReturn(new com.nest.app.identity.service.UserWithTempPassword(created, "TempPass9"));
         when(identityRegistrationService.createMembership(any(), any(), any(), eq(Role.STUDENT), eq(MembershipStatus.ACTIVE), any()))
                 .thenReturn(AcademyMembership.builder().id(UUID.randomUUID()).build());
 
         var response = service.registerManual(request("new@example.com"));
 
         assertThat(response.pendingConfirmation()).isFalse();
+        assertThat(response.temporaryPassword()).isEqualTo("TempPass9");
         verify(otpService, never()).requestOtp(any(), any(), any());
-        verify(notificationService, never()).notify(any(), any(), any(), any(), any());
+        verify(notificationService, never()).notify(any(), any(), any(), any(), any(), any());
     }
 
     @Test
@@ -135,7 +137,7 @@ class StudentRegistrationServiceTest {
 
         assertThat(response.pendingConfirmation()).isTrue();
         verify(identityRegistrationService).stagePendingCourseGrant(eq(membershipId), anyMap());
-        verify(notificationService).notify(eq(existing.getId()), eq(NotificationType.MEMBERSHIP_CONFIRMATION), anyString(), anyString(), eq("123456"));
+        verify(notificationService).notify(eq(existing.getId()), eq(NotificationModule.ERP), eq(NotificationType.MEMBERSHIP_CONFIRMATION), anyString(), anyString(), eq("123456"));
     }
 
     @Test
@@ -227,5 +229,36 @@ class StudentRegistrationServiceTest {
 
         assertThat(response.pendingConfirmation()).isFalse();
         assertThat(response.membershipId()).isEqualTo(membershipId);
+    }
+
+    @Test
+    void deactivatingACourseMemberFlipsTheCourseMapActiveFlag() {
+        newService();
+        actingAsAdmin();
+        UUID membershipId = UUID.randomUUID();
+        var courseMap = com.nest.app.identity.entity.CourseMap.builder()
+                .id(UUID.randomUUID()).membershipId(membershipId).courseId(courseId).active(true).build();
+        when(membershipRepository.findById(membershipId))
+                .thenReturn(Optional.of(AcademyMembership.builder().id(membershipId).academyId(academyId).build()));
+        when(courseMapRepository.findByMembershipIdAndCourseId(membershipId, courseId)).thenReturn(Optional.of(courseMap));
+
+        service.setCourseMemberActive(courseId, membershipId, false);
+
+        assertThat(courseMap.isActive()).isFalse();
+        verify(courseMapRepository).save(courseMap);
+    }
+
+    @Test
+    void cannotToggleAMemberBelongingToAnotherAcademy() {
+        newService();
+        actingAsAdmin(); // active academy == academyId
+        UUID membershipId = UUID.randomUUID();
+        when(membershipRepository.findById(membershipId))
+                .thenReturn(Optional.of(AcademyMembership.builder().id(membershipId).academyId(UUID.randomUUID()).build()));
+
+        assertThatThrownBy(() -> service.setCourseMemberActive(courseId, membershipId, false))
+                .isInstanceOf(com.nest.common.exception.ForbiddenException.class);
+
+        verify(courseMapRepository, never()).save(any());
     }
 }

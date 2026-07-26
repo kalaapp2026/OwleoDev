@@ -47,4 +47,11 @@ public class CourseMap {
      * default_fee, editable per-student thereafter (sibling discount, scholarship, etc.). */
     @Column(name = "agreed_fee", precision = 12, scale = 2)
     private BigDecimal agreedFee;
+
+    /** False when an Academy Admin has deactivated this person from this one course - the course
+     * then stops showing for them and they drop out of its rosters/pickers, but the row survives
+     * so it can be flipped back on. Reversible, unlike deleting the enrolment. */
+    @Column(nullable = false)
+    @Builder.Default
+    private boolean active = true;
 }

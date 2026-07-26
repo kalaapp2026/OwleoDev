@@ -11,4 +11,8 @@ public interface PostRepository extends JpaRepository<Post, UUID> {
     List<Post> findByVisibilityOrderByCreatedAtDesc(PostVisibility visibility);
 
     List<Post> findByAuthorMembershipIdOrderByCreatedAtDesc(UUID authorMembershipId);
+
+    List<Post> findByAuthorUserIdOrderByCreatedAtDesc(UUID authorUserId);
+
+    List<Post> findByAuthorMembershipIdInOrderByCreatedAtDesc(java.util.Collection<UUID> authorMembershipIds);
 }

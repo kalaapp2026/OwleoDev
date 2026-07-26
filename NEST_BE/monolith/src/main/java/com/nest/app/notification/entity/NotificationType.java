@@ -1,8 +1,9 @@
 package com.nest.app.notification.entity;
 
-/** MEMBERSHIP_CONFIRMATION is the only kind today (PRD 7.4 addendum: the in-app OTP-delivery
- * channel for linking an existing person to a new academy/course) - room to grow without a
- * schema change once real push/social notifications land. */
+/** The kind of event a notification represents (orthogonal to {@link NotificationModule}, which
+ * is about which bell shows it). ADMIN_BROADCAST is a Super Admin announcement composed by hand;
+ * the rest are system-generated. Room to grow without a schema change as more triggers land. */
 public enum NotificationType {
-    MEMBERSHIP_CONFIRMATION
+    MEMBERSHIP_CONFIRMATION,
+    ADMIN_BROADCAST
 }

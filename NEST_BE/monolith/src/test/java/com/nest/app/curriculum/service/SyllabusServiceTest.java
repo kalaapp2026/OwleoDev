@@ -57,6 +57,8 @@ class SyllabusServiceTest {
     private BatchMemberRepository batchMemberRepository;
     @Mock
     private FileStorageService fileStorageService;
+    @Mock
+    private com.nest.app.identity.service.CourseFeatureGuard courseFeatureGuard;
 
     private SyllabusService syllabusService;
 
@@ -67,7 +69,8 @@ class SyllabusServiceTest {
     @BeforeEach
     void setUp() {
         syllabusService = new SyllabusService(syllabusUnitRepository, trackRepository, materialAttachmentRepository,
-                courseMapRepository, membershipRepository, batchRepository, batchMemberRepository, fileStorageService);
+                courseMapRepository, membershipRepository, batchRepository, batchMemberRepository, fileStorageService,
+                courseFeatureGuard);
 
         MembershipClaim claim = new MembershipClaim(UUID.randomUUID(), academyId, "Natyalaya", Role.ACADEMY_ADMIN, Set.of(), Set.of());
         TenantContext.set(new NestPrincipal(UUID.randomUUID(), "meera", Role.ACADEMY_ADMIN, List.of(claim), claim.membershipId()));

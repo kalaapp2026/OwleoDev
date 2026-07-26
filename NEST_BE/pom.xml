@@ -97,6 +97,14 @@
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-compiler-plugin</artifactId>
                     <configuration>
+                        <!-- Maven's incremental compiler doesn't reliably regenerate the synthetic
+                             $1 switch-map inner class a `switch` on an enum compiles to when only
+                             the outer class changes - target/classes ends up with an outer class
+                             that references a $1 sibling that never got rebuilt, throwing
+                             NoClassDefFoundError at call time (only at runtime, not compile time).
+                             Full compilation every time avoids the whole bug class; this project is
+                             small enough that the speed cost is negligible. -->
+                        <useIncrementalCompilation>false</useIncrementalCompilation>
                         <annotationProcessorPaths>
                             <path>
                                 <groupId>org.projectlombok</groupId>

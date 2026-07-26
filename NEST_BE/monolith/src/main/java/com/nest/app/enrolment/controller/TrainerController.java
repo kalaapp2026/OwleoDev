@@ -1,8 +1,10 @@
 package com.nest.app.enrolment.controller;
 
 import com.nest.app.enrolment.dto.RegisterTrainerRequest;
+import com.nest.app.enrolment.dto.TrainerDetailResponse;
 import com.nest.app.enrolment.dto.TrainerResponse;
 import com.nest.app.enrolment.dto.TrainerSummaryResponse;
+import com.nest.app.enrolment.dto.UpdateTrainerRequest;
 import com.nest.app.enrolment.service.TrainerRegistrationService;
 import com.nest.common.security.FeatureKey;
 import com.nest.common.security.RequiresFeature;
@@ -11,7 +13,9 @@ import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
@@ -33,10 +37,25 @@ public class TrainerController {
         return trainerRegistrationService.registerTrainer(request);
     }
 
-    /** Batch creation's default-trainer picker source - every active Trainer enrolled in this course. */
+    /** Pre-fills the trainer edit form (profile + per-course features). */
+    @GetMapping("/trainers/{membershipId}")
+    @RequiresFeature(FeatureKey.TRAINER_REGISTRATION)
+    public TrainerDetailResponse detail(@PathVariable UUID membershipId) {
+        return trainerRegistrationService.getTrainerDetail(membershipId);
+    }
+
+    @PutMapping("/trainers/{membershipId}")
+    @RequiresFeature(FeatureKey.TRAINER_REGISTRATION)
+    public TrainerResponse update(@PathVariable UUID membershipId, @Valid @RequestBody UpdateTrainerRequest request) {
+        return trainerRegistrationService.updateTrainer(membershipId, request);
+    }
+
+    /** Batch default-trainer picker + Users management screen. includeInactive=false (default,
+     * picker) drops course-deactivated trainers; true (management view) keeps them, flagged. */
     @GetMapping("/courses/{courseId}/trainers")
     @RequiresFeature(FeatureKey.BATCH_CREATION)
-    public List<TrainerSummaryResponse> trainersForCourse(@PathVariable UUID courseId) {
-        return trainerRegistrationService.listTrainersForCourse(courseId);
+    public List<TrainerSummaryResponse> trainersForCourse(@PathVariable UUID courseId,
+                                                          @RequestParam(defaultValue = "false") boolean includeInactive) {
+        return trainerRegistrationService.listTrainersForCourse(courseId, includeInactive);
     }
 }

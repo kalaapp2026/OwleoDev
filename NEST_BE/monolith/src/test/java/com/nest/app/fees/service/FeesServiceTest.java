@@ -53,6 +53,8 @@ class FeesServiceTest {
     private AcademyMembershipRepository membershipRepository;
     @Mock
     private UserRepository userRepository;
+    @Mock
+    private com.nest.app.identity.service.CourseFeatureGuard courseFeatureGuard;
 
     private FeesService feesService;
 
@@ -62,7 +64,7 @@ class FeesServiceTest {
     @BeforeEach
     void setUp() {
         feesService = new FeesService(feeTransactionRepository, courseMapRepository, feeSlipRepository,
-                courseRepository, membershipRepository, userRepository);
+                courseRepository, membershipRepository, userRepository, courseFeatureGuard);
         TenantContext.set(new NestPrincipal(UUID.randomUUID(), "meera", Role.ACADEMY_ADMIN, List.of(), null));
     }
 

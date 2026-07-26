@@ -35,6 +35,13 @@ public class AcademyController {
         return academyService.onboardAcademy(request);
     }
 
+    /** Super Admin tenant list - broadcast-console academy picker + suspend/reactivate screen. */
+    @GetMapping("/academies")
+    @PreAuthorize("hasRole('SUPER_ADMIN')")
+    public java.util.List<AcademyResponse> listAll() {
+        return academyService.listAll();
+    }
+
     @GetMapping("/academies/{id}")
     public AcademyResponse get(@PathVariable UUID id) {
         return academyService.getAcademy(id);
