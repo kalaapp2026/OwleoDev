@@ -7,6 +7,11 @@ import 'package:nest_fe/features/academy/data/academy_onboarding_api.dart';
 
 final academyOnboardingApiProvider = Provider((ref) => AcademyOnboardingApi(ref.watch(dioClientProvider)));
 
+/// Super Admin only - every academy incl. suspended. Backs the academy-management screen and the
+/// broadcast console's academy picker.
+final allAcademiesProvider =
+    FutureProvider.autoDispose<List<AcademyBrief>>((ref) => ref.watch(academyOnboardingApiProvider).listAll());
+
 const _categories = ['DANCE', 'MUSIC', 'MULTI_DISCIPLINE'];
 
 /// PRD 3.2 / 2.4: Super Admin onboards an academy plus its first Academy Admin in one form. On

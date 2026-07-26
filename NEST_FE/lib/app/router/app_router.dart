@@ -7,7 +7,9 @@ import 'package:nest_fe/core/widgets/owleo_wordmark.dart';
 import 'package:nest_fe/features/academy/presentation/academy_info_screen.dart';
 import 'package:nest_fe/features/academy/presentation/academy_onboarding_screen.dart';
 import 'package:nest_fe/features/attendance/presentation/attendance_screen.dart';
+import 'package:nest_fe/features/auth/presentation/become_artist_screen.dart';
 import 'package:nest_fe/features/auth/presentation/login_screen.dart';
+import 'package:nest_fe/features/auth/presentation/signup_screen.dart';
 import 'package:nest_fe/features/curriculum/presentation/course_management_screen.dart';
 import 'package:nest_fe/features/curriculum/presentation/syllabus_screen.dart';
 import 'package:nest_fe/features/enrolment/presentation/user_creation_screen.dart';
@@ -24,15 +26,22 @@ final routerProvider = Provider<GoRouter>((ref) {
     refreshListenable: _SessionRefreshListenable(ref),
     redirect: (context, state) {
       final session = ref.read(sessionControllerProvider);
-      final goingToLogin = state.matchedLocation == '/login';
+      final loc = state.matchedLocation;
+      final goingToLogin = loc == '/login';
+      // /signup is public like /login, but - unlike /login - a freshly-authenticated user must be
+      // allowed to stay on it (or move on to /become-artist) instead of being bounced to /home,
+      // since signup flips the session to authenticated mid-flow, before the artist prompt runs.
+      final isPublicAuthRoute = goingToLogin || loc == '/signup';
 
       if (session.isBootstrapping) return null; // splash handles this path
-      if (!session.isAuthenticated && !goingToLogin) return '/login';
+      if (!session.isAuthenticated && !isPublicAuthRoute) return '/login';
       if (session.isAuthenticated && goingToLogin) return '/home';
       return null;
     },
     routes: [
       GoRoute(path: '/login', builder: (context, state) => const LoginScreen()),
+      GoRoute(path: '/signup', builder: (context, state) => const SignupScreen()),
+      GoRoute(path: '/become-artist', builder: (context, state) => const BecomeArtistScreen()),
       GoRoute(path: '/home', builder: (context, state) => const _RootGate()),
       GoRoute(path: '/profile', builder: (context, state) => const Scaffold(body: ProfileScreen())),
       GoRoute(path: '/erp/students/new', builder: (context, state) => const UserCreationScreen()),

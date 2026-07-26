@@ -55,6 +55,27 @@ class AuthApi {
     );
   }
 
+  /// Public self-signup - username and password chosen together, same screen. Always creates a
+  /// GUEST account and logs them straight in, same response shape as login.
+  Future<LoginResult> signup({
+    required String username,
+    required String password,
+    required String fullName,
+    required String phone,
+    required String email,
+  }) {
+    return _client.call(
+      (dio) => dio.post('/auth/signup', data: {
+        'username': username,
+        'password': password,
+        'fullName': fullName,
+        'phone': phone,
+        'email': email,
+      }),
+      (data) => LoginResult.fromJson(data as Map<String, dynamic>),
+    );
+  }
+
   Future<void> resendOtp(String identifier) {
     return _client.callVoid((dio) => dio.post('/auth/otp/request', data: {'identifier': identifier, 'purpose': 'LOGIN'}));
   }

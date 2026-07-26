@@ -5,7 +5,7 @@
          to the backend too. -->
     <uses-permission android:name="android.permission.INTERNET"/>
     <application
-        android:label="nest_fe"
+        android:label="Owleo Nest"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
         android:usesCleartextTraffic="true">

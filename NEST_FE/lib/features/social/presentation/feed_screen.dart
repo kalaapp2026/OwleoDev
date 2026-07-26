@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:nest_fe/core/network/api_config.dart';
 import 'package:nest_fe/core/providers/core_providers.dart';
 import 'package:nest_fe/core/widgets/async_value_view.dart';
+import 'package:nest_fe/core/widgets/avatar.dart';
 import 'package:nest_fe/features/social/data/post.dart';
 import 'package:nest_fe/features/social/data/social_api.dart';
 
@@ -50,29 +52,57 @@ class _PostCard extends StatelessWidget {
     final colorScheme = Theme.of(context).colorScheme;
     final isEvent = post.type == 'EVENT_REF';
 
+    final imageUrl = post.mediaUrls.isNotEmpty ? ApiConfig.resolveMediaUrl(post.mediaUrls.first) : null;
+
     return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
+            child: Row(
               children: [
-                if (isEvent)
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: colorScheme.secondary.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: Text('EVENT', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: colorScheme.secondary)),
+                Avatar(name: post.authorDisplayName ?? '?', imageUrl: post.authorAvatarUrl, radius: 18),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    post.authorDisplayName ?? 'Unknown',
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+                    overflow: TextOverflow.ellipsis,
                   ),
+                ),
               ],
             ),
-            if (isEvent) const SizedBox(height: 8),
-            Text(post.content ?? '', style: Theme.of(context).textTheme.bodyLarge),
-          ],
-        ),
+          ),
+          if (imageUrl != null)
+            AspectRatio(
+              aspectRatio: 4 / 3,
+              child: Image.network(imageUrl, fit: BoxFit.cover),
+            ),
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (isEvent)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: colorScheme.secondary.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text('EVENT', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: colorScheme.secondary)),
+                    ),
+                  ),
+                if (post.content != null && post.content!.isNotEmpty)
+                  Text(post.content!, style: Theme.of(context).textTheme.bodyLarge),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

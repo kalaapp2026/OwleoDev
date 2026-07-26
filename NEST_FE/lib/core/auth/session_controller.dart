@@ -58,6 +58,25 @@ class SessionController extends Notifier<SessionState> {
     await _onLoginSuccess(result);
   }
 
+  /// Public self-signup - username and password chosen together, same screen. Always creates a
+  /// GUEST account and logs them straight in, same as a normal login.
+  Future<void> signup({
+    required String username,
+    required String password,
+    required String fullName,
+    required String phone,
+    required String email,
+  }) async {
+    final result = await _authApi.signup(
+      username: username,
+      password: password,
+      fullName: fullName,
+      phone: phone,
+      email: email,
+    );
+    await _onLoginSuccess(result);
+  }
+
   Future<void> resendOtp(String identifier) => _authApi.resendOtp(identifier);
 
   Future<void> verifyOtp(String identifier, String code) async {

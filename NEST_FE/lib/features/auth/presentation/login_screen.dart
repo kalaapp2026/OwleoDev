@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:nest_fe/core/auth/session_controller.dart';
 import 'package:nest_fe/core/error/api_exception.dart';
 import 'package:nest_fe/core/widgets/app_notice.dart';
@@ -173,6 +174,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           child: _isLoading
               ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2))
               : const Text('Continue'),
+        ),
+        const SizedBox(height: 12),
+        Center(
+          child: TextButton(
+            onPressed: _isLoading ? null : () => context.push('/signup'),
+            child: const Text('Create account'),
+          ),
         ),
       ],
     );

@@ -1,16 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:nest_fe/app/theme/app_colors.dart';
 import 'package:nest_fe/core/auth/session_controller.dart';
 import 'package:nest_fe/core/widgets/owleo_wordmark.dart';
 import 'package:nest_fe/features/dashboard/presentation/dashboard_screen.dart';
 import 'package:nest_fe/features/enrolment/presentation/batches_screen.dart';
 import 'package:nest_fe/features/fees/presentation/fees_screen.dart';
+import 'package:nest_fe/features/notification/data/notification_api.dart';
+import 'package:nest_fe/features/notification/presentation/notifications_screen.dart';
 import 'package:nest_fe/features/profile/presentation/profile_screen.dart';
 import 'package:nest_fe/features/shell/presentation/more_menu_sheet.dart';
 import 'package:nest_fe/features/social/presentation/events_tab.dart';
 import 'package:nest_fe/features/social/presentation/feed_screen.dart';
-import 'package:nest_fe/features/social/presentation/notifications_tab.dart';
+import 'package:nest_fe/features/social/presentation/my_posts_screen.dart';
+import 'package:nest_fe/features/social/presentation/search_profiles_screen.dart';
 
 enum AppMode { social, erp }
 
@@ -33,7 +35,7 @@ class AppShellState extends ConsumerState<AppShell> {
   int _socialIndex = 0;
   int _erpIndex = 0;
 
-  static const _socialTitles = ['Feed', 'Events', '', 'Notifications', 'Profile'];
+  static const _socialTitles = ['Feed', 'Events', '', 'My Posts', 'Profile'];
   static const _erpTitles = ['Dashboard', 'Batches', '', 'Fees', 'Profile'];
 
   void goToErpTab(int index) => setState(() {
@@ -49,16 +51,27 @@ class AppShellState extends ConsumerState<AppShell> {
 
     final title = _mode == AppMode.social ? _socialTitles[_socialIndex] : _erpTitles[_erpIndex];
 
+    // The bell is per-module: in ERP it shows ERP notifications, in Social it shows Social ones -
+    // so a Trainer on their fees dashboard never sees "someone liked your post" and vice versa.
+    final module = _mode == AppMode.erp ? NotificationModule.erp : NotificationModule.social;
+
     return Scaffold(
       appBar: AppBar(
         title: title.isEmpty ? const OwleoWordmark() : Text(title),
         actions: [
+          _NotificationBell(module: module),
+          IconButton(
+            icon: const Icon(Icons.person_outline),
+            tooltip: 'Profile',
+            onPressed: () => setState(() {
+              if (_mode == AppMode.erp) {
+                _erpIndex = 4;
+              } else {
+                _socialIndex = 4;
+              }
+            }),
+          ),
           if (_mode == AppMode.erp) ...[
-            IconButton(
-              icon: const Icon(Icons.person_outline),
-              tooltip: 'Profile',
-              onPressed: () => setState(() => _erpIndex = 4),
-            ),
             if (user != null && user.memberships.length > 1)
               PopupMenuButton<String>(
                 tooltip: 'Switch academy',
@@ -100,7 +113,7 @@ class AppShellState extends ConsumerState<AppShell> {
         children: [
           IndexedStack(
             index: _socialIndex,
-            children: const [FeedScreen(), EventsTab(), SizedBox.shrink(), NotificationsTab(), ProfileScreen()],
+            children: const [FeedScreen(), EventsTab(), SizedBox.shrink(), MyPostsScreen(), ProfileScreen()],
           ),
           IndexedStack(
             index: _erpIndex,
@@ -122,6 +135,9 @@ class AppShellState extends ConsumerState<AppShell> {
         onSocialTap: (i) => setState(() => _socialIndex = i),
         onErpTap: (i) => setState(() => _erpIndex = i),
         onMoreTap: () => showMoreMenu(context, ref),
+        onSearchTap: () => Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => const SearchProfilesScreen()),
+        ),
         onToggle: () {
           if (!hasErpAccess) return;
           setState(() => _mode = _mode == AppMode.social ? AppMode.erp : AppMode.social);
@@ -140,6 +156,7 @@ class _BottomNav extends StatelessWidget {
     required this.onSocialTap,
     required this.onErpTap,
     required this.onMoreTap,
+    required this.onSearchTap,
     required this.onToggle,
   });
 
@@ -150,6 +167,7 @@ class _BottomNav extends StatelessWidget {
   final ValueChanged<int> onSocialTap;
   final ValueChanged<int> onErpTap;
   final VoidCallback onMoreTap;
+  final VoidCallback onSearchTap;
   final VoidCallback onToggle;
 
   @override
@@ -161,8 +179,11 @@ class _BottomNav extends StatelessWidget {
     final leftIcons = isSocial
         ? const [(Icons.dynamic_feed_outlined, 'Feed'), (Icons.celebration_outlined, 'Events')]
         : const [(Icons.dashboard_outlined, 'Dashboard'), (Icons.groups_outlined, 'Batches')];
+    // Both sides now carry exactly 2 left + 2 right icons around the centre toggle, so the two
+    // modes line up pixel-for-pixel when you switch - Social's Profile moved to the app-bar
+    // (mirroring ERP), freeing this slot for My Posts + Search.
     final rightIcons = isSocial
-        ? const [(Icons.notifications_outlined, 'Alerts'), (Icons.person_outline, 'Profile')]
+        ? const [(Icons.grid_on_outlined, 'My Posts'), (Icons.search, 'Search')]
         : const [(Icons.account_balance_wallet_outlined, 'Fees'), (Icons.apps_rounded, 'More')];
 
     Widget navItem(IconData icon, String label, int index, ValueChanged<int> onTap) {
@@ -186,9 +207,10 @@ class _BottomNav extends StatelessWidget {
       );
     }
 
-    // Unlike the other four slots, "More" opens a bottom sheet rather than switching to a tab -
-    // it never has a "selected" state of its own, so it always renders in the neutral colour.
-    Widget moreItem(IconData icon, String label, VoidCallback onTap) {
+    // Unlike the other four slots, this one triggers an action (ERP: opens the More sheet; Social:
+    // pushes Search) rather than switching to a tab - it never has a "selected" state of its own,
+    // so it always renders in the neutral colour.
+    Widget actionItem(IconData icon, String label, VoidCallback onTap) {
       final color = colorScheme.onSurface.withValues(alpha: 0.45);
       return Expanded(
         child: InkWell(
@@ -229,11 +251,92 @@ class _BottomNav extends StatelessWidget {
               ),
             ),
             navItem(rightIcons[0].$1, rightIcons[0].$2, 3, isSocial ? onSocialTap : onErpTap),
-            if (isSocial)
-              navItem(rightIcons[1].$1, rightIcons[1].$2, 4, onSocialTap)
-            else
-              moreItem(rightIcons[1].$1, rightIcons[1].$2, onMoreTap),
+            actionItem(rightIcons[1].$1, rightIcons[1].$2, isSocial ? onSearchTap : onMoreTap),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// App-bar bell for the current module, with an unread-count badge. Tapping TOGGLES a dropdown
+/// panel open/closed right under the bell - never a full page - and tapping outside (or the bell
+/// again) closes it. Watching a Riverpod family per module means the badge auto-refreshes whenever
+/// the notifications/unread providers are invalidated (e.g. after marking something read).
+class _NotificationBell extends ConsumerStatefulWidget {
+  const _NotificationBell({required this.module});
+
+  final NotificationModule module;
+
+  @override
+  ConsumerState<_NotificationBell> createState() => _NotificationBellState();
+}
+
+class _NotificationBellState extends ConsumerState<_NotificationBell> {
+  final _link = LayerLink();
+  OverlayEntry? _overlayEntry;
+
+  void _toggle() => _overlayEntry != null ? _close() : _open();
+
+  void _open() {
+    final overlay = Overlay.of(context);
+    _overlayEntry = OverlayEntry(
+      builder: (overlayContext) => Stack(
+        children: [
+          // Full-screen invisible barrier - tapping anywhere outside the panel closes it.
+          Positioned.fill(
+            child: GestureDetector(behavior: HitTestBehavior.opaque, onTap: _close),
+          ),
+          CompositedTransformFollower(
+            link: _link,
+            showWhenUnlinked: false,
+            targetAnchor: Alignment.bottomRight,
+            followerAnchor: Alignment.topRight,
+            offset: const Offset(0, 8),
+            child: Material(
+              elevation: 8,
+              borderRadius: BorderRadius.circular(14),
+              clipBehavior: Clip.antiAlias,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 380, maxHeight: 440),
+                child: SizedBox(
+                  width: 380,
+                  child: NotificationDropdownContent(module: widget.module, onClose: _close),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+    overlay.insert(_overlayEntry!);
+    setState(() {});
+  }
+
+  void _close() {
+    _overlayEntry?.remove();
+    _overlayEntry = null;
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void dispose() {
+    _overlayEntry?.remove();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final unread = ref.watch(unreadCountProvider(widget.module)).valueOrNull ?? 0;
+    return CompositedTransformTarget(
+      link: _link,
+      child: IconButton(
+        tooltip: 'Notifications',
+        onPressed: _toggle,
+        icon: Badge(
+          isLabelVisible: unread > 0,
+          label: Text(unread > 99 ? '99+' : '$unread'),
+          child: Icon(_overlayEntry != null ? Icons.notifications : Icons.notifications_outlined),
         ),
       ),
     );
@@ -246,20 +349,16 @@ class _NavLogoToggle extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       width: 42,
       height: 42,
+      padding: const EdgeInsets.all(2),
       decoration: BoxDecoration(
-        color: isDark ? AppColors.darkBg : AppColors.lightIconBg,
         shape: BoxShape.circle,
         border: Border.all(color: colorScheme.primary, width: 1.6),
       ),
-      child: Center(
-        child: Text(
-          'O',
-          style: TextStyle(color: colorScheme.primary, fontWeight: FontWeight.w800, fontSize: 18),
-        ),
+      child: const ClipOval(
+        child: Image(image: AssetImage('assets/brand/owl_icon.png'), fit: BoxFit.cover),
       ),
     );
   }

@@ -1,11 +1,11 @@
 {
-    "name": "nest_fe",
-    "short_name": "nest_fe",
+    "name": "Owleo Nest",
+    "short_name": "Owleo Nest",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "NEST (Owleo Nest) - Academy ERP + Social",
+    "background_color": "#0B1212",
+    "theme_color": "#0B1212",
+    "description": "Owleo Nest - Academy ERP + Social",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

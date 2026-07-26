@@ -1,6 +1,5 @@
-import 'dart:typed_data';
-
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:nest_fe/core/auth/feature_keys.dart';
 import 'package:nest_fe/core/auth/session_controller.dart';
@@ -13,6 +12,67 @@ import 'package:nest_fe/features/enrolment/data/enrolment_api.dart';
 import 'package:nest_fe/features/enrolment/presentation/batches_screen.dart';
 import 'package:nest_fe/features/enrolment/presentation/profile_image_picker.dart';
 import 'package:nest_fe/features/enrolment/presentation/student_roster_picker.dart';
+import 'package:nest_fe/features/enrolment/presentation/user_edit_screens.dart';
+
+/// Shows a student's login details (new registration or a password reset) in a dialog with copy
+/// buttons - a snackbar would vanish before the admin can note them down. Both values are
+/// selectable and copyable so they can be handed over reliably.
+Future<void> showLoginCredentialsDialog(
+  BuildContext context, {
+  required String username,
+  required String temporaryPassword,
+  String title = 'Login details',
+}) {
+  return showDialog(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      title: Text(title),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('Share these with the student - they change the password on first login.'),
+          const SizedBox(height: 14),
+          _CredentialRow(label: 'Username', value: username),
+          const SizedBox(height: 8),
+          _CredentialRow(label: 'Temporary password', value: temporaryPassword),
+        ],
+      ),
+      actions: [TextButton(onPressed: () => Navigator.of(dialogContext).pop(), child: const Text('Done'))],
+    ),
+  );
+}
+
+class _CredentialRow extends StatelessWidget {
+  const _CredentialRow({required this.label, required this.value});
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(label, style: Theme.of(context).textTheme.bodySmall),
+              SelectableText(value, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+            ],
+          ),
+        ),
+        IconButton(
+          icon: const Icon(Icons.copy_outlined, size: 18),
+          tooltip: 'Copy',
+          onPressed: () {
+            Clipboard.setData(ClipboardData(text: value));
+            AppNotice.success(context, '$label copied.');
+          },
+        ),
+      ],
+    );
+  }
+}
 
 /// PRD 3.4/3.5: manual registration for both Students and Trainers - the two account types the
 /// backend actually supports self-service creation for (Flow B WhatsApp self-registration isn't
@@ -47,7 +107,7 @@ class _UserCreationScreenState extends State<UserCreationScreen> with SingleTick
         title: const Text('Users'),
         bottom: TabBar(controller: _tabController, tabs: const [Tab(text: 'Students'), Tab(text: 'Trainers')]),
       ),
-      body: TabBarView(controller: _tabController, children: const [_StudentRoster(), _TrainerForm()]),
+      body: TabBarView(controller: _tabController, children: const [_StudentRoster(), _TrainerRoster()]),
     );
   }
 }
@@ -156,6 +216,7 @@ class _StudentRosterState extends ConsumerState<_StudentRoster> {
                   label: const Text('Add student'),
                   onPressed: () async {
                     await Navigator.of(context).push(MaterialPageRoute(builder: (_) => const _AddStudentScreen()));
+                    ref.invalidate(courseStudentsManageProvider);
                     ref.invalidate(studentsForCourseProvider);
                   },
                 ),
@@ -168,16 +229,28 @@ class _StudentRosterState extends ConsumerState<_StudentRoster> {
   }
 }
 
+/// Management rosters (includeInactive: true) - distinct from the batch-picker's active-only
+/// studentsForCourseProvider, because here an admin needs to see AND reactivate deactivated people.
+final courseStudentsManageProvider =
+    FutureProvider.autoDispose.family<List<StudentSummary>, String>((ref, courseId) {
+  return ref.watch(enrolmentApiProvider).studentsForCourse(courseId, includeInactive: true);
+});
+
+final courseTrainersManageProvider =
+    FutureProvider.autoDispose.family<List<TrainerSummary>, String>((ref, courseId) {
+  return ref.watch(enrolmentApiProvider).trainersForCourse(courseId, includeInactive: true);
+});
+
 class _RosterList extends ConsumerWidget {
   const _RosterList({required this.courseId});
   final String courseId;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final studentsAsync = ref.watch(studentsForCourseProvider(courseId));
+    final studentsAsync = ref.watch(courseStudentsManageProvider(courseId));
     return AsyncValueView<List<StudentSummary>>(
       value: studentsAsync,
-      onRetry: () => ref.invalidate(studentsForCourseProvider(courseId)),
+      onRetry: () => ref.invalidate(courseStudentsManageProvider(courseId)),
       data: (context, students) {
         if (students.isEmpty) {
           return const EmptyState(icon: Icons.people_outline, message: 'No students registered for this course yet.');
@@ -187,17 +260,113 @@ class _RosterList extends ConsumerWidget {
           itemCount: students.length,
           itemBuilder: (context, i) {
             final s = students[i];
-            return Card(
-              margin: const EdgeInsets.symmetric(vertical: 4),
-              child: ListTile(
-                leading: CircleAvatar(child: Text(s.fullName.isNotEmpty ? s.fullName[0].toUpperCase() : '?')),
-                title: Text(s.fullName),
-                subtitle: Text('@${s.username}'),
-              ),
+            return _MemberRosterTile(
+              fullName: s.fullName,
+              username: s.username,
+              active: s.active,
+              onToggle: (active) async {
+                await ref.read(enrolmentApiProvider).setCourseMemberActive(courseId, s.membershipId, active);
+                ref.invalidate(courseStudentsManageProvider(courseId));
+                ref.invalidate(studentsForCourseProvider(courseId)); // keep the batch picker in sync
+              },
+              onResetPassword: () async {
+                final temp = await ref.read(enrolmentApiProvider).resetStudentPassword(s.membershipId);
+                if (context.mounted) {
+                  await showLoginCredentialsDialog(context,
+                      username: s.username, temporaryPassword: temp, title: 'New password');
+                }
+              },
+              onEdit: () async {
+                final saved = await Navigator.of(context).push<bool>(
+                  MaterialPageRoute(builder: (_) => EditStudentScreen(membershipId: s.membershipId)),
+                );
+                if (saved == true) {
+                  ref.invalidate(courseStudentsManageProvider(courseId));
+                  ref.invalidate(studentsForCourseProvider(courseId));
+                }
+              },
             );
           },
         );
       },
+    );
+  }
+}
+
+/// One roster row with an active/inactive switch. Deactivating removes the course from that
+/// person's app and drops them from batch pickers; the row stays so it can be flipped back.
+class _MemberRosterTile extends StatefulWidget {
+  const _MemberRosterTile({
+    required this.fullName,
+    required this.username,
+    required this.active,
+    required this.onToggle,
+    this.onResetPassword,
+    this.onEdit,
+  });
+
+  final String fullName;
+  final String username;
+  final bool active;
+  final Future<void> Function(bool active) onToggle;
+
+  /// When set (students), a key button offers a password reset. Omitted for trainers.
+  final Future<void> Function()? onResetPassword;
+
+  /// Opens the edit form for this person.
+  final VoidCallback? onEdit;
+
+  @override
+  State<_MemberRosterTile> createState() => _MemberRosterTileState();
+}
+
+class _MemberRosterTileState extends State<_MemberRosterTile> {
+  bool _busy = false;
+
+  Future<void> _run(Future<void> Function() action) async {
+    setState(() => _busy = true);
+    try {
+      await action();
+    } on ApiException catch (e) {
+      if (mounted) AppNotice.error(context, e.message);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final active = widget.active;
+    return Card(
+      margin: const EdgeInsets.symmetric(vertical: 4),
+      child: ListTile(
+        leading: CircleAvatar(
+          child: Text(widget.fullName.isNotEmpty ? widget.fullName[0].toUpperCase() : '?'),
+        ),
+        title: Text(widget.fullName),
+        subtitle: Text(active ? '@${widget.username}' : '@${widget.username} · inactive'),
+        enabled: active,
+        trailing: _busy
+            ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2))
+            : Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (widget.onEdit != null)
+                    IconButton(
+                      icon: const Icon(Icons.edit_outlined, size: 20),
+                      tooltip: 'Edit',
+                      onPressed: widget.onEdit,
+                    ),
+                  if (widget.onResetPassword != null)
+                    IconButton(
+                      icon: const Icon(Icons.key_outlined, size: 20),
+                      tooltip: 'Reset password',
+                      onPressed: () => _run(widget.onResetPassword!),
+                    ),
+                  Switch(value: active, onChanged: (v) => _run(() => widget.onToggle(v))),
+                ],
+              ),
+      ),
     );
   }
 }
@@ -276,8 +445,15 @@ class _StudentFormState extends ConsumerState<_StudentForm> {
           _existingFullName = result.fullName;
         });
       } else {
-        AppNotice.success(context, '${result.fullName} was registered successfully.${photoWarning ?? ''}');
-        Navigator.of(context).pop();
+        if (photoWarning != null) AppNotice.error(context, 'Registered, but$photoWarning');
+        // Students log in with a password now - surface the generated temp one so it can be handed
+        // over (a snackbar would vanish before it's noted down).
+        await showLoginCredentialsDialog(
+          context,
+          username: result.username,
+          temporaryPassword: result.temporaryPassword ?? '(unavailable)',
+        );
+        if (mounted) Navigator.of(context).pop();
       }
     } on ApiException catch (e) {
       if (mounted) AppNotice.error(context, e.message);
@@ -398,6 +574,133 @@ class _StudentFormState extends ConsumerState<_StudentForm> {
   }
 }
 
+/// Trainer tab, roster-first (mirrors _StudentRoster): pick a course, see its trainers with an
+/// active/inactive switch, "Add trainer" below. Only actual course-mapped Trainers appear here -
+/// an Academy Admin is not a Trainer and is never listed as one.
+class _TrainerRoster extends ConsumerStatefulWidget {
+  const _TrainerRoster();
+
+  @override
+  ConsumerState<_TrainerRoster> createState() => _TrainerRosterState();
+}
+
+class _TrainerRosterState extends ConsumerState<_TrainerRoster> {
+  String? _selectedCourseId;
+
+  @override
+  Widget build(BuildContext context) {
+    final user = ref.watch(sessionControllerProvider).user;
+    final isAdmin = user != null && (user.isSuperAdmin || user.isActiveAcademyAdmin);
+
+    final coursesAsync = isAdmin || user?.activeMembershipId == null
+        ? ref.watch(activeCoursesProvider)
+        : ref.watch(coursesForMembershipProvider(user!.activeMembershipId!));
+
+    return AsyncValueView<List<Course>>(
+      value: coursesAsync,
+      onRetry: () => ref.invalidate(activeCoursesProvider),
+      data: (context, courses) {
+        if (courses.isEmpty) {
+          return const EmptyState(icon: Icons.school_outlined, message: 'No courses to show trainers for yet.');
+        }
+        if (!isAdmin && _selectedCourseId == null) {
+          _selectedCourseId = courses.first.id;
+        }
+        final selectedCourseId = _selectedCourseId;
+
+        return Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+              child: DropdownButtonFormField<String>(
+                initialValue: selectedCourseId != null && courses.any((c) => c.id == selectedCourseId) ? selectedCourseId : null,
+                decoration: InputDecoration(
+                  labelText: isAdmin ? 'Course (required)' : 'Course',
+                  prefixIcon: const Icon(Icons.school_outlined),
+                ),
+                items: courses.map((c) => DropdownMenuItem(value: c.id, child: Text(c.name))).toList(),
+                onChanged: (v) => setState(() => _selectedCourseId = v),
+              ),
+            ),
+            Expanded(
+              child: selectedCourseId == null
+                  ? const EmptyState(icon: Icons.filter_list_outlined, message: 'Pick a course to see its trainers.')
+                  : _TrainerRosterList(courseId: selectedCourseId),
+            ),
+            SafeArea(
+              top: false,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                child: OutlinedButton.icon(
+                  icon: const Icon(Icons.badge_outlined),
+                  label: const Text('Add trainer'),
+                  onPressed: () async {
+                    await Navigator.of(context).push(MaterialPageRoute(builder: (_) => const _AddTrainerScreen()));
+                    if (selectedCourseId != null) ref.invalidate(courseTrainersManageProvider(selectedCourseId));
+                  },
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _TrainerRosterList extends ConsumerWidget {
+  const _TrainerRosterList({required this.courseId});
+  final String courseId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final trainersAsync = ref.watch(courseTrainersManageProvider(courseId));
+    return AsyncValueView<List<TrainerSummary>>(
+      value: trainersAsync,
+      onRetry: () => ref.invalidate(courseTrainersManageProvider(courseId)),
+      data: (context, trainers) {
+        if (trainers.isEmpty) {
+          return const EmptyState(icon: Icons.people_outline, message: 'No trainers mapped to this course yet.');
+        }
+        return ListView.builder(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          itemCount: trainers.length,
+          itemBuilder: (context, i) {
+            final t = trainers[i];
+            return _MemberRosterTile(
+              fullName: t.fullName,
+              username: t.username,
+              active: t.active,
+              onToggle: (active) async {
+                await ref.read(enrolmentApiProvider).setCourseMemberActive(courseId, t.membershipId, active);
+                ref.invalidate(courseTrainersManageProvider(courseId));
+              },
+              onEdit: () async {
+                final saved = await Navigator.of(context).push<bool>(
+                  MaterialPageRoute(builder: (_) => EditTrainerScreen(membershipId: t.membershipId)),
+                );
+                if (saved == true) ref.invalidate(courseTrainersManageProvider(courseId));
+              },
+            );
+          },
+        );
+      },
+    );
+  }
+}
+
+class _AddTrainerScreen extends StatelessWidget {
+  const _AddTrainerScreen();
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Add trainer')),
+      body: const _TrainerForm(),
+    );
+  }
+}
+
 class _TrainerForm extends ConsumerStatefulWidget {
   const _TrainerForm();
 
@@ -409,8 +712,20 @@ class _TrainerFormState extends ConsumerState<_TrainerForm> {
   final _usernameController = TextEditingController();
   final _fullNameController = TextEditingController();
   final _phoneController = TextEditingController();
-  final _selectedFeatures = <String>{};
+  final _emailController = TextEditingController();
+  final _dobController = TextEditingController();
+  final _addressController = TextEditingController();
+  final _cityController = TextEditingController();
+  final _stateController = TextEditingController();
+  final _yearsOfExperienceController = TextEditingController();
   final _selectedCourseIds = <String>{};
+
+  /// ON (default): one shared feature set applied to every selected course. OFF: each course gets
+  /// its own set from [_perCourseFeatures].
+  bool _sameForAll = true;
+  final _sharedFeatures = <String>{};
+  final _perCourseFeatures = <String, Set<String>>{};
+
   bool _isSaving = false;
   Uint8List? _photoBytes;
   String? _photoFilename;
@@ -426,33 +741,112 @@ class _TrainerFormState extends ConsumerState<_TrainerForm> {
     FeatureKeys.batchCreation,
   ];
 
+  /// courseId -> features to grant, exactly what the backend's courseFeatures map expects.
+  Map<String, Set<String>> _buildCourseFeatures() {
+    return {
+      for (final courseId in _selectedCourseIds)
+        courseId: _sameForAll ? {..._sharedFeatures} : {...?_perCourseFeatures[courseId]},
+    };
+  }
+
+  @override
+  void dispose() {
+    _usernameController.dispose();
+    _fullNameController.dispose();
+    _phoneController.dispose();
+    _emailController.dispose();
+    _dobController.dispose();
+    _addressController.dispose();
+    _cityController.dispose();
+    _stateController.dispose();
+    _yearsOfExperienceController.dispose();
+    super.dispose();
+  }
+
   Future<void> _submit() async {
+    if (_selectedCourseIds.isEmpty) {
+      AppNotice.error(context, 'Assign the trainer to at least one course.');
+      return;
+    }
+    if (_emailController.text.trim().isEmpty || _dobController.text.trim().isEmpty) {
+      AppNotice.error(context, 'Email and date of birth are required.');
+      return;
+    }
     setState(() => _isSaving = true);
     try {
       final result = await ref.read(enrolmentApiProvider).registerTrainer(
             username: _usernameController.text.trim(),
             fullName: _fullNameController.text.trim(),
             phone: _phoneController.text.trim(),
-            features: _selectedFeatures,
-            courseIds: _selectedCourseIds,
+            email: _emailController.text.trim(),
+            dob: _dobController.text.trim(),
+            address: _addressController.text.trim().isEmpty ? null : _addressController.text.trim(),
+            city: _cityController.text.trim().isEmpty ? null : _cityController.text.trim(),
+            state: _stateController.text.trim().isEmpty ? null : _stateController.text.trim(),
+            yearsOfExperience: int.tryParse(_yearsOfExperienceController.text.trim()),
+            courseFeatures: _buildCourseFeatures(),
           );
       if (!mounted) return;
 
-      String? photoWarning;
       if (_photoBytes != null) {
         try {
           await ref.read(enrolmentApiProvider).uploadProfileImage(result.userId, _photoBytes!, _photoFilename!);
         } on ApiException catch (e) {
-          photoWarning = ' (photo upload failed: ${e.message})';
+          if (mounted) AppNotice.error(context, 'Registered, but photo upload failed: ${e.message}');
         }
       }
       if (!mounted) return;
-      AppNotice.success(context, 'Registered - temp password: ${result.temporaryPassword}${photoWarning ?? ''}');
+      await showLoginCredentialsDialog(context,
+          username: result.username, temporaryPassword: result.temporaryPassword);
+      if (mounted) Navigator.of(context).pop();
     } on ApiException catch (e) {
       if (mounted) AppNotice.error(context, e.message);
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }
+  }
+
+  Widget _featureWrap(Set<String> selected, void Function(String feature, bool on) onToggle) {
+    return Wrap(
+      spacing: 8,
+      runSpacing: 4,
+      children: _allFeatures.map((f) {
+        return FilterChip(
+          label: Text(f.replaceAll('_', ' ')),
+          selected: selected.contains(f),
+          onSelected: (v) => setState(() => onToggle(f, v)),
+        );
+      }).toList(),
+    );
+  }
+
+  /// One labelled feature picker per selected course (the "per-course" toggle state).
+  List<Widget> _perCourseFeatureSections() {
+    final courses = ref.read(activeCoursesProvider).valueOrNull ?? const <Course>[];
+    String nameFor(String id) {
+      for (final c in courses) {
+        if (c.id == id) return c.name;
+      }
+      return 'Course';
+    }
+
+    return _selectedCourseIds.map((courseId) {
+      final selected = _perCourseFeatures[courseId] ?? const <String>{};
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(nameFor(courseId), style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
+            const SizedBox(height: 6),
+            _featureWrap(selected, (f, on) {
+              final set = _perCourseFeatures.putIfAbsent(courseId, () => <String>{});
+              on ? set.add(f) : set.remove(f);
+            }),
+          ],
+        ),
+      );
+    }).toList();
   }
 
   @override
@@ -466,6 +860,30 @@ class _TrainerFormState extends ConsumerState<_TrainerForm> {
         const SizedBox(height: 12),
         TextField(controller: _phoneController, decoration: const InputDecoration(labelText: 'Phone')),
         const SizedBox(height: 12),
+        TextField(
+          controller: _emailController,
+          decoration: const InputDecoration(
+            labelText: 'Email',
+            helperText: 'Required - this app uses email as the unique account identifier.',
+          ),
+        ),
+        const SizedBox(height: 12),
+        TextField(controller: _dobController, decoration: const InputDecoration(labelText: 'Date of birth (YYYY-MM-DD)')),
+        const SizedBox(height: 12),
+        TextField(
+          controller: _yearsOfExperienceController,
+          keyboardType: TextInputType.number,
+          decoration: const InputDecoration(labelText: 'Years of experience (optional)'),
+        ),
+        const SizedBox(height: 12),
+        TextField(controller: _addressController, decoration: const InputDecoration(labelText: 'Address (optional)')),
+        const SizedBox(height: 12),
+        Row(children: [
+          Expanded(child: TextField(controller: _cityController, decoration: const InputDecoration(labelText: 'City'))),
+          const SizedBox(width: 12),
+          Expanded(child: TextField(controller: _stateController, decoration: const InputDecoration(labelText: 'State'))),
+        ]),
+        const SizedBox(height: 12),
         ProfileImagePicker(
           onPicked: (file, bytes) => setState(() {
             _photoBytes = bytes;
@@ -473,16 +891,23 @@ class _TrainerFormState extends ConsumerState<_TrainerForm> {
           }),
         ),
         const SizedBox(height: 16),
-        Text('Courses to map', style: Theme.of(context).textTheme.titleMedium),
+        Text('Courses to assign', style: Theme.of(context).textTheme.titleMedium),
         const SizedBox(height: 4),
         Text(
-          'Optional - can be assigned later once batches are set up.',
+          'Pick the courses this trainer will handle - features are granted per course below.',
           style: Theme.of(context).textTheme.bodySmall,
         ),
         const SizedBox(height: 8),
         _CoursesPicker(
           selectedCourseIds: _selectedCourseIds,
-          onToggle: (id, selected) => setState(() => selected ? _selectedCourseIds.add(id) : _selectedCourseIds.remove(id)),
+          onToggle: (id, selected) => setState(() {
+            if (selected) {
+              _selectedCourseIds.add(id);
+            } else {
+              _selectedCourseIds.remove(id);
+              _perCourseFeatures.remove(id);
+            }
+          }),
         ),
         const SizedBox(height: 16),
         Text('Features to grant', style: Theme.of(context).textTheme.titleMedium),
@@ -490,19 +915,23 @@ class _TrainerFormState extends ConsumerState<_TrainerForm> {
           'Capped to whatever features you yourself hold - the backend rejects anything beyond that (PRD §3.5).',
           style: Theme.of(context).textTheme.bodySmall,
         ),
-        const SizedBox(height: 8),
-        Wrap(
-          spacing: 8,
-          runSpacing: 4,
-          children: _allFeatures.map((f) {
-            final selected = _selectedFeatures.contains(f);
-            return FilterChip(
-              label: Text(f.replaceAll('_', ' ')),
-              selected: selected,
-              onSelected: (v) => setState(() => v ? _selectedFeatures.add(f) : _selectedFeatures.remove(f)),
-            );
-          }).toList(),
+        const SizedBox(height: 4),
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          title: const Text('Same features for all courses'),
+          subtitle: Text(_sameForAll
+              ? 'One feature set applied to every selected course.'
+              : 'Set features separately for each course.'),
+          value: _sameForAll,
+          onChanged: (v) => setState(() => _sameForAll = v),
         ),
+        const SizedBox(height: 8),
+        if (_sameForAll)
+          _featureWrap(_sharedFeatures, (f, on) => on ? _sharedFeatures.add(f) : _sharedFeatures.remove(f))
+        else if (_selectedCourseIds.isEmpty)
+          Text('Pick a course above first.', style: Theme.of(context).textTheme.bodySmall)
+        else
+          ..._perCourseFeatureSections(),
         const SizedBox(height: 18),
         ElevatedButton(
           onPressed: _isSaving ? null : _submit,

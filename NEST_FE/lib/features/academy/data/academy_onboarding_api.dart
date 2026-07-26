@@ -27,9 +27,42 @@ class OnboardAcademyResult {
   }
 }
 
+/// A Super Admin's-eye view of one academy - enough to list, pick, and see if it's suspended.
+class AcademyBrief {
+  final String id;
+  final String name;
+  final String status;
+
+  AcademyBrief({required this.id, required this.name, required this.status});
+
+  bool get isSuspended => status == 'SUSPENDED';
+
+  factory AcademyBrief.fromJson(Map<String, dynamic> json) => AcademyBrief(
+        id: json['id'] as String,
+        name: json['name'] as String,
+        status: json['status'] as String? ?? 'ACTIVE',
+      );
+}
+
 class AcademyOnboardingApi {
   AcademyOnboardingApi(this._client);
   final DioClient _client;
+
+  /// Super Admin only - every academy including suspended ones (broadcast picker + suspend screen).
+  Future<List<AcademyBrief>> listAll() {
+    return _client.call(
+      (dio) => dio.get('/academies'),
+      (data) => (data as List).map((e) => AcademyBrief.fromJson(e as Map<String, dynamic>)).toList(),
+    );
+  }
+
+  /// Super Admin only - suspend a tenant (e.g. non-payment) or reactivate it. [status] is
+  /// 'ACTIVE' or 'SUSPENDED'. A suspended academy disappears for all its members and trainers.
+  Future<void> setStatus(String academyId, String status) {
+    return _client.callVoid(
+      (dio) => dio.put('/academies/$academyId/status', queryParameters: {'status': status}),
+    );
+  }
 
   Future<OnboardAcademyResult> onboard({
     required String academyName,

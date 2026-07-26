@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:nest_fe/app/theme/theme_controller.dart';
 import 'package:nest_fe/core/auth/session_controller.dart';
 import 'package:nest_fe/core/widgets/app_notice.dart';
+import 'package:nest_fe/features/academy/presentation/academy_management_screen.dart';
+import 'package:nest_fe/features/artist_application/presentation/artist_applications_screen.dart';
 
 class ProfileScreen extends ConsumerWidget {
   const ProfileScreen({super.key});
@@ -42,6 +45,48 @@ class ProfileScreen extends ConsumerWidget {
           ),
         ),
         const SizedBox(height: 28),
+
+        if (user.isSuperAdmin) ...[
+          const _SectionLabel('Super Admin'),
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.account_balance_outlined),
+              title: const Text('Academies'),
+              subtitle: const Text('Onboard, suspend or reactivate academies'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const AcademyManagementScreen()),
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.palette_outlined),
+              title: const Text('Artist Applications'),
+              subtitle: const Text('Review Guests applying to become Artists'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const ArtistApplicationsScreen()),
+              ),
+            ),
+          ),
+          const SizedBox(height: 20),
+        ],
+
+        if (user.isGuest) ...[
+          const _SectionLabel('Artist'),
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.palette_outlined),
+              title: const Text('Become an Artist'),
+              subtitle: const Text('Apply for approval to post to the feed'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => context.push('/become-artist'),
+            ),
+          ),
+          const SizedBox(height: 20),
+        ],
 
         if (user.memberships.isNotEmpty) ...[
           const _SectionLabel('Academy memberships'),

@@ -23,11 +23,6 @@ class AppColors {
   static const lightCyan = Color(0xFF00D1FF);
   static const lightInk = Color(0xFF111827);
 
-  /// Background chip for the owl mark's icon in light mode (owleo_wordmark.dart, app_shell.dart's
-  /// nav toggle) - a faint tint of lightPurple, distinct enough from lightBg/white cards that the
-  /// mark doesn't vanish against dashboard content.
-  static const lightIconBg = Color(0xFFECEAF7);
-
   // ---- Semantic (same meaning in both themes, tuned per-theme in app_theme.dart) ----
   static const success = Color(0xFF1E8E5A);
   static const warning = Color(0xFFB8860B);

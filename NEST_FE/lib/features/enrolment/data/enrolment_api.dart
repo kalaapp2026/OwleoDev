@@ -11,6 +11,7 @@ class StudentRegistrationResult {
   final String fullName;
   final Map<String, num> courseFees;
   final bool pendingConfirmation;
+  final String? temporaryPassword;
 
   StudentRegistrationResult({
     required this.userId,
@@ -19,6 +20,7 @@ class StudentRegistrationResult {
     required this.fullName,
     required this.courseFees,
     required this.pendingConfirmation,
+    required this.temporaryPassword,
   });
 
   factory StudentRegistrationResult.fromJson(Map<String, dynamic> json) => StudentRegistrationResult(
@@ -28,6 +30,7 @@ class StudentRegistrationResult {
         fullName: json['fullName'] as String,
         courseFees: Map<String, num>.from(json['courseFees'] as Map),
         pendingConfirmation: json['pendingConfirmation'] as bool? ?? false,
+        temporaryPassword: json['temporaryPassword'] as String?,
       );
 }
 
@@ -36,14 +39,12 @@ class TrainerRegistrationResult {
   final String membershipId;
   final String username;
   final String temporaryPassword;
-  final Set<String> features;
 
   TrainerRegistrationResult({
     required this.userId,
     required this.membershipId,
     required this.username,
     required this.temporaryPassword,
-    required this.features,
   });
 
   factory TrainerRegistrationResult.fromJson(Map<String, dynamic> json) => TrainerRegistrationResult(
@@ -51,47 +52,222 @@ class TrainerRegistrationResult {
         membershipId: json['membershipId'] as String,
         username: json['username'] as String,
         temporaryPassword: json['temporaryPassword'] as String,
-        features: Set<String>.from(json['features'] as List? ?? []),
       );
 }
 
-/// One row for a batch roster picker - a real name to check off, not a bare membership UUID.
+/// One row for a batch roster picker / the Users management screen. [active] is this person's
+/// per-course enrolment state - false means an admin deactivated them from this one course.
 class StudentSummary {
   final String membershipId;
   final String userId;
   final String username;
   final String fullName;
+  final bool active;
 
-  StudentSummary({required this.membershipId, required this.userId, required this.username, required this.fullName});
+  StudentSummary({
+    required this.membershipId,
+    required this.userId,
+    required this.username,
+    required this.fullName,
+    required this.active,
+  });
 
   factory StudentSummary.fromJson(Map<String, dynamic> json) => StudentSummary(
         membershipId: json['membershipId'] as String,
         userId: json['userId'] as String,
         username: json['username'] as String,
         fullName: json['fullName'] as String,
+        active: json['active'] as bool? ?? true,
       );
 }
 
-/// One row for a batch's default-trainer picker - a real name to pick, not a bare membership UUID.
+/// One row for a batch's default-trainer picker / the Users management screen.
 class TrainerSummary {
   final String membershipId;
   final String userId;
   final String username;
   final String fullName;
+  final bool active;
 
-  TrainerSummary({required this.membershipId, required this.userId, required this.username, required this.fullName});
+  TrainerSummary({
+    required this.membershipId,
+    required this.userId,
+    required this.username,
+    required this.fullName,
+    required this.active,
+  });
 
   factory TrainerSummary.fromJson(Map<String, dynamic> json) => TrainerSummary(
         membershipId: json['membershipId'] as String,
         userId: json['userId'] as String,
         username: json['username'] as String,
         fullName: json['fullName'] as String,
+        active: json['active'] as bool? ?? true,
+      );
+}
+
+/// Pre-fill payload for the trainer edit form.
+class TrainerDetail {
+  final String userId;
+  final String membershipId;
+  final String username;
+  final String fullName;
+  final String? phone;
+  final String? email;
+  final String? dob;
+  final String? address;
+  final String? city;
+  final String? state;
+  final int? yearsOfExperience;
+  final Map<String, Set<String>> courseFeatures;
+
+  TrainerDetail({
+    required this.userId,
+    required this.membershipId,
+    required this.username,
+    required this.fullName,
+    required this.phone,
+    required this.email,
+    required this.dob,
+    required this.address,
+    required this.city,
+    required this.state,
+    required this.yearsOfExperience,
+    required this.courseFeatures,
+  });
+
+  factory TrainerDetail.fromJson(Map<String, dynamic> json) => TrainerDetail(
+        userId: json['userId'] as String,
+        membershipId: json['membershipId'] as String,
+        username: json['username'] as String,
+        fullName: json['fullName'] as String,
+        phone: json['phone'] as String?,
+        email: json['email'] as String?,
+        dob: json['dob'] as String?,
+        address: json['address'] as String?,
+        city: json['city'] as String?,
+        state: json['state'] as String?,
+        yearsOfExperience: json['yearsOfExperience'] as int?,
+        courseFeatures: ((json['courseFeatures'] as Map?) ?? {}).map(
+          (k, v) => MapEntry(k as String, Set<String>.from(v as List)),
+        ),
+      );
+}
+
+/// Pre-fill payload for the student edit form.
+class StudentDetail {
+  final String userId;
+  final String membershipId;
+  final String username;
+  final String fullName;
+  final String? phone;
+  final String? email;
+  final String? dob;
+  final String? address;
+  final String? city;
+  final String? state;
+  final Map<String, num?> courseFees;
+
+  StudentDetail({
+    required this.userId,
+    required this.membershipId,
+    required this.username,
+    required this.fullName,
+    required this.phone,
+    required this.email,
+    required this.dob,
+    required this.address,
+    required this.city,
+    required this.state,
+    required this.courseFees,
+  });
+
+  factory StudentDetail.fromJson(Map<String, dynamic> json) => StudentDetail(
+        userId: json['userId'] as String,
+        membershipId: json['membershipId'] as String,
+        username: json['username'] as String,
+        fullName: json['fullName'] as String,
+        phone: json['phone'] as String?,
+        email: json['email'] as String?,
+        dob: json['dob'] as String?,
+        address: json['address'] as String?,
+        city: json['city'] as String?,
+        state: json['state'] as String?,
+        courseFees: ((json['courseFees'] as Map?) ?? {}).map(
+          (k, v) => MapEntry(k as String, v as num?),
+        ),
       );
 }
 
 class EnrolmentApi {
   EnrolmentApi(this._client);
   final DioClient _client;
+
+  Future<TrainerDetail> trainerDetail(String membershipId) {
+    return _client.call(
+      (dio) => dio.get('/trainers/$membershipId'),
+      (data) => TrainerDetail.fromJson(data as Map<String, dynamic>),
+    );
+  }
+
+  Future<void> updateTrainer(
+    String membershipId, {
+    required String fullName,
+    required String phone,
+    required String email,
+    required String dob,
+    String? address,
+    String? city,
+    String? state,
+    int? yearsOfExperience,
+    required Map<String, Set<String>> courseFeatures,
+  }) {
+    return _client.callVoid(
+      (dio) => dio.put('/trainers/$membershipId', data: {
+        'fullName': fullName,
+        'phone': phone,
+        'email': email,
+        'dob': dob,
+        'address': address,
+        'city': city,
+        'state': state,
+        'yearsOfExperience': yearsOfExperience,
+        'courseFeatures': courseFeatures.map((courseId, features) => MapEntry(courseId, features.toList())),
+      }),
+    );
+  }
+
+  Future<StudentDetail> studentDetail(String membershipId) {
+    return _client.call(
+      (dio) => dio.get('/students/$membershipId'),
+      (data) => StudentDetail.fromJson(data as Map<String, dynamic>),
+    );
+  }
+
+  Future<void> updateStudent(
+    String membershipId, {
+    required String fullName,
+    required String phone,
+    required String dob,
+    String? email,
+    String? address,
+    String? city,
+    String? state,
+    required List<Map<String, dynamic>> courses,
+  }) {
+    return _client.callVoid(
+      (dio) => dio.put('/students/$membershipId', data: {
+        'fullName': fullName,
+        'phone': phone,
+        'dob': dob,
+        'email': email,
+        'address': address,
+        'city': city,
+        'state': state,
+        'courses': courses,
+      }),
+    );
+  }
 
   Future<StudentRegistrationResult> registerStudent({
     required String username,
@@ -131,13 +307,21 @@ class EnrolmentApi {
     );
   }
 
+  /// [courseFeatures] maps each assigned courseId -> the features granted on that course. The
+  /// "same features for all courses" toggle just sends the same set for every course. Email is
+  /// required - it's this app's platform-wide identity key (PRD 7.4 addendum), so every account,
+  /// trainers included, needs one.
   Future<TrainerRegistrationResult> registerTrainer({
     required String username,
     required String fullName,
     required String phone,
-    String? email,
-    required Set<String> features,
-    required Set<String> courseIds,
+    required String email,
+    required String dob, // yyyy-MM-dd
+    String? address,
+    String? city,
+    String? state,
+    int? yearsOfExperience,
+    required Map<String, Set<String>> courseFeatures,
   }) {
     return _client.call(
       (dio) => dio.post('/trainers', data: {
@@ -145,8 +329,12 @@ class EnrolmentApi {
         'fullName': fullName,
         'phone': phone,
         'email': email,
-        'features': features.toList(),
-        'courseIds': courseIds.toList(),
+        'dob': dob,
+        'address': address,
+        'city': city,
+        'state': state,
+        'yearsOfExperience': yearsOfExperience,
+        'courseFeatures': courseFeatures.map((courseId, features) => MapEntry(courseId, features.toList())),
       }),
       (data) => TrainerRegistrationResult.fromJson(data as Map<String, dynamic>),
     );
@@ -187,12 +375,29 @@ class EnrolmentApi {
     );
   }
 
-  /// Every active Trainer enrolled in this course - the default-trainer picker source for batch
-  /// creation, so students can see who's actually taking the class.
-  Future<List<TrainerSummary>> trainersForCourse(String courseId) {
+  /// Trainers for this course. [includeInactive] false (batch picker) drops course-deactivated
+  /// trainers; true (Users management screen) keeps them so they can be reactivated.
+  Future<List<TrainerSummary>> trainersForCourse(String courseId, {bool includeInactive = false}) {
     return _client.call(
-      (dio) => dio.get('/courses/$courseId/trainers'),
+      (dio) => dio.get('/courses/$courseId/trainers', queryParameters: {'includeInactive': includeInactive}),
       (data) => (data as List).map((e) => TrainerSummary.fromJson(e as Map<String, dynamic>)).toList(),
+    );
+  }
+
+  /// Academy Admin (or Trainer with student-registration access) deactivates/reactivates a person
+  /// for one course - works for both students and trainers (both live in course_map).
+  Future<void> setCourseMemberActive(String courseId, String membershipId, bool active) {
+    return _client.callVoid(
+      (dio) => dio.put('/courses/$courseId/members/$membershipId/active', queryParameters: {'active': active}),
+    );
+  }
+
+  /// Issues a fresh temp password for a student and returns it once (unified login - students log
+  /// in with a password now). The admin hands it over; the student changes it on first login.
+  Future<String> resetStudentPassword(String membershipId) {
+    return _client.call(
+      (dio) => dio.post('/students/$membershipId/reset-password'),
+      (data) => (data as Map<String, dynamic>)['temporaryPassword'] as String,
     );
   }
 
@@ -217,11 +422,11 @@ class EnrolmentApi {
     );
   }
 
-  /// Every active Student enrolled in this course - the roster picker source for creating or
-  /// editing a batch's membership.
-  Future<List<StudentSummary>> studentsForCourse(String courseId) {
+  /// Students for this course. [includeInactive] false (batch roster picker) drops course-
+  /// deactivated students; true (Users management screen) keeps them so they can be reactivated.
+  Future<List<StudentSummary>> studentsForCourse(String courseId, {bool includeInactive = false}) {
     return _client.call(
-      (dio) => dio.get('/courses/$courseId/students'),
+      (dio) => dio.get('/courses/$courseId/students', queryParameters: {'includeInactive': includeInactive}),
       (data) => (data as List).map((e) => StudentSummary.fromJson(e as Map<String, dynamic>)).toList(),
     );
   }
