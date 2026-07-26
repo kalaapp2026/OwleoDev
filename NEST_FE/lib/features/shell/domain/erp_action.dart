@@ -8,6 +8,10 @@ class ErpAction {
   final String? route;
   final int? erpTabIndex;
   final String? requiredFeature;
+  /// Alternative to [requiredFeature] for a tile that covers more than one delegable action
+  /// (e.g. "User Creation" covers both Student and Trainer registration) - visible if the caller
+  /// holds ANY of these, since the screen behind the tile shows only the parts they can use.
+  final List<String>? anyOfFeatures;
   final bool adminOnly;
   final bool superAdminOnly;
 
@@ -17,6 +21,7 @@ class ErpAction {
     this.route,
     this.erpTabIndex,
     this.requiredFeature,
+    this.anyOfFeatures,
     this.adminOnly = false,
     this.superAdminOnly = false,
   });
@@ -31,6 +36,9 @@ class ErpAction {
     // the moment they're tapped (no active academy to scope the request to).
     if (user.isSuperAdmin) return false;
     if (adminOnly) return user.isActiveAcademyAdmin;
+    if (anyOfFeatures != null) {
+      return user.isActiveAcademyAdmin || anyOfFeatures!.any(user.hasFeature);
+    }
     if (requiredFeature == null) return true;
     return user.isActiveAcademyAdmin || user.hasFeature(requiredFeature!);
   }
@@ -53,7 +61,8 @@ const kErpActions = <ErpAction>[
   ErpAction(icon: Icons.groups_2_outlined, label: 'Batch Creation', erpTabIndex: 1, requiredFeature: FeatureKeys.batchCreation),
   ErpAction(icon: Icons.event_note_outlined, label: 'Class Schedule', route: '/erp/scheduling', requiredFeature: FeatureKeys.batchScheduling),
   ErpAction(icon: Icons.update_outlined, label: 'Class Reschedule', route: '/erp/scheduling/reschedule', requiredFeature: FeatureKeys.reschedule),
-  ErpAction(icon: Icons.person_add_alt_outlined, label: 'User Creation', route: '/erp/students/new', requiredFeature: FeatureKeys.studentRegistration),
+  ErpAction(icon: Icons.person_add_alt_outlined, label: 'User Creation', route: '/erp/students/new',
+      anyOfFeatures: [FeatureKeys.studentRegistration, FeatureKeys.trainerRegistration]),
   ErpAction(icon: Icons.grid_view_outlined, label: 'Dashboard', erpTabIndex: 0),
   ErpAction(icon: Icons.fact_check_outlined, label: 'Attendance', route: '/erp/attendance', requiredFeature: FeatureKeys.attendance),
   ErpAction(icon: Icons.calendar_month_outlined, label: 'Calendar', route: '/erp/calendar'),

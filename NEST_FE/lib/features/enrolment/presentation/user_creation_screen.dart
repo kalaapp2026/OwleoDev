@@ -78,20 +78,28 @@ class _CredentialRow extends StatelessWidget {
 /// backend actually supports self-service creation for (Flow B WhatsApp self-registration isn't
 /// built yet, see Scope gaps). The Student tab opens on a roster (who's already registered,
 /// course-filtered), not straight into a blank form - "Add" is a deliberate action below the list.
-class UserCreationScreen extends StatefulWidget {
+class UserCreationScreen extends ConsumerStatefulWidget {
   const UserCreationScreen({super.key});
 
   @override
-  State<UserCreationScreen> createState() => _UserCreationScreenState();
+  ConsumerState<UserCreationScreen> createState() => _UserCreationScreenState();
 }
 
-class _UserCreationScreenState extends State<UserCreationScreen> with SingleTickerProviderStateMixin {
+class _UserCreationScreenState extends ConsumerState<UserCreationScreen> with SingleTickerProviderStateMixin {
   late final TabController _tabController;
+  late final bool _showStudents;
+  late final bool _showTrainers;
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    final user = ref.read(sessionControllerProvider).user;
+    final isAdmin = user != null && (user.isSuperAdmin || user.isActiveAcademyAdmin);
+    // Mirrors ErpAction's "User Creation" tile (anyOf student/trainer registration) - a Trainer
+    // who only holds one of the two must not see a tab for the one they'd just get a 403 on.
+    _showStudents = isAdmin || (user?.hasFeature(FeatureKeys.studentRegistration) ?? false);
+    _showTrainers = isAdmin || (user?.hasFeature(FeatureKeys.trainerRegistration) ?? false);
+    _tabController = TabController(length: (_showStudents ? 1 : 0) + (_showTrainers ? 1 : 0), vsync: this);
   }
 
   @override
@@ -102,12 +110,22 @@ class _UserCreationScreenState extends State<UserCreationScreen> with SingleTick
 
   @override
   Widget build(BuildContext context) {
+    final tabs = [
+      if (_showStudents) const Tab(text: 'Students'),
+      if (_showTrainers) const Tab(text: 'Trainers'),
+    ];
+    final views = [
+      if (_showStudents) const _StudentRoster(),
+      if (_showTrainers) const _TrainerRoster(),
+    ];
     return Scaffold(
       appBar: AppBar(
         title: const Text('Users'),
-        bottom: TabBar(controller: _tabController, tabs: const [Tab(text: 'Students'), Tab(text: 'Trainers')]),
+        bottom: tabs.isEmpty ? null : TabBar(controller: _tabController, tabs: tabs),
       ),
-      body: TabBarView(controller: _tabController, children: const [_StudentRoster(), _TrainerRoster()]),
+      body: tabs.isEmpty
+          ? const Center(child: Text("You don't have access to register students or trainers."))
+          : TabBarView(controller: _tabController, children: views),
     );
   }
 }

@@ -5,16 +5,20 @@ import 'package:nest_fe/core/widgets/async_value_view.dart';
 import 'package:nest_fe/features/curriculum/data/course.dart';
 import 'package:nest_fe/features/curriculum/data/curriculum_api.dart';
 
-/// The delegable feature checklist offered when assigning a trainer to courses.
+/// The delegable feature checklist offered when assigning a trainer to courses - mirrors backend
+/// FeatureKey.ALL_DELEGABLE exactly, so anything an Academy Admin can grant is actually offered.
 const trainerFeatureKeys = [
   FeatureKeys.attendance,
   FeatureKeys.batchScheduling,
   FeatureKeys.reschedule,
   FeatureKeys.feesEntry,
+  FeatureKeys.feesDashboard,
   FeatureKeys.syllabusEdit,
   FeatureKeys.eventManagement,
   FeatureKeys.studentRegistration,
+  FeatureKeys.trainerRegistration,
   FeatureKeys.batchCreation,
+  FeatureKeys.artistStylePosting,
 ];
 
 /// Reusable per-course feature picker shared by trainer create and trainer edit: pick courses,
