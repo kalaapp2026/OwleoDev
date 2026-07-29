@@ -15,9 +15,12 @@
 
     // go_router uses real URL paths (/login, /erp/courses). "single-page-application" serves
     // index.html for any path that isn't a real file, so deep links and refreshes work instead
-    // of 404ing. This is the Workers equivalent of a Pages rewrite rule - note that the
-    // _redirects file (kept for the Netlify/Render paths) does NOT cover this here, because
-    // Workers Static Assets doesn't support 200-status rewrites in _redirects the way Pages does.
+    // of 404ing.
+    //
+    // This is the ONLY thing providing that behaviour here. A `_redirects` file with
+    // `/*  /index.html  200` - the Pages/Netlify way - does not work on Workers Static Assets:
+    // it rejects 200-status rewrites and fails the whole deploy with
+    // "Infinite loop detected in this rule". So don't add one back.
     "not_found_handling": "single-page-application"
   }
 }

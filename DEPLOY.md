@@ -95,8 +95,12 @@ Checked against Cloudflare's hard limits with the real build - all comfortable:
 | Files per deploy | 20,000 | 41 |
 | Build timeout | 20 min | ~4-6 min |
 
-`web/_redirects` is already committed and verified to reach `build/web` on every build, so the
-SPA fallback needs no dashboard config.
+SPA routing is handled by `wrangler.jsonc` (`not_found_handling: "single-page-application"`), so it
+needs no dashboard config.
+
+> **Do not add a `_redirects` file with `/*  /index.html  200`.** That's the Pages/Netlify way and
+> Workers Static Assets rejects it - the deploy fails with *"Infinite loop detected in this rule"*.
+> `not_found_handling` already covers it. `web/_headers` (caching) is fine and is used.
 
 ### B1 - Auto-deploy from GitHub (set up once, then deploys on every push)
 
