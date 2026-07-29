@@ -104,15 +104,22 @@ class ConsoleStatGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final columns = ConsoleBreakpoints.statColumns(context);
-    return GridView.count(
-      crossAxisCount: columns,
+    // A FIXED tile height, not childAspectRatio. Aspect ratio derives height from the column
+    // width, so the same card is short on a phone and tall on a monitor - and the short version
+    // can't fit the value + label + footnote, which overflows. A fixed height is the same on
+    // every screen and is sized to the tallest content a tile can hold.
+    final tileHeight = stats.any((s) => s.footnote != null) ? 134.0 : 116.0;
+    return GridView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
-      mainAxisSpacing: 12,
-      crossAxisSpacing: 12,
-      childAspectRatio: ConsoleBreakpoints.isCompact(context) ? 1.7 : 1.75,
-      children: stats.map((s) => _ConsoleStatCard(stat: s)).toList(),
+      itemCount: stats.length,
+      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: ConsoleBreakpoints.statColumns(context),
+        mainAxisSpacing: 12,
+        crossAxisSpacing: 12,
+        mainAxisExtent: tileHeight,
+      ),
+      itemBuilder: (context, index) => _ConsoleStatCard(stat: stats[index]),
     );
   }
 }
@@ -129,38 +136,48 @@ class _ConsoleStatCard extends StatelessWidget {
     return Card(
       margin: EdgeInsets.zero,
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Icon(stat.icon, color: accent, size: 20),
-            const Spacer(),
-            FittedBox(
-              fit: BoxFit.scaleDown,
-              alignment: Alignment.centerLeft,
-              child: Text(
-                stat.value,
-                style: Theme.of(context)
-                    .textTheme
-                    .headlineSmall
-                    ?.copyWith(fontWeight: FontWeight.w700, color: accent),
+            // Flexible + FittedBox so a long value ("1,23,456", "19m ago") shrinks to fit instead
+            // of pushing the label out of the card. Belt and braces with the fixed tile height:
+            // the card cannot overflow even if the theme's text scale changes underneath it.
+            Flexible(
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  stat.value,
+                  maxLines: 1,
+                  style: Theme.of(context)
+                      .textTheme
+                      .headlineSmall
+                      ?.copyWith(fontWeight: FontWeight.w700, color: accent),
+                ),
               ),
             ),
-            const SizedBox(height: 2),
-            Text(
-              stat.label,
-              style: Theme.of(context).textTheme.bodySmall,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  stat.label,
+                  style: Theme.of(context).textTheme.bodySmall,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                if (stat.footnote != null)
+                  Text(
+                    stat.footnote!,
+                    style: TextStyle(fontSize: 10, color: colorScheme.onSurface.withValues(alpha: 0.45)),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+              ],
             ),
-            if (stat.footnote != null)
-              Text(
-                stat.footnote!,
-                style: TextStyle(fontSize: 10, color: colorScheme.onSurface.withValues(alpha: 0.45)),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
           ],
         ),
       ),

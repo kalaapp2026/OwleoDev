@@ -6,9 +6,9 @@ import 'package:nest_fe/features/dashboard/presentation/dashboard_screen.dart';
 import 'package:nest_fe/features/enrolment/presentation/batches_screen.dart';
 import 'package:nest_fe/features/fees/presentation/fees_screen.dart';
 import 'package:nest_fe/features/notification/data/notification_api.dart';
-import 'package:nest_fe/features/artist_application/presentation/artist_applications_screen.dart';
 import 'package:nest_fe/features/notification/presentation/notifications_screen.dart';
 import 'package:nest_fe/features/platform/presentation/academy_stats_screen.dart';
+import 'package:nest_fe/features/platform/presentation/billing_screen.dart';
 import 'package:nest_fe/features/platform/presentation/super_admin_dashboard_screen.dart';
 import 'package:nest_fe/features/profile/presentation/profile_screen.dart';
 import 'package:nest_fe/features/shell/presentation/more_menu_sheet.dart';
@@ -43,7 +43,7 @@ class AppShellState extends ConsumerState<AppShell> {
 
   /// A Super Admin belongs to no academy, so Batches and Fees - which are scoped to the active
   /// academy - have nothing to show them. Their ERP side is the platform console instead.
-  static const _superAdminErpTitles = ['Platform', 'Academies', '', 'Applications', 'Profile'];
+  static const _superAdminErpTitles = ['Platform', 'Academies', '', 'Billing', 'Profile'];
 
   void goToErpTab(int index) => setState(() {
         _mode = AppMode.erp;
@@ -134,7 +134,7 @@ class AppShellState extends ConsumerState<AppShell> {
                     SuperAdminDashboardScreen(),
                     AcademyStatsScreen(embedded: true),
                     SizedBox.shrink(),
-                    ArtistApplicationsScreen(embedded: true),
+                    BillingScreen(embedded: true),
                     ProfileScreen(),
                   ]
                 : const [
@@ -205,7 +205,7 @@ class _BottomNav extends StatelessWidget {
         ? const [(Icons.insights_outlined, 'Platform'), (Icons.account_balance_outlined, 'Academies')]
         : const [(Icons.dashboard_outlined, 'Dashboard'), (Icons.groups_outlined, 'Batches')];
     final erpRightIcons = isSuperAdmin
-        ? const [(Icons.palette_outlined, 'Applications'), (Icons.apps_rounded, 'More')]
+        ? const [(Icons.receipt_long_outlined, 'Billing'), (Icons.apps_rounded, 'More')]
         : const [(Icons.account_balance_wallet_outlined, 'Fees'), (Icons.apps_rounded, 'More')];
 
     final leftIcons = isSocial
@@ -269,15 +269,21 @@ class _BottomNav extends StatelessWidget {
           children: [
             navItem(leftIcons[0].$1, leftIcons[0].$2, 0, isSocial ? onSocialTap : onErpTap),
             navItem(leftIcons[1].$1, leftIcons[1].$2, 1, isSocial ? onSocialTap : onErpTap),
+            // Center is load-bearing: Expanded hands its child a TIGHT width (a fifth of the bar),
+            // which on a wide desktop window is ~350px - the logo's own 42px width is ignored and
+            // ClipOval stretches it into a long ellipse. Center lets it keep its intrinsic size
+            // while the slot still reserves an equal share of the row.
             Expanded(
-              child: Opacity(
-                opacity: canToggleErp ? 1 : 0.35,
-                child: InkWell(
-                  onTap: onToggle,
-                  customBorder: const CircleBorder(),
-                  child: const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 4),
-                    child: _NavLogoToggle(),
+              child: Center(
+                child: Opacity(
+                  opacity: canToggleErp ? 1 : 0.35,
+                  child: InkWell(
+                    onTap: onToggle,
+                    customBorder: const CircleBorder(),
+                    child: const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 4),
+                      child: _NavLogoToggle(),
+                    ),
                   ),
                 ),
               ),

@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:nest_fe/core/auth/session_controller.dart';
 import 'package:nest_fe/core/providers/core_providers.dart';
 import 'package:nest_fe/core/widgets/async_value_view.dart';
+import 'package:nest_fe/features/artist_application/presentation/artist_applications_screen.dart';
 import 'package:nest_fe/features/platform/data/platform_api.dart';
 import 'package:nest_fe/features/platform/presentation/console_layout.dart';
 
@@ -79,14 +80,29 @@ class SuperAdminDashboardScreen extends ConsumerWidget {
                 ConsoleStat('Posts this week', '${data.social.postsThisWeek}', Icons.post_add_outlined),
                 ConsoleStat('Total events', '${data.social.totalEvents}', Icons.celebration_outlined),
                 ConsoleStat('Upcoming events', '${data.social.upcomingEvents}', Icons.event_available_outlined),
-                ConsoleStat(
-                  'Artist applications',
-                  '${data.social.pendingArtistApplications}',
-                  Icons.palette_outlined,
-                  tone: data.social.pendingArtistApplications > 0 ? colorScheme.tertiary : null,
-                  footnote: data.social.pendingArtistApplications > 0 ? 'waiting for review' : null,
-                ),
               ]),
+              const SizedBox(height: 24),
+
+              // Artist applications lost its own nav tab to Billing, so it needs a route from
+              // here - a queue nobody can reach is a queue that never gets worked.
+              const ConsoleSectionTitle('Review queue'),
+              Card(
+                margin: EdgeInsets.zero,
+                child: ListTile(
+                  leading: Icon(Icons.palette_outlined,
+                      color: data.social.pendingArtistApplications > 0 ? colorScheme.tertiary : null),
+                  title: const Text('Artist applications'),
+                  subtitle: Text(data.social.pendingArtistApplications == 0
+                      ? 'Nothing waiting for review'
+                      : '${data.social.pendingArtistApplications} waiting for review'),
+                  trailing: data.social.pendingArtistApplications == 0
+                      ? const Icon(Icons.chevron_right)
+                      : Badge(label: Text('${data.social.pendingArtistApplications}')),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const ArtistApplicationsScreen()),
+                  ),
+                ),
+              ),
             ],
           );
         },
