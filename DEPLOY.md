@@ -16,16 +16,16 @@ In the Render dashboard on the **owleodev** service → Environment, add:
 
 | Key | Value |
 | --- | --- |
-| `NEST_CORS_ALLOWED_ORIGINS` | `https://owleo-web.onrender.com` |
+| `NEST_CORS_ALLOWED_ORIGINS` | `https://owleo-web.kalaapp2026.workers.dev` |
 
 Comma-separate if you add a custom domain later:
-`https://owleo-web.onrender.com,https://app.owleonest.com`
+`https://owleo-web.kalaapp2026.workers.dev,https://app.owleonest.com`
 
 Save - Render redeploys automatically. Confirm it took effect:
 
 ```bash
 curl -s -D - -o /dev/null -X OPTIONS https://owleodev.onrender.com/auth/login \
-  -H "Origin: https://owleo-web.onrender.com" \
+  -H "Origin: https://owleo-web.kalaapp2026.workers.dev" \
   -H "Access-Control-Request-Method: POST" | grep -i access-control-allow-origin
 ```
 
@@ -133,7 +133,7 @@ The first `deploy` offers to create the project. Repeat those last two commands 
 
 ### Then, for either path
 
-Your URL is `https://owleo-web.pages.dev`. **Add it to `NEST_CORS_ALLOWED_ORIGINS` on the backend**
+Your URL is `https://owleo-web.kalaapp2026.workers.dev`. **Add it to `NEST_CORS_ALLOWED_ORIGINS` on the backend**
 (Step 1) - until you do, the site loads and every API call fails.
 
 ---
@@ -164,7 +164,7 @@ First build takes ~3-6 minutes because it downloads Flutter. Later builds reuse 
 
 ## Verify (any host)
 
-1. Open `https://owleo-web.onrender.com`
+1. Open `https://owleo-web.kalaapp2026.workers.dev`
 2. Log in as `superadmin`
 3. Open DevTools → Network. If you see CORS errors, Step 1 didn't apply.
 4. Hard-refresh while on an inner page - it should reload, not 404 (that's the rewrite).
