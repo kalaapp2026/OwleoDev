@@ -41,8 +41,8 @@ that first-load figure is what decides whether a free tier is actually usable.
 
 | Host | Free bandwidth | ~Fresh visits/month | Verdict |
 | --- | --- | --- | --- |
-| **Cloudflare Pages** | unlimited | unlimited | Best free option for a build this size |
-| **Render** (static) | 100 GB/mo | ~25,000 | Already configured here (`render.yaml`) |
+| **Cloudflare Pages** | unlimited | unlimited | **Recommended** - see Option B |
+| **Render** (static) | 100 GB/mo | ~25,000 | Also configured here (`render.yaml`) |
 | Netlify / Vercel | 100 GB/mo | ~25,000 | Fine |
 | **Firebase Hosting** | 360 MB/**day** | ~90/day | Fine for demos; tight for real use |
 
@@ -84,19 +84,53 @@ Your URL will be `https://<project-id>.web.app`. Put that in `NEST_CORS_ALLOWED_
 
 ---
 
-## Option B - Cloudflare Pages (most headroom, still free)
+## Option B - Cloudflare Pages (recommended)
 
-Dashboard → Workers & Pages → Create → Pages → connect the repo, then:
+Unlimited bandwidth on the free plan, which is the one that matters for a build this size.
+Checked against Cloudflare's hard limits with the real build - all comfortable:
 
+| Limit | Cloudflare | This build |
+| --- | --- | --- |
+| Max file size | 25 MiB | 6.9 MB (`canvaskit.wasm`) |
+| Files per deploy | 20,000 | 41 |
+| Build timeout | 20 min | ~4-6 min |
+
+`web/_redirects` is already committed and verified to reach `build/web` on every build, so the
+SPA fallback needs no dashboard config.
+
+### B1 - Auto-deploy from GitHub (set up once, then deploys on every push)
+
+Dashboard → **Workers & Pages** → **Create** → **Pages** → **Connect to Git** → pick the repo, then:
+
+- **Framework preset:** `None`
 - **Build command:**
   ```
   git clone https://github.com/flutter/flutter.git --depth 1 -b stable $HOME/flutter && export PATH="$HOME/flutter/bin:$PATH" && cd NEST_FE && flutter pub get && flutter build web --release --dart-define=API_BASE_URL=https://owleodev.onrender.com
   ```
 - **Build output directory:** `NEST_FE/build/web`
-- **SPA fallback:** add a file `NEST_FE/web/_redirects` containing `/*  /index.html  200`
-  (Flutter copies `web/` into the build, so it lands in the output automatically.)
+- **Root directory:** leave as the repo root (the command `cd`s itself)
 
-Deploys on every push. URL is `https://<project>.pages.dev` - add it to `NEST_CORS_ALLOWED_ORIGINS`.
+Cloudflare's build image has no Flutter, hence the clone - `--depth 1` keeps it under a minute.
+
+### B2 - Direct upload (deploy right now, no CI)
+
+Faster to get working, and it uses no build minutes. You run the build locally:
+
+```bash
+npm install -g wrangler
+wrangler login
+
+cd NEST_FE
+flutter build web --release --dart-define=API_BASE_URL=https://owleodev.onrender.com
+wrangler pages deploy build/web --project-name=owleo-web
+```
+
+The first `deploy` offers to create the project. Repeat those last two commands for each release.
+
+### Then, for either path
+
+Your URL is `https://owleo-web.pages.dev`. **Add it to `NEST_CORS_ALLOWED_ORIGINS` on the backend**
+(Step 1) - until you do, the site loads and every API call fails.
 
 ---
 
