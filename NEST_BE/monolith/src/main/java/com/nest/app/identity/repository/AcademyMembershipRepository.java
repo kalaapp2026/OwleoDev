@@ -26,4 +26,13 @@ public interface AcademyMembershipRepository extends JpaRepository<AcademyMember
      * mapped to a course via CourseMap (they have blanket academy access, not per-course
      * enrolment), so they can't be found the same way a Trainer's course_map row is found. */
     List<AcademyMembership> findByAcademyIdAndRoleTypeAndStatus(UUID academyId, Role roleType, MembershipStatus status);
+
+    // ---- Super Admin platform metrics ----
+
+    /** Per-academy headcount by role. Counts MEMBERSHIPS, not people: the same person teaching at
+     * two academies is one user but two trainers, which is the right unit for "how big is this
+     * academy". Platform-wide user totals come from UserRepository instead. */
+    long countByAcademyIdAndRoleTypeAndStatus(UUID academyId, Role roleType, MembershipStatus status);
+
+    long countByRoleTypeAndStatus(Role roleType, MembershipStatus status);
 }

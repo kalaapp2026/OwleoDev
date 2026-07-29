@@ -10,14 +10,18 @@ import 'package:nest_fe/features/academy/presentation/academy_onboarding_screen.
 /// reactivate an existing one. Suspending an academy locks out its whole tenant - students,
 /// trainers, and its Academy Admin - until Super Admin reactivates it.
 class AcademyManagementScreen extends ConsumerWidget {
-  const AcademyManagementScreen({super.key});
+  const AcademyManagementScreen({super.key, this.embedded = false});
+
+  /// True when rendered as a tab inside AppShell, which already supplies the Scaffold's AppBar -
+  /// a second one here would stack two title bars. False when pushed as its own page.
+  final bool embedded;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final academiesAsync = ref.watch(allAcademiesProvider);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Academies')),
+      appBar: embedded ? null : AppBar(title: const Text('Academies')),
       floatingActionButton: FloatingActionButton.extended(
         icon: const Icon(Icons.add_business_outlined),
         label: const Text('New academy'),

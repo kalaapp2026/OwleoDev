@@ -13,14 +13,18 @@ final pendingArtistApplicationsProvider =
 /// Super Admin review queue (PRD 7.4 addendum) - approve flips the applicant straight to Artist
 /// (they can post to the feed immediately); reject leaves them as a Guest (view-only).
 class ArtistApplicationsScreen extends ConsumerWidget {
-  const ArtistApplicationsScreen({super.key});
+  const ArtistApplicationsScreen({super.key, this.embedded = false});
+
+  /// True when rendered as a tab inside AppShell, which already supplies the Scaffold's AppBar -
+  /// a second one here would stack two title bars. False when pushed as its own page.
+  final bool embedded;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final applicationsAsync = ref.watch(pendingArtistApplicationsProvider);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Artist Applications')),
+      appBar: embedded ? null : AppBar(title: const Text('Artist Applications')),
       body: AsyncValueView<List<ArtistApplication>>(
         value: applicationsAsync,
         onRetry: () => ref.invalidate(pendingArtistApplicationsProvider),

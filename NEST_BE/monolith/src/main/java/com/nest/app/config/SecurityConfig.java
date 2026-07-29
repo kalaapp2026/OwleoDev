@@ -1,5 +1,6 @@
 package com.nest.app.config;
 
+import com.nest.app.platform.ActivityTrackingFilter;
 import com.nest.common.security.JwtAuthFilter;
 import com.nest.common.security.NestAuthenticationEntryPoint;
 import org.springframework.beans.factory.annotation.Value;
@@ -26,6 +27,9 @@ public class SecurityConfig {
 
     private static final String[] PUBLIC_PATHS = {
             "/auth/**",
+            // Install counting has to work BEFORE login - an install that never signs up is still
+            // an install. Carries no PII (client-generated device id only) and is idempotent.
+            "/devices/ping",
             "/swagger-ui/**", "/v3/api-docs/**", "/v3/api-docs.yaml",
             "/actuator/health",
             // Uploaded avatars - just images, not sensitive documents, so an <img src> doesn't
@@ -42,6 +46,7 @@ public class SecurityConfig {
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http, JwtAuthFilter jwtAuthFilter,
+                                                     ActivityTrackingFilter activityTrackingFilter,
                                                      NestAuthenticationEntryPoint authenticationEntryPoint) throws Exception {
         http
                 .csrf(AbstractHttpConfigurer::disable)
@@ -51,7 +56,10 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(PUBLIC_PATHS).permitAll()
                         .anyRequest().authenticated())
-                .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
+                .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class)
+                // AFTER JwtAuthFilter on purpose - it reads the principal that filter sets in
+                // TenantContext, which is cleared as soon as JwtAuthFilter's doFilter returns.
+                .addFilterAfter(activityTrackingFilter, JwtAuthFilter.class);
 
         return http.build();
     }

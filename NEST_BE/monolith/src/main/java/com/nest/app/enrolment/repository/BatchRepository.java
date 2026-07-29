@@ -16,4 +16,7 @@ public interface BatchRepository extends JpaRepository<Batch, UUID> {
 
     /** Calendar's source for a Trainer's own classes - the batches they're the default trainer for. */
     List<Batch> findByTrainerMembershipId(UUID trainerMembershipId);
+
+    /** Super Admin platform metrics - per-academy batch count, via that academy's course ids. */
+    long countByCourseIdIn(Collection<UUID> courseIds);
 }

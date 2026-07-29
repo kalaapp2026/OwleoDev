@@ -115,6 +115,13 @@ public class User {
     @Column(name = "updated_at")
     private Instant updatedAt;
 
+    /** Last authenticated request from this person, stamped (throttled) by ActivityTrackingFilter.
+     * Deliberately NOT login time: someone who stays logged in for weeks should still only count
+     * as active on the days they actually opened the app. Backs the Super Admin console's
+     * active-now / DAU / WAU / MAU figures. */
+    @Column(name = "last_seen_at")
+    private Instant lastSeenAt;
+
     public LocalDate getDob() {
         return dobEncrypted == null ? null : LocalDate.parse(dobEncrypted);
     }

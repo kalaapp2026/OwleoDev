@@ -45,6 +45,13 @@ public final class TenantContext {
         return require().userId();
     }
 
+    /** For callers that run on every request regardless of authentication (activity tracking) and
+     * must treat "nobody logged in" as an ordinary case, not an error. */
+    public static UUID currentUserIdOrNull() {
+        NestPrincipal principal = CURRENT.get();
+        return principal == null ? null : principal.userId();
+    }
+
     public static MembershipClaim currentMembership() {
         return require().activeMembership()
                 .orElseThrow(() -> new ForbiddenException("Request has no active academy membership"));

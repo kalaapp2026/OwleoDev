@@ -6,7 +6,10 @@ import 'package:nest_fe/features/dashboard/presentation/dashboard_screen.dart';
 import 'package:nest_fe/features/enrolment/presentation/batches_screen.dart';
 import 'package:nest_fe/features/fees/presentation/fees_screen.dart';
 import 'package:nest_fe/features/notification/data/notification_api.dart';
+import 'package:nest_fe/features/academy/presentation/academy_management_screen.dart';
+import 'package:nest_fe/features/artist_application/presentation/artist_applications_screen.dart';
 import 'package:nest_fe/features/notification/presentation/notifications_screen.dart';
+import 'package:nest_fe/features/platform/presentation/super_admin_dashboard_screen.dart';
 import 'package:nest_fe/features/profile/presentation/profile_screen.dart';
 import 'package:nest_fe/features/shell/presentation/more_menu_sheet.dart';
 import 'package:nest_fe/features/social/presentation/events_tab.dart';
@@ -38,6 +41,10 @@ class AppShellState extends ConsumerState<AppShell> {
   static const _socialTitles = ['Feed', 'Events', '', 'My Posts', 'Profile'];
   static const _erpTitles = ['Dashboard', 'Batches', '', 'Fees', 'Profile'];
 
+  /// A Super Admin belongs to no academy, so Batches and Fees - which are scoped to the active
+  /// academy - have nothing to show them. Their ERP side is the platform console instead.
+  static const _superAdminErpTitles = ['Platform', 'Academies', '', 'Applications', 'Profile'];
+
   void goToErpTab(int index) => setState(() {
         _mode = AppMode.erp;
         _erpIndex = index;
@@ -48,8 +55,10 @@ class AppShellState extends ConsumerState<AppShell> {
     final session = ref.watch(sessionControllerProvider);
     final user = session.user;
     final hasErpAccess = user?.hasErpAccess ?? false;
+    final isSuperAdmin = user?.isSuperAdmin ?? false;
 
-    final title = _mode == AppMode.social ? _socialTitles[_socialIndex] : _erpTitles[_erpIndex];
+    final erpTitles = isSuperAdmin ? _superAdminErpTitles : _erpTitles;
+    final title = _mode == AppMode.social ? _socialTitles[_socialIndex] : erpTitles[_erpIndex];
 
     // The bell is per-module: in ERP it shows ERP notifications, in Social it shows Social ones -
     // so a Trainer on their fees dashboard never sees "someone liked your post" and vice versa.
@@ -115,15 +124,26 @@ class AppShellState extends ConsumerState<AppShell> {
             index: _socialIndex,
             children: const [FeedScreen(), EventsTab(), SizedBox.shrink(), MyPostsScreen(), ProfileScreen()],
           ),
+          // A Super Admin belongs to no academy (PRD 2.4), so every academy-scoped ERP screen -
+          // the dashboard's "your courses" tiles, Batches, Fees - has nothing to show them and
+          // would just error on open. Their ERP side is the cross-tenant platform console instead.
           IndexedStack(
             index: _erpIndex,
-            children: [
-              const DashboardScreen(),
-              const BatchesScreen(),
-              const SizedBox.shrink(),
-              const FeesScreen(),
-              const ProfileScreen(),
-            ],
+            children: isSuperAdmin
+                ? const [
+                    SuperAdminDashboardScreen(),
+                    AcademyManagementScreen(embedded: true),
+                    SizedBox.shrink(),
+                    ArtistApplicationsScreen(embedded: true),
+                    ProfileScreen(),
+                  ]
+                : const [
+                    DashboardScreen(),
+                    BatchesScreen(),
+                    SizedBox.shrink(),
+                    FeesScreen(),
+                    ProfileScreen(),
+                  ],
           ),
         ],
       ),
@@ -132,6 +152,7 @@ class AppShellState extends ConsumerState<AppShell> {
         socialIndex: _socialIndex,
         erpIndex: _erpIndex,
         canToggleErp: hasErpAccess,
+        isSuperAdmin: isSuperAdmin,
         onSocialTap: (i) => setState(() => _socialIndex = i),
         onErpTap: (i) => setState(() => _erpIndex = i),
         onMoreTap: () => showMoreMenu(context, ref),
@@ -153,6 +174,7 @@ class _BottomNav extends StatelessWidget {
     required this.socialIndex,
     required this.erpIndex,
     required this.canToggleErp,
+    required this.isSuperAdmin,
     required this.onSocialTap,
     required this.onErpTap,
     required this.onMoreTap,
@@ -164,6 +186,7 @@ class _BottomNav extends StatelessWidget {
   final int socialIndex;
   final int erpIndex;
   final bool canToggleErp;
+  final bool isSuperAdmin;
   final ValueChanged<int> onSocialTap;
   final ValueChanged<int> onErpTap;
   final VoidCallback onMoreTap;
@@ -176,15 +199,24 @@ class _BottomNav extends StatelessWidget {
     final isSocial = mode == AppMode.social;
     final currentIndex = isSocial ? socialIndex : erpIndex;
 
+    // The ERP set differs for a Super Admin: they have no academy, so Batches/Fees are replaced by
+    // the platform-level equivalents (see AppShellState's IndexedStack).
+    final erpLeftIcons = isSuperAdmin
+        ? const [(Icons.insights_outlined, 'Platform'), (Icons.account_balance_outlined, 'Academies')]
+        : const [(Icons.dashboard_outlined, 'Dashboard'), (Icons.groups_outlined, 'Batches')];
+    final erpRightIcons = isSuperAdmin
+        ? const [(Icons.palette_outlined, 'Applications'), (Icons.apps_rounded, 'More')]
+        : const [(Icons.account_balance_wallet_outlined, 'Fees'), (Icons.apps_rounded, 'More')];
+
     final leftIcons = isSocial
         ? const [(Icons.dynamic_feed_outlined, 'Feed'), (Icons.celebration_outlined, 'Events')]
-        : const [(Icons.dashboard_outlined, 'Dashboard'), (Icons.groups_outlined, 'Batches')];
+        : erpLeftIcons;
     // Both sides now carry exactly 2 left + 2 right icons around the centre toggle, so the two
     // modes line up pixel-for-pixel when you switch - Social's Profile moved to the app-bar
     // (mirroring ERP), freeing this slot for My Posts + Search.
     final rightIcons = isSocial
         ? const [(Icons.grid_on_outlined, 'My Posts'), (Icons.search, 'Search')]
-        : const [(Icons.account_balance_wallet_outlined, 'Fees'), (Icons.apps_rounded, 'More')];
+        : erpRightIcons;
 
     Widget navItem(IconData icon, String label, int index, ValueChanged<int> onTap) {
       final selected = currentIndex == index;
