@@ -1,0 +1,23 @@
+{
+  // Cloudflare Workers Static Assets config for the Flutter web build.
+  //
+  // Needed because the project deploys with `npx wrangler deploy`, which has no way to guess
+  // where the built site is - without this it fails with "Could not detect a directory
+  // containing static files". The build command produces NEST_FE/build/web; this points at it.
+  //
+  // Deploy runs from the repo root, so the path is relative to there, not to NEST_FE.
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "owleo-web",
+  "compatibility_date": "2026-07-29",
+
+  "assets": {
+    "directory": "./NEST_FE/build/web",
+
+    // go_router uses real URL paths (/login, /erp/courses). "single-page-application" serves
+    // index.html for any path that isn't a real file, so deep links and refreshes work instead
+    // of 404ing. This is the Workers equivalent of a Pages rewrite rule - note that the
+    // _redirects file (kept for the Netlify/Render paths) does NOT cover this here, because
+    // Workers Static Assets doesn't support 200-status rewrites in _redirects the way Pages does.
+    "not_found_handling": "single-page-application"
+  }
+}

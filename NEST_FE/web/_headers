@@ -1,0 +1,21 @@
+# Cache rules for Cloudflare Workers Static Assets / Pages / Netlify.
+#
+# This is what decides whether the multi-MB wasm renderer is fetched once or on every single
+# visit - the difference between a fast repeat load and burning bandwidth for no reason.
+#
+# Flutter copies everything in web/ into build/web, so this ships with the build automatically.
+
+# Asset filenames are content-hashed, so the same name never means different bytes.
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+
+/canvaskit/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# index.html must NOT be cached: it names the hashed assets, so a stale copy keeps booting an old
+# build whose asset files no longer exist.
+/index.html
+  Cache-Control: no-cache
+
+/flutter_bootstrap.js
+  Cache-Control: no-cache
