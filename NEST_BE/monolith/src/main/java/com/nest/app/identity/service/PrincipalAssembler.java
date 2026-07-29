@@ -57,9 +57,15 @@ public class PrincipalAssembler {
     }
 
     public List<MembershipSummary> summarise(User user) {
-        // Same suspension filter as assemble() - a suspended academy vanishes from the switcher and
-        // the membership list, not just from feature/course grants (PRD 2.4 tenant suspension).
-        return membershipRepository.findByUserId(user.getId()).stream()
+        // Must apply the SAME filters as assemble(), or the two disagree and the app trusts the
+        // wrong one: /users/me drives what the UI unlocks (the academy switcher, whether the ERP
+        // side is reachable at all), while assemble() drives what the API will actually authorise.
+        //   - ACTIVE only: a PENDING_CONFIRMATION membership is precisely one the person has NOT
+        //     consented to yet (PRD 7.4) - listing it handed them the academy in their switcher
+        //     before they'd entered the confirmation code. REVOKED is excluded for the same reason.
+        //   - not suspended: a suspended academy vanishes from the switcher too, not just from
+        //     feature/course grants (PRD 2.4 tenant suspension).
+        return membershipRepository.findByUserIdAndStatus(user.getId(), MembershipStatus.ACTIVE).stream()
                 .filter(m -> !isAcademySuspended(m.getAcademyId()))
                 .map(m -> new MembershipSummary(m.getId(), m.getAcademyId(), m.getAcademyName(), m.getRoleType(),
                         m.getStatus().name(), featureKeysFor(m.getId()), courseIdsFor(m.getId())))

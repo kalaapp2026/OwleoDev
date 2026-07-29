@@ -67,18 +67,24 @@ class UserProfile {
   bool get isSuperAdmin => role == 'SUPER_ADMIN';
   bool get isArtist => role == 'ARTIST';
   bool get isGuest => role == 'GUEST';
+
+  /// The only memberships that grant anything - see [MembershipSummary.isActive]. Everything that
+  /// decides access or shows an academy to the user reads this, never the raw list.
+  List<MembershipSummary> get activeMemberships => memberships.where((m) => m.isActive).toList();
+
   // A Super Admin has no academy membership (they operate across tenants, onboarding academies -
   // PRD 2.4), so they'd otherwise be locked out of the ERP side entirely. Their ERP home is the
   // academy-onboarding tile, not the within-academy tools an academy member sees.
-  bool get hasErpAccess => memberships.isNotEmpty || isSuperAdmin;
-  bool get hasMultipleAcademies => memberships.length > 1;
+  bool get hasErpAccess => activeMemberships.isNotEmpty || isSuperAdmin;
+  bool get hasMultipleAcademies => activeMemberships.length > 1;
 
   MembershipSummary? get activeMembership {
-    if (activeMembershipId == null) return memberships.isEmpty ? null : memberships.first;
+    final active = activeMemberships;
+    if (activeMembershipId == null) return active.isEmpty ? null : active.first;
     try {
-      return memberships.firstWhere((m) => m.membershipId == activeMembershipId);
+      return active.firstWhere((m) => m.membershipId == activeMembershipId);
     } catch (_) {
-      return memberships.isEmpty ? null : memberships.first;
+      return active.isEmpty ? null : active.first;
     }
   }
 

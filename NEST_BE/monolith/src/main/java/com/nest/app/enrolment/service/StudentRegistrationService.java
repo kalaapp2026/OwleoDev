@@ -270,11 +270,20 @@ public class StudentRegistrationService {
         String code = otpService.requestOtp(student.getPhone(), OtpPurpose.MEMBERSHIP_CONFIRMATION, membershipId);
         String courseNames = courseRepository.findAllById(courseFees.keySet()).stream()
                 .map(Course::getName).collect(Collectors.joining(", "));
+        String title = "Confirm your enrolment";
+        String body = "Someone at " + academyName + " wants to add you to " + courseNames
+                + ". Share this code with them to confirm it's really you: " + code;
+
+        // Deliberately posted to BOTH bells, which is the one place we break the "ERP and Social
+        // never bleed into each other" rule. The recipient is by definition someone this academy
+        // can't reach yet - often with no ACTIVE membership at all - so the ERP side of the app
+        // may be completely inaccessible to them, and an ERP-only notification would be invisible
+        // in exactly the case it exists for. Same code in both, so whichever bell they can open
+        // gets them unblocked.
         notificationService.notify(student.getId(), NotificationModule.ERP, NotificationType.MEMBERSHIP_CONFIRMATION,
-                "Confirm your enrolment",
-                "Someone at " + academyName + " wants to add you to " + courseNames
-                        + ". Share this code with them to confirm it's really you: " + code,
-                code);
+                title, body, code);
+        notificationService.notify(student.getId(), NotificationModule.SOCIAL, NotificationType.MEMBERSHIP_CONFIRMATION,
+                title, body, code);
     }
 
     private List<UUID> courseIdsFor(UUID membershipId) {

@@ -72,13 +72,13 @@ class AppShellState extends ConsumerState<AppShell> {
             }),
           ),
           if (_mode == AppMode.erp) ...[
-            if (user != null && user.memberships.length > 1)
+            if (user != null && user.hasMultipleAcademies)
               PopupMenuButton<String>(
                 tooltip: 'Switch academy',
                 icon: const Icon(Icons.arrow_drop_down),
                 onSelected: (membershipId) =>
                     ref.read(sessionControllerProvider.notifier).switchActiveMembership(membershipId),
-                itemBuilder: (context) => user.memberships
+                itemBuilder: (context) => user.activeMemberships
                     .map(
                       (m) => PopupMenuItem<String>(
                         value: m.membershipId,

@@ -32,4 +32,10 @@ class MembershipSummary {
   bool hasFeature(String key) => features.contains(key);
 
   bool get isAcademyAdmin => roleType == 'ACADEMY_ADMIN';
+
+  /// PENDING_CONFIRMATION means the person hasn't yet approved being added to this academy
+  /// (PRD 7.4) and REVOKED means they were removed - neither grants any access. The backend
+  /// already filters these out of /users/me; this is the second line of defence so a stale or
+  /// older backend can't unlock the ERP side of the app for an unconfirmed membership.
+  bool get isActive => status == 'ACTIVE';
 }

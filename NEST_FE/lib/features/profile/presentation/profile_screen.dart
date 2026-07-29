@@ -88,9 +88,9 @@ class ProfileScreen extends ConsumerWidget {
           const SizedBox(height: 20),
         ],
 
-        if (user.memberships.isNotEmpty) ...[
+        if (user.activeMemberships.isNotEmpty) ...[
           const _SectionLabel('Academy memberships'),
-          ...user.memberships.map((m) => Card(
+          ...user.activeMemberships.map((m) => Card(
                 child: ListTile(
                   leading: const Icon(Icons.account_balance_outlined),
                   title: Text(m.academyName ?? m.academyId),
