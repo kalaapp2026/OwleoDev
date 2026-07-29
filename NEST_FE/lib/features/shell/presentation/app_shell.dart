@@ -6,9 +6,9 @@ import 'package:nest_fe/features/dashboard/presentation/dashboard_screen.dart';
 import 'package:nest_fe/features/enrolment/presentation/batches_screen.dart';
 import 'package:nest_fe/features/fees/presentation/fees_screen.dart';
 import 'package:nest_fe/features/notification/data/notification_api.dart';
-import 'package:nest_fe/features/academy/presentation/academy_management_screen.dart';
 import 'package:nest_fe/features/artist_application/presentation/artist_applications_screen.dart';
 import 'package:nest_fe/features/notification/presentation/notifications_screen.dart';
+import 'package:nest_fe/features/platform/presentation/academy_stats_screen.dart';
 import 'package:nest_fe/features/platform/presentation/super_admin_dashboard_screen.dart';
 import 'package:nest_fe/features/profile/presentation/profile_screen.dart';
 import 'package:nest_fe/features/shell/presentation/more_menu_sheet.dart';
@@ -132,7 +132,7 @@ class AppShellState extends ConsumerState<AppShell> {
             children: isSuperAdmin
                 ? const [
                     SuperAdminDashboardScreen(),
-                    AcademyManagementScreen(embedded: true),
+                    AcademyStatsScreen(embedded: true),
                     SizedBox.shrink(),
                     ArtistApplicationsScreen(embedded: true),
                     ProfileScreen(),

@@ -2,6 +2,7 @@ package com.nest.app.enrolment.repository;
 
 import com.nest.app.enrolment.entity.Batch;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
 
 import java.util.Collection;
 import java.util.List;
@@ -19,4 +20,15 @@ public interface BatchRepository extends JpaRepository<Batch, UUID> {
 
     /** Super Admin platform metrics - per-academy batch count, via that academy's course ids. */
     long countByCourseIdIn(Collection<UUID> courseIds);
+
+    /** Batch counts for every academy at once. Batch has no academy_id, so this joins through
+     * Course - written as a cross-join with an explicit id match because the two entities have no
+     * mapped JPA association (courseId is a plain UUID column). */
+    @Query("""
+            select c.academyId, count(b)
+            from Batch b, Course c
+            where b.courseId = c.id
+            group by c.academyId
+            """)
+    List<Object[]> countByAcademyGrouped();
 }

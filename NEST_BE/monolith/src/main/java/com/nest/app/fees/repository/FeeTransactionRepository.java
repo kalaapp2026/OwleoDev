@@ -20,4 +20,16 @@ public interface FeeTransactionRepository extends JpaRepository<FeeTransaction, 
     BigDecimal sumPaid(@Param("membershipId") UUID membershipId, @Param("courseId") UUID courseId, @Param("period") String period);
 
     List<FeeTransaction> findByCourseIdAndPeriod(UUID courseId, String period);
+
+    /** Fees collected per academy, for every academy at once (Super Admin academy list). Joins
+     * through Course because a transaction records a course, not an academy. This is the
+     * academy's OWN revenue from its students - not what the academy owes the platform, which is
+     * a separate concern (billing). */
+    @Query("""
+            select c.academyId, coalesce(sum(f.amountPaid), 0)
+            from FeeTransaction f, Course c
+            where f.courseId = c.id
+            group by c.academyId
+            """)
+    List<Object[]> sumCollectedByAcademyGrouped();
 }

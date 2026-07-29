@@ -3,6 +3,7 @@ package com.nest.app.event.repository;
 import com.nest.app.event.entity.Event;
 import com.nest.app.event.entity.EventVisibility;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -19,4 +20,8 @@ public interface EventRepository extends JpaRepository<Event, UUID> {
     long countByEventDateAfter(LocalDateTime now);
 
     long countByAcademyId(UUID academyId);
+
+    /** Event counts for every academy at once (Super Admin academy list). */
+    @Query("select e.academyId, count(e) from Event e group by e.academyId")
+    List<Object[]> countByAcademyGrouped();
 }

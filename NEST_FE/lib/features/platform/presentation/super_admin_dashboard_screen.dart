@@ -4,9 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:nest_fe/core/auth/session_controller.dart';
 import 'package:nest_fe/core/providers/core_providers.dart';
 import 'package:nest_fe/core/widgets/async_value_view.dart';
-import 'package:nest_fe/features/academy/presentation/academy_management_screen.dart';
-import 'package:nest_fe/features/artist_application/presentation/artist_applications_screen.dart';
 import 'package:nest_fe/features/platform/data/platform_api.dart';
+import 'package:nest_fe/features/platform/presentation/console_layout.dart';
 
 final platformApiProvider = Provider((ref) => PlatformApi(ref.watch(dioClientProvider)));
 final platformOverviewProvider =
@@ -28,181 +27,111 @@ class SuperAdminDashboardScreen extends ConsumerWidget {
       child: AsyncValueView<PlatformOverview>(
         value: overviewAsync,
         onRetry: () => ref.invalidate(platformOverviewProvider),
-        data: (context, data) => ListView(
-          padding: const EdgeInsets.all(20),
-          children: [
-            Text('Platform overview', style: Theme.of(context).textTheme.bodyMedium),
-            Text(user?.fullName ?? 'Super Admin', style: Theme.of(context).textTheme.headlineSmall),
-            const SizedBox(height: 20),
+        data: (context, data) {
+          final colorScheme = Theme.of(context).colorScheme;
+          return ConsolePage(
+            children: [
+              Text('Platform overview', style: Theme.of(context).textTheme.bodyMedium),
+              Text(user?.fullName ?? 'Super Admin', style: Theme.of(context).textTheme.headlineSmall),
+              const SizedBox(height: 24),
 
-            _SectionTitle('Live now'),
-            _StatGrid(stats: [
-              _Stat('Active last hour', '${data.activity.activeLastHour}', Icons.bolt_outlined),
-              _Stat('Active today', '${data.activity.activeToday}', Icons.today_outlined),
-              _Stat('Active this week', '${data.activity.activeThisWeek}', Icons.date_range_outlined),
-              _Stat('Active this month', '${data.activity.activeThisMonth}', Icons.calendar_month_outlined),
-            ]),
-            const SizedBox(height: 24),
-
-            _SectionTitle('Academies'),
-            _StatGrid(stats: [
-              _Stat('Total', '${data.academies.total}', Icons.account_balance_outlined),
-              _Stat('Active', '${data.academies.active}', Icons.check_circle_outline),
-              _Stat('Suspended', '${data.academies.suspended}', Icons.pause_circle_outline),
-              _Stat('New this month', '${data.academies.newThisMonth}', Icons.trending_up),
-            ]),
-            const SizedBox(height: 24),
-
-            _SectionTitle('Users'),
-            _StatGrid(stats: [
-              _Stat('Total users', '${data.users.total}', Icons.people_outline),
-              _Stat('New this week', '${data.users.newThisWeek}', Icons.person_add_alt_outlined),
-              _Stat('New this month', '${data.users.newThisMonth}', Icons.group_add_outlined),
-              _Stat('Installs seen', '${data.activity.installsSeen}', Icons.install_mobile_outlined,
+              const ConsoleSectionTitle('Live now'),
+              ConsoleStatGrid(stats: [
+                ConsoleStat('Active last hour', '${data.activity.activeLastHour}', Icons.bolt_outlined),
+                ConsoleStat('Active today', '${data.activity.activeToday}', Icons.today_outlined),
+                ConsoleStat('Active this week', '${data.activity.activeThisWeek}', Icons.date_range_outlined),
+                ConsoleStat('Active this month', '${data.activity.activeThisMonth}', Icons.calendar_month_outlined),
+                ConsoleStat('Total users', '${data.users.total}', Icons.people_outline),
+                ConsoleStat(
+                  'Installs seen',
+                  '${data.activity.installsSeen}',
+                  Icons.install_mobile_outlined,
                   // Honest labelling: the backend cannot read Play Store / App Store download
                   // counts, so this is distinct devices that launched the app, not downloads.
-                  footnote: 'devices, not store downloads'),
-            ]),
-            const SizedBox(height: 20),
-            _RoleBreakdown(byRole: data.users.byRole),
-            const SizedBox(height: 24),
-
-            _SectionTitle('Signups - last 30 days'),
-            const SizedBox(height: 8),
-            _SignupTrendChart(trend: data.signupTrend),
-            const SizedBox(height: 24),
-
-            _SectionTitle('Social'),
-            _StatGrid(stats: [
-              _Stat('Total posts', '${data.social.totalPosts}', Icons.dynamic_feed_outlined),
-              _Stat('Posts this week', '${data.social.postsThisWeek}', Icons.post_add_outlined),
-              _Stat('Total events', '${data.social.totalEvents}', Icons.celebration_outlined),
-              _Stat('Upcoming events', '${data.social.upcomingEvents}', Icons.event_available_outlined),
-            ]),
-            const SizedBox(height: 20),
-
-            _SectionTitle('Manage'),
-            const SizedBox(height: 4),
-            Card(
-              child: ListTile(
-                leading: const Icon(Icons.account_balance_outlined),
-                title: const Text('Academies'),
-                subtitle: const Text('Onboard, suspend or reactivate'),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const AcademyManagementScreen()),
+                  footnote: 'devices, not store downloads',
                 ),
+              ]),
+              const SizedBox(height: 28),
+
+              const ConsoleSectionTitle('Academies'),
+              ConsoleStatGrid(stats: [
+                ConsoleStat('Total', '${data.academies.total}', Icons.account_balance_outlined),
+                ConsoleStat('Active', '${data.academies.active}', Icons.check_circle_outline),
+                ConsoleStat('Suspended', '${data.academies.suspended}', Icons.pause_circle_outline,
+                    tone: data.academies.suspended > 0 ? colorScheme.error : null),
+                ConsoleStat('New this month', '${data.academies.newThisMonth}', Icons.trending_up),
+                ConsoleStat('New users / week', '${data.users.newThisWeek}', Icons.person_add_alt_outlined),
+                ConsoleStat('New users / month', '${data.users.newThisMonth}', Icons.group_add_outlined),
+              ]),
+              const SizedBox(height: 28),
+
+              // Side by side on a desktop window - the trend and the role split are read together,
+              // and stacking them wastes half the screen. Falls back to stacked when narrow.
+              _TrendAndRoles(
+                trend: data.signupTrend,
+                byRole: data.users.byRole,
               ),
-            ),
-            Card(
-              child: ListTile(
-                leading: const Icon(Icons.palette_outlined),
-                title: const Text('Artist applications'),
-                subtitle: Text(data.social.pendingArtistApplications == 0
-                    ? 'Nothing waiting for review'
-                    : '${data.social.pendingArtistApplications} waiting for review'),
-                trailing: data.social.pendingArtistApplications == 0
-                    ? const Icon(Icons.chevron_right)
-                    : Badge(label: Text('${data.social.pendingArtistApplications}')),
-                onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const ArtistApplicationsScreen()),
+              const SizedBox(height: 28),
+
+              const ConsoleSectionTitle('Social'),
+              ConsoleStatGrid(stats: [
+                ConsoleStat('Total posts', '${data.social.totalPosts}', Icons.dynamic_feed_outlined),
+                ConsoleStat('Posts this week', '${data.social.postsThisWeek}', Icons.post_add_outlined),
+                ConsoleStat('Total events', '${data.social.totalEvents}', Icons.celebration_outlined),
+                ConsoleStat('Upcoming events', '${data.social.upcomingEvents}', Icons.event_available_outlined),
+                ConsoleStat(
+                  'Artist applications',
+                  '${data.social.pendingArtistApplications}',
+                  Icons.palette_outlined,
+                  tone: data.social.pendingArtistApplications > 0 ? colorScheme.tertiary : null,
+                  footnote: data.social.pendingArtistApplications > 0 ? 'waiting for review' : null,
                 ),
-              ),
-            ),
-          ],
-        ),
+              ]),
+            ],
+          );
+        },
       ),
     );
   }
 }
 
-class _SectionTitle extends StatelessWidget {
-  const _SectionTitle(this.text);
-  final String text;
+/// Signup trend and role split, side by side on a desktop window. They're read together ("we grew
+/// - who are the new people?"), and stacking them on a wide screen wastes half the viewport. Falls
+/// back to stacked below the compact breakpoint.
+class _TrendAndRoles extends StatelessWidget {
+  const _TrendAndRoles({required this.trend, required this.byRole});
+
+  final List<DailyCount> trend;
+  final Map<String, int> byRole;
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: Text(
-        text.toUpperCase(),
-        style: TextStyle(
-          fontSize: 11,
-          fontWeight: FontWeight.w700,
-          letterSpacing: 0.6,
-          color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5),
-        ),
-      ),
+    final chart = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const ConsoleSectionTitle('Signups - last 30 days'),
+        _SignupTrendChart(trend: trend),
+      ],
     );
-  }
-}
-
-class _Stat {
-  const _Stat(this.label, this.value, this.icon, {this.footnote});
-  final String label;
-  final String value;
-  final IconData icon;
-  final String? footnote;
-}
-
-/// Two-per-row so the numbers stay legible on a phone; the grid grows with the list rather than
-/// being hard-coded to four.
-class _StatGrid extends StatelessWidget {
-  const _StatGrid({required this.stats});
-  final List<_Stat> stats;
-
-  @override
-  Widget build(BuildContext context) {
-    return GridView.count(
-      crossAxisCount: 2,
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      mainAxisSpacing: 10,
-      crossAxisSpacing: 10,
-      childAspectRatio: 1.9,
-      children: stats.map((s) => _StatCard(stat: s)).toList(),
+    final roles = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const ConsoleSectionTitle('Users by role'),
+        _RoleBreakdown(byRole: byRole),
+      ],
     );
-  }
-}
 
-class _StatCard extends StatelessWidget {
-  const _StatCard({required this.stat});
-  final _Stat stat;
-
-  @override
-  Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    return Card(
-      margin: EdgeInsets.zero,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Row(
-              children: [
-                Icon(stat.icon, color: colorScheme.primary, size: 18),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    stat.value,
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 4),
-            Text(stat.label, style: Theme.of(context).textTheme.bodySmall, overflow: TextOverflow.ellipsis),
-            if (stat.footnote != null)
-              Text(
-                stat.footnote!,
-                style: TextStyle(fontSize: 10, color: colorScheme.onSurface.withValues(alpha: 0.45)),
-                overflow: TextOverflow.ellipsis,
-              ),
-          ],
-        ),
+    if (ConsoleBreakpoints.isCompact(context)) {
+      return Column(children: [chart, const SizedBox(height: 24), roles]);
+    }
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(flex: 3, child: chart),
+          const SizedBox(width: 20),
+          Expanded(flex: 2, child: roles),
+        ],
       ),
     );
   }

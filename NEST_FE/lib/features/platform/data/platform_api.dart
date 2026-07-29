@@ -133,6 +133,73 @@ class DailyCount {
       );
 }
 
+/// One academy as the Super Admin console sees it - identity plus the headline counts. Distinct
+/// from [AcademyStats] above, which is the platform-wide roll-up (how many academies exist).
+class AcademySummary {
+  final String id;
+  final String name;
+  final String? city;
+  final String status;
+  final String? plan;
+  final DateTime? createdAt;
+
+  /// Newest activity across this academy's members. Null means nobody has opened the app since
+  /// activity tracking started - shown as "no activity yet" rather than faked as zero.
+  final DateTime? lastActivityAt;
+
+  final int students;
+  final int trainers;
+  final int admins;
+  final int courses;
+  final int batches;
+  final int events;
+  final int posts;
+
+  /// The academy's own revenue from its students - not what it owes the platform.
+  final double feesCollected;
+
+  const AcademySummary({
+    required this.id,
+    required this.name,
+    required this.city,
+    required this.status,
+    required this.plan,
+    required this.createdAt,
+    required this.lastActivityAt,
+    required this.students,
+    required this.trainers,
+    required this.admins,
+    required this.courses,
+    required this.batches,
+    required this.events,
+    required this.posts,
+    required this.feesCollected,
+  });
+
+  bool get isSuspended => status == 'SUSPENDED';
+
+  int get people => students + trainers + admins;
+
+  factory AcademySummary.fromJson(Map<String, dynamic> json) => AcademySummary(
+        id: json['id'] as String,
+        name: json['name'] as String,
+        city: json['city'] as String?,
+        status: json['status'] as String? ?? 'ACTIVE',
+        plan: json['plan'] as String?,
+        createdAt: json['createdAt'] == null ? null : DateTime.parse(json['createdAt'] as String),
+        lastActivityAt:
+            json['lastActivityAt'] == null ? null : DateTime.parse(json['lastActivityAt'] as String),
+        students: (json['students'] as num?)?.toInt() ?? 0,
+        trainers: (json['trainers'] as num?)?.toInt() ?? 0,
+        admins: (json['admins'] as num?)?.toInt() ?? 0,
+        courses: (json['courses'] as num?)?.toInt() ?? 0,
+        batches: (json['batches'] as num?)?.toInt() ?? 0,
+        events: (json['events'] as num?)?.toInt() ?? 0,
+        posts: (json['posts'] as num?)?.toInt() ?? 0,
+        feesCollected: (json['feesCollected'] as num?)?.toDouble() ?? 0,
+      );
+}
+
 class PlatformApi {
   PlatformApi(this._client);
   final DioClient _client;
@@ -141,6 +208,20 @@ class PlatformApi {
     return _client.call(
       (dio) => dio.get('/admin/platform/overview'),
       (data) => PlatformOverview.fromJson(data as Map<String, dynamic>),
+    );
+  }
+
+  Future<List<AcademySummary>> academies() {
+    return _client.call(
+      (dio) => dio.get('/admin/platform/academies'),
+      (data) => (data as List).map((e) => AcademySummary.fromJson(e as Map<String, dynamic>)).toList(),
+    );
+  }
+
+  Future<AcademySummary> academy(String academyId) {
+    return _client.call(
+      (dio) => dio.get('/admin/platform/academies/$academyId'),
+      (data) => AcademySummary.fromJson(data as Map<String, dynamic>),
     );
   }
 

@@ -3,6 +3,8 @@ package com.nest.app.curriculum.repository;
 import com.nest.app.curriculum.entity.Course;
 import com.nest.app.curriculum.entity.CourseStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import java.util.List;
 import java.util.UUID;
@@ -24,6 +26,11 @@ public interface CourseRepository extends JpaRepository<Course, UUID> {
     long countByAcademyIdAndStatus(UUID academyId, CourseStatus status);
 
     /** Batch counts per academy have to go through courses - Batch has no academy_id of its own. */
-    @org.springframework.data.jpa.repository.Query("select c.id from Course c where c.academyId = :academyId")
-    List<UUID> findIdsByAcademyId(@org.springframework.data.repository.query.Param("academyId") UUID academyId);
+    @Query("select c.id from Course c where c.academyId = :academyId")
+    List<UUID> findIdsByAcademyId(@Param("academyId") UUID academyId);
+
+    /** Course counts for every academy at once - see AcademyMembershipRepository.countByAcademyAndRole
+     * for why these are grouped rather than asked per academy. */
+    @Query("select c.academyId, count(c) from Course c where c.status = :status group by c.academyId")
+    List<Object[]> countByAcademyGrouped(@Param("status") CourseStatus status);
 }

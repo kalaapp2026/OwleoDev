@@ -4,6 +4,8 @@ import com.nest.app.identity.entity.AcademyMembership;
 import com.nest.app.identity.entity.MembershipStatus;
 import com.nest.common.security.Role;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import java.util.List;
 import java.util.Optional;
@@ -35,4 +37,27 @@ public interface AcademyMembershipRepository extends JpaRepository<AcademyMember
     long countByAcademyIdAndRoleTypeAndStatus(UUID academyId, Role roleType, MembershipStatus status);
 
     long countByRoleTypeAndStatus(Role roleType, MembershipStatus status);
+
+    /**
+     * Headcount for EVERY academy at once, as (academyId, roleType, count) rows. Grouped on
+     * purpose: the Super Admin academy list needs this for every tenant, and asking per-academy
+     * would be one query per academy per role.
+     */
+    @Query("""
+            select m.academyId, m.roleType, count(m)
+            from AcademyMembership m
+            where m.status = :status
+            group by m.academyId, m.roleType
+            """)
+    List<Object[]> countByAcademyAndRole(@Param("status") MembershipStatus status);
+
+    /** Most recent sign of life in each academy - the newest last_seen_at across its members.
+     * Answers "is this tenant actually being used" without opening it. */
+    @Query("""
+            select m.academyId, max(u.lastSeenAt)
+            from AcademyMembership m, User u
+            where m.userId = u.id and m.status = :status
+            group by m.academyId
+            """)
+    List<Object[]> lastActivityByAcademy(@Param("status") MembershipStatus status);
 }
