@@ -1,0 +1,9 @@
+# SPA fallback for Cloudflare Pages / Netlify.
+#
+# go_router uses real URL paths (/login, /erp/courses, /signup). Without this, loading or
+# refreshing any path other than "/" asks the host for a file that doesn't exist and 404s.
+# The 200 (rather than a redirect) keeps the URL intact so Flutter can route it client-side.
+#
+# Flutter copies everything in web/ into build/web, so this ships automatically.
+# Harmless on hosts that don't read it (Firebase and Render use their own config).
+/*  /index.html  200

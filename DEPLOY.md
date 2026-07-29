@@ -33,7 +33,74 @@ You want a header back. Nothing means it isn't applied yet.
 
 ---
 
-## Step 2 - Create the static site
+## Choosing a free host
+
+A Flutter web build is heavy: a first-time visitor downloads roughly **4MB** (1.1MB of gzipped
+JS plus the multi-MB wasm renderer). Repeat visits are nearly free because assets are cached, but
+that first-load figure is what decides whether a free tier is actually usable.
+
+| Host | Free bandwidth | ~Fresh visits/month | Verdict |
+| --- | --- | --- | --- |
+| **Cloudflare Pages** | unlimited | unlimited | Best free option for a build this size |
+| **Render** (static) | 100 GB/mo | ~25,000 | Already configured here (`render.yaml`) |
+| Netlify / Vercel | 100 GB/mo | ~25,000 | Fine |
+| **Firebase Hosting** | 360 MB/**day** | ~90/day | Fine for demos; tight for real use |
+
+Firebase's limit is per *day*, not per month - about **90 first-time visitors daily** at 4MB each.
+That's genuinely fine while you're testing and sharing a link with a few people, and genuinely
+limiting once an academy's students start using it. It's the one number worth knowing before
+picking it.
+
+All three steps below (CORS, SPA rewrite, `--dart-define`) are needed on **every** host. Only the
+upload command differs.
+
+---
+
+## Option A - Firebase Hosting
+
+One-time setup:
+
+```bash
+npm install -g firebase-tools
+firebase login
+cd NEST_FE
+firebase init hosting     # existing project or create one
+```
+
+`firebase init` will ask about the public directory and SPA rewrite. **`firebase.json` is already
+committed** with the right answers (public `build/web`, rewrite everything to `/index.html`, long
+cache on assets, no-cache on `index.html`) - so if the wizard offers to overwrite it, say **no**.
+
+Every deploy:
+
+```bash
+cd NEST_FE
+flutter build web --release --dart-define=API_BASE_URL=https://owleodev.onrender.com
+firebase deploy --only hosting
+```
+
+Your URL will be `https://<project-id>.web.app`. Put that in `NEST_CORS_ALLOWED_ORIGINS`
+(Step 1) or nothing will load past the login screen.
+
+---
+
+## Option B - Cloudflare Pages (most headroom, still free)
+
+Dashboard → Workers & Pages → Create → Pages → connect the repo, then:
+
+- **Build command:**
+  ```
+  git clone https://github.com/flutter/flutter.git --depth 1 -b stable $HOME/flutter && export PATH="$HOME/flutter/bin:$PATH" && cd NEST_FE && flutter pub get && flutter build web --release --dart-define=API_BASE_URL=https://owleodev.onrender.com
+  ```
+- **Build output directory:** `NEST_FE/build/web`
+- **SPA fallback:** add a file `NEST_FE/web/_redirects` containing `/*  /index.html  200`
+  (Flutter copies `web/` into the build, so it lands in the output automatically.)
+
+Deploys on every push. URL is `https://<project>.pages.dev` - add it to `NEST_CORS_ALLOWED_ORIGINS`.
+
+---
+
+## Option C - Render static site (already configured)
 
 `render.yaml` at the repo root already describes it. Either:
 
@@ -57,7 +124,7 @@ First build takes ~3-6 minutes because it downloads Flutter. Later builds reuse 
 
 ---
 
-## Step 3 - Verify
+## Verify (any host)
 
 1. Open `https://owleo-web.onrender.com`
 2. Log in as `superadmin`
