@@ -39,8 +39,13 @@ public class SecurityConfig {
 
     /** The Flutter web build runs on its own origin (localhost:5000 in dev, a real domain once
      * deployed) - without CORS the browser blocks every request before it even reaches
-     * JwtAuthFilter, regardless of how correct the backend logic is. Comma-separated so a real
-     * deployment can override via NEST_ALLOWED_ORIGINS instead of editing code. */
+     * JwtAuthFilter, regardless of how correct the backend logic is.
+     *
+     * <p>The default below is DEV ONLY. A deployed web build is served from its own https origin,
+     * which is not in this list, so every API call from it fails at the browser until the host's
+     * environment sets the origin explicitly. The env var is
+     * {@code NEST_CORS_ALLOWED_ORIGINS} (Spring's relaxed binding of the property name below),
+     * comma-separated - e.g. {@code https://owleo-web.onrender.com}. */
     @Value("${nest.cors.allowed-origins:http://localhost:5000,http://localhost:*,http://127.0.0.1:*}")
     private String allowedOrigins;
 

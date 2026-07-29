@@ -1,0 +1,57 @@
+# Render Blueprint for the Owleo Nest WEB app (the Flutter build).
+#
+# Scope note: this file deliberately defines ONLY the static site. The backend
+# (owleodev) already exists as a Render web service created from NEST_BE/Dockerfile,
+# and adding it here risks a blueprint apply reconciling/duplicating a live service.
+# The one backend change deployment needs is an environment variable - see DEPLOY.md.
+#
+# Static sites are CDN-served and do not spin down, so the web app itself is always
+# up. The BACKEND on Render's free tier does sleep after inactivity - see DEPLOY.md.
+
+services:
+  - type: web
+    name: owleo-web
+    runtime: static
+
+    # Render's build image has no Flutter, so the build fetches it. --depth 1 keeps
+    # the clone to about a minute; the whole build runs roughly 3-6 minutes.
+    # API_BASE_URL is compiled INTO the bundle by --dart-define (ApiConfig reads it
+    # via String.fromEnvironment), so changing it requires a rebuild, not a restart.
+    buildCommand: |
+      set -e
+      if [ ! -d "$HOME/flutter" ]; then
+        git clone https://github.com/flutter/flutter.git --depth 1 -b stable "$HOME/flutter"
+      fi
+      export PATH="$HOME/flutter/bin:$PATH"
+      flutter --version
+      cd NEST_FE
+      flutter pub get
+      flutter build web --release --dart-define=API_BASE_URL=$API_BASE_URL
+
+    staticPublishPath: NEST_FE/build/web
+
+    envVars:
+      - key: API_BASE_URL
+        value: https://owleodev.onrender.com
+
+    # go_router uses real URL paths (/login, /erp/courses). Without this, refreshing
+    # on any route other than "/" asks Render for a file that doesn't exist and 404s.
+    # Every path falls through to index.html and Flutter routes it client-side.
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+
+    headers:
+      # Hashed asset filenames change on every build, so they're safe to cache hard.
+      - path: /assets/*
+        name: Cache-Control
+        value: public, max-age=31536000, immutable
+      - path: /canvaskit/*
+        name: Cache-Control
+        value: public, max-age=31536000, immutable
+      # index.html must NOT be cached, or returning users keep booting an old build
+      # that points at stale asset hashes.
+      - path: /index.html
+        name: Cache-Control
+        value: no-cache
