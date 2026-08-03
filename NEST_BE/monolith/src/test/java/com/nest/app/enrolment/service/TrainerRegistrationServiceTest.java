@@ -30,6 +30,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
@@ -50,6 +52,10 @@ class TrainerRegistrationServiceTest {
     private UserRepository userRepository;
     @Mock
     private com.nest.app.identity.repository.CourseFeatureGrantRepository courseFeatureGrantRepository;
+    @Mock
+    private com.nest.app.curriculum.repository.CourseRepository courseRepository;
+    @Mock
+    private com.nest.app.identity.service.MembershipConfirmationService membershipConfirmationService;
 
     private TrainerRegistrationService trainerRegistrationService;
 
@@ -73,7 +79,7 @@ class TrainerRegistrationServiceTest {
     @Test
     void trainerCannotDelegateASuperiorFeatureSet() {
         trainerRegistrationService = new TrainerRegistrationService(identityRegistrationService, courseMapRepository,
-                membershipRepository, userRepository, courseFeatureGrantRepository);
+                membershipRepository, userRepository, courseFeatureGrantRepository, courseRepository, membershipConfirmationService);
         actingAsTrainerWithFeatures(Set.of(FeatureKey.ATTENDANCE, FeatureKey.BATCH_SCHEDULING));
 
         var request = new RegisterTrainerRequest("junior", "Junior Trainer", "9000000001", "junior@example.com",
@@ -88,7 +94,7 @@ class TrainerRegistrationServiceTest {
     @Test
     void trainerCanDelegateExactlyTheirOwnFeatureSet() {
         trainerRegistrationService = new TrainerRegistrationService(identityRegistrationService, courseMapRepository,
-                membershipRepository, userRepository, courseFeatureGrantRepository);
+                membershipRepository, userRepository, courseFeatureGrantRepository, courseRepository, membershipConfirmationService);
         actingAsTrainerWithFeatures(Set.of(FeatureKey.ATTENDANCE, FeatureKey.BATCH_SCHEDULING, FeatureKey.RESCHEDULE));
 
         User createdUser = User.builder().id(UUID.randomUUID()).username("junior").build();
@@ -111,7 +117,7 @@ class TrainerRegistrationServiceTest {
     @Test
     void academyAdminCannotDelegateNonDelegableFeatures() {
         trainerRegistrationService = new TrainerRegistrationService(identityRegistrationService, courseMapRepository,
-                membershipRepository, userRepository, courseFeatureGrantRepository);
+                membershipRepository, userRepository, courseFeatureGrantRepository, courseRepository, membershipConfirmationService);
         actingAsAcademyAdmin();
 
         var request = new RegisterTrainerRequest("ravi", "Ravi", "9000000002", "ravi@example.com",
@@ -126,7 +132,7 @@ class TrainerRegistrationServiceTest {
     @Test
     void academyAdminCanGrantAnyDelegableFeatureDespiteHoldingNoFeatureGrantsThemselves() {
         trainerRegistrationService = new TrainerRegistrationService(identityRegistrationService, courseMapRepository,
-                membershipRepository, userRepository, courseFeatureGrantRepository);
+                membershipRepository, userRepository, courseFeatureGrantRepository, courseRepository, membershipConfirmationService);
         actingAsAcademyAdmin();
 
         User createdUser = User.builder().id(UUID.randomUUID()).username("ravi").build();
@@ -144,5 +150,55 @@ class TrainerRegistrationServiceTest {
 
         assertThat(response.courseFeatures().values().stream().flatMap(Set::stream).toList())
                 .containsExactlyInAnyOrder(FeatureKey.FEES_ENTRY, FeatureKey.FEES_DASHBOARD);
+    }
+
+    @Test
+    void anExistingNestUserIsLinkedToThisAcademyInsteadOfBeingRejectedAsADuplicate() {
+        trainerRegistrationService = new TrainerRegistrationService(identityRegistrationService, courseMapRepository,
+                membershipRepository, userRepository, courseFeatureGrantRepository, courseRepository, membershipConfirmationService);
+        actingAsAcademyAdmin();
+
+        // Someone already on NEST - e.g. a student at a different academy.
+        User existing = User.builder().id(UUID.randomUUID()).username("priya").fullName("Priya").build();
+        when(identityRegistrationService.findByEmail("priya@example.com")).thenReturn(java.util.Optional.of(existing));
+        when(identityRegistrationService.findMembership(eq(existing.getId()), any())).thenReturn(java.util.Optional.empty());
+        when(identityRegistrationService.createMembership(any(), any(), any(), eq(Role.TRAINER),
+                eq(MembershipStatus.PENDING_CONFIRMATION), any()))
+                .thenReturn(AcademyMembership.builder().id(UUID.randomUUID()).build());
+        when(courseRepository.findAllById(any())).thenReturn(List.of());
+
+        var request = new RegisterTrainerRequest("priya_new", "Priya", "9000000009", "priya@example.com",
+                java.time.LocalDate.of(1990, 1, 1), null, null, null, null,
+                Map.of(UUID.randomUUID(), Set.of(FeatureKey.ATTENDANCE)));
+
+        var response = trainerRegistrationService.registerTrainer(request);
+
+        assertThat(response.pendingConfirmation()).as("needs that person's own approval").isTrue();
+        assertThat(response.temporaryPassword()).as("they keep their existing password").isNull();
+        assertThat(response.userId()).isEqualTo(existing.getId());
+        verify(identityRegistrationService, never())
+                .createTrainerWithPassword(any(), any(), any(), any(), any(), any(), any(), any(), any(), any());
+        verify(membershipConfirmationService).sendConfirmation(eq(existing), any(), any(), eq("a trainer"), any());
+    }
+
+    @Test
+    void someoneAlreadyInThisAcademyIsRejectedWithAClearReason() {
+        trainerRegistrationService = new TrainerRegistrationService(identityRegistrationService, courseMapRepository,
+                membershipRepository, userRepository, courseFeatureGrantRepository, courseRepository, membershipConfirmationService);
+        actingAsAcademyAdmin();
+
+        User existing = User.builder().id(UUID.randomUUID()).username("priya").fullName("Priya").build();
+        when(identityRegistrationService.findByEmail("priya@example.com")).thenReturn(java.util.Optional.of(existing));
+        when(identityRegistrationService.findMembership(eq(existing.getId()), any())).thenReturn(java.util.Optional.of(
+                AcademyMembership.builder().id(UUID.randomUUID()).roleType(Role.STUDENT)
+                        .status(MembershipStatus.ACTIVE).build()));
+
+        var request = new RegisterTrainerRequest("priya_new", "Priya", "9000000009", "priya@example.com",
+                java.time.LocalDate.of(1990, 1, 1), null, null, null, null,
+                Map.of(UUID.randomUUID(), Set.of(FeatureKey.ATTENDANCE)));
+
+        assertThatThrownBy(() -> trainerRegistrationService.registerTrainer(request))
+                .isInstanceOf(com.nest.common.exception.BadRequestException.class)
+                .hasMessageContaining("already");
     }
 }

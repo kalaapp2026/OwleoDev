@@ -1,5 +1,6 @@
 package com.nest.app.enrolment.controller;
 
+import com.nest.app.enrolment.dto.ConfirmMembershipRequest;
 import com.nest.app.enrolment.dto.RegisterTrainerRequest;
 import com.nest.app.enrolment.dto.TrainerDetailResponse;
 import com.nest.app.enrolment.dto.TrainerResponse;
@@ -35,6 +36,15 @@ public class TrainerController {
     @RequiresFeature(FeatureKey.TRAINER_REGISTRATION)
     public TrainerResponse register(@Valid @RequestBody RegisterTrainerRequest request) {
         return trainerRegistrationService.registerTrainer(request);
+    }
+
+    /** Completes registration when the person already had a NEST account (pendingConfirmation=true
+     * on the register response): they read back the code sent to their notifications, which is
+     * what proves they agreed to teach here rather than just being claimed (PRD 7.4). */
+    @PostMapping("/trainers/confirm-membership")
+    @RequiresFeature(FeatureKey.TRAINER_REGISTRATION)
+    public TrainerResponse confirmMembership(@Valid @RequestBody ConfirmMembershipRequest request) {
+        return trainerRegistrationService.confirmMembership(request.membershipId(), request.code());
     }
 
     /** Pre-fills the trainer edit form (profile + per-course features). */

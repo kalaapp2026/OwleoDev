@@ -5,6 +5,8 @@ import com.nest.app.enrolment.dto.TrainerResponse;
 import com.nest.app.enrolment.dto.TrainerSummaryResponse;
 import com.nest.app.enrolment.dto.TrainerDetailResponse;
 import com.nest.app.enrolment.dto.UpdateTrainerRequest;
+import com.nest.app.curriculum.entity.Course;
+import com.nest.app.curriculum.repository.CourseRepository;
 import com.nest.app.identity.entity.AcademyMembership;
 import com.nest.app.identity.entity.CourseFeatureGrant;
 import com.nest.app.identity.entity.CourseMap;
@@ -15,8 +17,10 @@ import com.nest.app.identity.repository.CourseFeatureGrantRepository;
 import com.nest.app.identity.repository.CourseMapRepository;
 import com.nest.app.identity.repository.UserRepository;
 import com.nest.app.identity.service.IdentityRegistrationService;
+import com.nest.app.identity.service.MembershipConfirmationService;
 import com.nest.app.identity.service.UserWithTempPassword;
 import com.nest.common.audit.Auditable;
+import com.nest.common.exception.BadRequestException;
 import com.nest.common.exception.ForbiddenException;
 import com.nest.common.exception.ResourceNotFoundException;
 import com.nest.common.security.FeatureKey;
@@ -31,6 +35,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -49,15 +54,21 @@ public class TrainerRegistrationService {
     private final AcademyMembershipRepository membershipRepository;
     private final UserRepository userRepository;
     private final CourseFeatureGrantRepository courseFeatureGrantRepository;
+    private final CourseRepository courseRepository;
+    private final MembershipConfirmationService membershipConfirmationService;
 
     public TrainerRegistrationService(IdentityRegistrationService identityRegistrationService, CourseMapRepository courseMapRepository,
                                        AcademyMembershipRepository membershipRepository, UserRepository userRepository,
-                                       CourseFeatureGrantRepository courseFeatureGrantRepository) {
+                                       CourseFeatureGrantRepository courseFeatureGrantRepository,
+                                       CourseRepository courseRepository,
+                                       MembershipConfirmationService membershipConfirmationService) {
         this.identityRegistrationService = identityRegistrationService;
         this.courseMapRepository = courseMapRepository;
         this.membershipRepository = membershipRepository;
         this.userRepository = userRepository;
         this.courseFeatureGrantRepository = courseFeatureGrantRepository;
+        this.courseRepository = courseRepository;
+        this.membershipConfirmationService = membershipConfirmationService;
     }
 
     /** Pre-fills the trainer edit form: profile + the current per-course feature checklist. */
@@ -86,7 +97,8 @@ public class TrainerRegistrationService {
         identityRegistrationService.replaceCourseFeatureGrants(membershipId, request.courseFeatures(), TenantContext.currentUserId());
 
         User user = userRepository.findById(membership.getUserId()).orElseThrow();
-        return new TrainerResponse(user.getId(), membership.getId(), user.getUsername(), null, request.courseFeatures());
+        return new TrainerResponse(user.getId(), membership.getId(), user.getUsername(), null,
+                request.courseFeatures(), false);
     }
 
     private AcademyMembership trainerInActiveAcademy(UUID membershipId) {
@@ -146,6 +158,14 @@ public class TrainerRegistrationService {
         MembershipClaim creator = TenantContext.currentMembership();
         assertGrantable(request.courseFeatures());
 
+        // Someone already on NEST - a student at another academy, or a trainer teaching elsewhere -
+        // must NOT get a second account. Their email is their identity across the whole platform
+        // (PRD 7.4), so we link them to this academy instead of rejecting them as a duplicate.
+        Optional<User> existing = identityRegistrationService.findByEmail(request.email());
+        if (existing.isPresent()) {
+            return linkExistingPerson(existing.get(), creator, request);
+        }
+
         UserWithTempPassword trainer = identityRegistrationService.createTrainerWithPassword(
                 request.username(), request.fullName(), request.phone(), request.email(), request.dob(),
                 request.address(), request.city(), request.state(), request.yearsOfExperience(), Role.TRAINER);
@@ -154,15 +174,70 @@ public class TrainerRegistrationService {
                 trainer.user().getId(), creator.academyId(), creator.academyName(), Role.TRAINER,
                 MembershipStatus.ACTIVE, TenantContext.currentUserId());
 
-        // The trainer is mapped to every course in the request (keys); course-map rows have no fee.
-        java.util.Map<UUID, BigDecimal> courseMap = new java.util.HashMap<>();
-        request.courseFeatures().keySet().forEach(id -> courseMap.put(id, null));
-        identityRegistrationService.replaceCourseMap(membership.getId(), courseMap);
-
-        identityRegistrationService.replaceCourseFeatureGrants(membership.getId(), request.courseFeatures(), TenantContext.currentUserId());
+        saveCourseAssignment(membership.getId(), request.courseFeatures());
 
         return new TrainerResponse(trainer.user().getId(), membership.getId(), trainer.user().getUsername(),
-                trainer.temporaryPassword(), request.courseFeatures());
+                trainer.temporaryPassword(), request.courseFeatures(), false);
+    }
+
+    /**
+     * Links an existing NEST account to this academy as a Trainer, pending that person's own
+     * approval. Their global role and password are untouched - someone can be a Student at one
+     * academy and a Trainer at another, because what they can do is decided by the per-academy
+     * membership, not by the account.
+     *
+     * <p>The course map and feature grants are written straight away even though the membership
+     * isn't active yet: PrincipalAssembler only ever reads ACTIVE memberships, so those rows grant
+     * nothing until confirmation flips the status. That's simpler than staging them somewhere
+     * else and having to replay it later.
+     */
+    private TrainerResponse linkExistingPerson(User person, MembershipClaim creator, RegisterTrainerRequest request) {
+        identityRegistrationService.findMembership(person.getId(), creator.academyId()).ifPresent(existing -> {
+            // One membership per person per academy - so this is "already here", not "add another".
+            throw new BadRequestException(person.getFullName() + " is already "
+                    + article(existing.getRoleType()) + " at this academy"
+                    + (existing.getStatus() == MembershipStatus.PENDING_CONFIRMATION
+                            ? ", with a request still awaiting their confirmation." : "."));
+        });
+
+        var membership = identityRegistrationService.createMembership(
+                person.getId(), creator.academyId(), creator.academyName(), Role.TRAINER,
+                MembershipStatus.PENDING_CONFIRMATION, TenantContext.currentUserId());
+
+        saveCourseAssignment(membership.getId(), request.courseFeatures());
+
+        String courseNames = courseRepository.findAllById(request.courseFeatures().keySet()).stream()
+                .map(Course::getName).collect(Collectors.joining(", "));
+        membershipConfirmationService.sendConfirmation(
+                person, membership.getId(), creator.academyName(), "a trainer", courseNames);
+
+        // No temp password: they already have an account and keep their existing credentials.
+        return new TrainerResponse(person.getId(), membership.getId(), person.getUsername(),
+                null, request.courseFeatures(), true);
+    }
+
+    /** Completes the link once the person reads their code back to whoever registered them. */
+    @Transactional
+    @Auditable(action = "TRAINER_MEMBERSHIP_CONFIRMED", entityType = "academy_membership")
+    public TrainerResponse confirmMembership(UUID membershipId, String code) {
+        AcademyMembership confirmed = membershipConfirmationService.confirm(membershipId, code);
+        User person = userRepository.findById(confirmed.getUserId())
+                .orElseThrow(() -> new ResourceNotFoundException("No account for this membership"));
+        return new TrainerResponse(person.getId(), confirmed.getId(), person.getUsername(),
+                null, courseFeaturesOf(confirmed.getId()), false);
+    }
+
+    /** A trainer's course rows carry no fee - they're a mapping, not an enrolment. */
+    private void saveCourseAssignment(UUID membershipId, Map<UUID, Set<String>> courseFeatures) {
+        Map<UUID, BigDecimal> courseMap = new HashMap<>();
+        courseFeatures.keySet().forEach(id -> courseMap.put(id, null));
+        identityRegistrationService.replaceCourseMap(membershipId, courseMap);
+        identityRegistrationService.replaceCourseFeatureGrants(membershipId, courseFeatures, TenantContext.currentUserId());
+    }
+
+    private String article(Role role) {
+        String name = role.name().replace('_', ' ').toLowerCase();
+        return (name.startsWith("a") ? "an " : "a ") + name;
     }
 
     /** Cascading-delegation cap (PRD 3.5), applied across the flat set of features requested over
