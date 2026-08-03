@@ -19,7 +19,9 @@ public interface CourseFeatureGrantRepository extends JpaRepository<CourseFeatur
     // unique constraint before the delete ever reaches the database. A bulk @Modifying query
     // executes immediately as a real SQL DELETE, so it's guaranteed to happen before any insert
     // that runs later in the same method.
-    @Modifying(clearAutomatically = true)
+    // flushAutomatically pairs with clearAutomatically and must not be dropped - see
+    // CourseMapRepository.deleteByMembershipId for the data-loss this caused without it.
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Query("delete from CourseFeatureGrant g where g.membershipId = :membershipId")
     void deleteByMembershipId(@Param("membershipId") UUID membershipId);
 

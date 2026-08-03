@@ -21,7 +21,12 @@ public interface CourseMapRepository extends JpaRepository<CourseMap, UUID> {
     // deleteByMembershipId for why (Hibernate flushes inserts before deletes, so a
     // delete-then-reinsert of an unchanged row in one transaction needs the delete to actually
     // hit the database immediately, not just get queued).
-    @Modifying(clearAutomatically = true)
+    // flushAutomatically is NOT optional here. clearAutomatically detaches everything in the
+    // persistence context, and Spring Data does NOT flush first by default - so a caller that
+    // saved entities earlier in the same transaction (trainer registration saves the User and
+    // AcademyMembership before mapping courses) would have those pending INSERTs silently thrown
+    // away. The request still returned 200 with credentials; the account simply never existed.
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Query("delete from CourseMap c where c.membershipId = :membershipId")
     void deleteByMembershipId(@Param("membershipId") UUID membershipId);
 }

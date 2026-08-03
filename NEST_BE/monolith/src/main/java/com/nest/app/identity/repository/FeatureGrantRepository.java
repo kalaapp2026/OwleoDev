@@ -16,7 +16,9 @@ public interface FeatureGrantRepository extends JpaRepository<FeatureGrant, UUID
     // deleteByMembershipId for why (Hibernate flushes inserts before deletes, so a
     // delete-then-reinsert of an unchanged row in one transaction needs the delete to actually
     // hit the database immediately, not just get queued).
-    @Modifying(clearAutomatically = true)
+    // flushAutomatically pairs with clearAutomatically and must not be dropped - see
+    // CourseMapRepository.deleteByMembershipId for the data-loss this caused without it.
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Query("delete from FeatureGrant g where g.membershipId = :membershipId")
     void deleteByMembershipId(@Param("membershipId") UUID membershipId);
 }

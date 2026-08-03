@@ -39,7 +39,11 @@ public interface UserRepository extends JpaRepository<User, UUID> {
 
     /** Bulk update rather than load-modify-save: this runs on the request hot path, and loading a
      * whole User just to stamp one timestamp would also risk clobbering concurrent edits. */
-    @Modifying(clearAutomatically = true)
+    // Deliberately does NOT clear the persistence context. Nothing reads the User afterwards (this
+    // fires from ActivityTrackingFilter once the response is already served), so clearing bought
+    // nothing - while carrying the risk that made trainer registration lose accounts: a clear
+    // without a flush discards un-flushed inserts belonging to whoever is on the stack.
+    @Modifying
     @Query("update User u set u.lastSeenAt = :seenAt where u.id = :userId")
     void touchLastSeen(@Param("userId") UUID userId, @Param("seenAt") Instant seenAt);
 
