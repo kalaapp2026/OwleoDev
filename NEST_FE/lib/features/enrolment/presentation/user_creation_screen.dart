@@ -748,6 +748,14 @@ class _TrainerFormState extends ConsumerState<_TrainerForm> {
   Uint8List? _photoBytes;
   String? _photoFilename;
 
+  /// Set when registerTrainer() comes back pendingConfirmation=true - this email already belongs
+  /// to a NEST account (e.g. a student at another academy), so instead of creating a duplicate the
+  /// form switches to asking for the code that person was sent (PRD 7.4). Mirrors the student form.
+  bool _pendingConfirmation = false;
+  String? _existingMembershipId;
+  String? _existingName;
+  final _codeController = TextEditingController();
+
   static const _allFeatures = [
     FeatureKeys.attendance,
     FeatureKeys.batchScheduling,
@@ -778,6 +786,7 @@ class _TrainerFormState extends ConsumerState<_TrainerForm> {
     _cityController.dispose();
     _stateController.dispose();
     _yearsOfExperienceController.dispose();
+    _codeController.dispose();
     super.dispose();
   }
 
@@ -806,6 +815,17 @@ class _TrainerFormState extends ConsumerState<_TrainerForm> {
           );
       if (!mounted) return;
 
+      if (result.pendingConfirmation) {
+        // Existing NEST account linked to this academy - nothing is granted until they approve,
+        // and there's no temp password to hand over because they keep their own.
+        setState(() {
+          _pendingConfirmation = true;
+          _existingMembershipId = result.membershipId;
+          _existingName = _fullNameController.text.trim();
+        });
+        return;
+      }
+
       if (_photoBytes != null) {
         try {
           await ref.read(enrolmentApiProvider).uploadProfileImage(result.userId, _photoBytes!, _photoFilename!);
@@ -815,8 +835,26 @@ class _TrainerFormState extends ConsumerState<_TrainerForm> {
       }
       if (!mounted) return;
       await showLoginCredentialsDialog(context,
-          username: result.username, temporaryPassword: result.temporaryPassword);
+          username: result.username, temporaryPassword: result.temporaryPassword ?? '(unavailable)');
       if (mounted) Navigator.of(context).pop();
+    } on ApiException catch (e) {
+      if (mounted) AppNotice.error(context, e.message);
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
+    }
+  }
+
+  Future<void> _confirm() async {
+    setState(() => _isSaving = true);
+    try {
+      final result = await ref.read(enrolmentApiProvider).confirmTrainerMembership(
+            membershipId: _existingMembershipId!,
+            code: _codeController.text.trim(),
+          );
+      if (mounted) {
+        AppNotice.success(context, 'Confirmed - ${result.username} is now a trainer here.');
+        Navigator.of(context).pop();
+      }
     } on ApiException catch (e) {
       if (mounted) AppNotice.error(context, e.message);
     } finally {
@@ -869,6 +907,52 @@ class _TrainerFormState extends ConsumerState<_TrainerForm> {
 
   @override
   Widget build(BuildContext context) {
+    if (_pendingConfirmation) {
+      return ListView(
+        padding: const EdgeInsets.all(20),
+        children: [
+          Card(
+            color: Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.35),
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Row(
+                children: [
+                  const Icon(Icons.info_outline),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text('${_existingName ?? 'This person'} already has a NEST account - '
+                        'they may study or teach at another academy. No new account was created.'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 14),
+          Text('Confirm', style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 6),
+          Text(
+            "They were sent a code in their app's Notifications tab - it appears under both the ERP "
+            'and Social bells. Ask them to read it out to confirm they agree to teach here.',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+          const SizedBox(height: 16),
+          TextField(
+            controller: _codeController,
+            autofocus: true,
+            keyboardType: TextInputType.number,
+            decoration: const InputDecoration(labelText: 'Code', prefixIcon: Icon(Icons.pin_outlined)),
+          ),
+          const SizedBox(height: 18),
+          ElevatedButton(
+            onPressed: _isSaving ? null : _confirm,
+            child: _isSaving
+                ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                : const Text('Confirm'),
+          ),
+        ],
+      );
+    }
+
     return ListView(
       padding: const EdgeInsets.all(20),
       children: [

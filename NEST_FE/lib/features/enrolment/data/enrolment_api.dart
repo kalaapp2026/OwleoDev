@@ -38,20 +38,32 @@ class TrainerRegistrationResult {
   final String userId;
   final String membershipId;
   final String username;
-  final String temporaryPassword;
+
+  /// Null when no new account was created - i.e. this linked someone who already had a NEST
+  /// account (a student or trainer at another academy), so they keep their own password.
+  final String? temporaryPassword;
+
+  /// True when an EXISTING NEST user was linked to this academy. The membership is
+  /// PENDING_CONFIRMATION and grants nothing until that person reads back the code sent to their
+  /// notifications (PRD 7.4) - same consent step students already had.
+  final bool pendingConfirmation;
 
   TrainerRegistrationResult({
     required this.userId,
     required this.membershipId,
     required this.username,
     required this.temporaryPassword,
+    required this.pendingConfirmation,
   });
 
   factory TrainerRegistrationResult.fromJson(Map<String, dynamic> json) => TrainerRegistrationResult(
         userId: json['userId'] as String,
         membershipId: json['membershipId'] as String,
         username: json['username'] as String,
-        temporaryPassword: json['temporaryPassword'] as String,
+        // Nullable cast is load-bearing: `as String` here threw for every linked person, so the
+        // registration appeared to fail outright and the confirmation step was never reached.
+        temporaryPassword: json['temporaryPassword'] as String?,
+        pendingConfirmation: json['pendingConfirmation'] as bool? ?? false,
       );
 }
 
@@ -304,6 +316,15 @@ class EnrolmentApi {
     return _client.call(
       (dio) => dio.post('/students/confirm-membership', data: {'membershipId': membershipId, 'code': code}),
       (data) => StudentRegistrationResult.fromJson(data as Map<String, dynamic>),
+    );
+  }
+
+  /// Trainer equivalent of [confirmMembership] - same consent step, different endpoint because the
+  /// two return different shapes (a trainer has course features, not fees).
+  Future<TrainerRegistrationResult> confirmTrainerMembership({required String membershipId, required String code}) {
+    return _client.call(
+      (dio) => dio.post('/trainers/confirm-membership', data: {'membershipId': membershipId, 'code': code}),
+      (data) => TrainerRegistrationResult.fromJson(data as Map<String, dynamic>),
     );
   }
 
