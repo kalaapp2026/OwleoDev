@@ -9,6 +9,7 @@ import 'package:nest_fe/features/notification/data/notification_api.dart';
 import 'package:nest_fe/features/notification/presentation/notifications_screen.dart';
 import 'package:nest_fe/features/platform/data/platform_settings_api.dart';
 import 'package:nest_fe/features/platform/presentation/academy_stats_screen.dart';
+import 'package:nest_fe/features/platform/presentation/platform_settings_screen.dart';
 import 'package:nest_fe/features/platform/presentation/billing_screen.dart';
 import 'package:nest_fe/features/platform/presentation/super_admin_dashboard_screen.dart';
 import 'package:nest_fe/features/profile/presentation/profile_screen.dart';
@@ -119,6 +120,17 @@ class AppShellState extends ConsumerState<AppShell> {
       appBar: AppBar(
         title: title.isEmpty ? const OwleoWordmark() : Text(title),
         actions: [
+          // Platform settings live in the app bar, not just on the Platform dashboard: a gear icon
+          // is where anyone looks for settings first, and on the dashboard it sat below the charts
+          // where it was easy to miss entirely.
+          if (isSuperAdmin)
+            IconButton(
+              icon: const Icon(Icons.settings_outlined),
+              tooltip: 'Platform settings',
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const PlatformSettingsScreen()),
+              ),
+            ),
           _NotificationBell(module: module),
           IconButton(
             icon: const Icon(Icons.person_outline),
