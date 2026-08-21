@@ -7,6 +7,7 @@ import 'package:nest_fe/features/enrolment/presentation/batches_screen.dart';
 import 'package:nest_fe/features/fees/presentation/fees_screen.dart';
 import 'package:nest_fe/features/notification/data/notification_api.dart';
 import 'package:nest_fe/features/notification/presentation/notifications_screen.dart';
+import 'package:nest_fe/features/platform/data/platform_settings_api.dart';
 import 'package:nest_fe/features/platform/presentation/academy_stats_screen.dart';
 import 'package:nest_fe/features/platform/presentation/billing_screen.dart';
 import 'package:nest_fe/features/platform/presentation/super_admin_dashboard_screen.dart';
@@ -38,6 +39,11 @@ class AppShellState extends ConsumerState<AppShell> {
   int _socialIndex = 0;
   int _erpIndex = 0;
 
+  /// Whether the user has moved the toggle themselves. Until they do, the shell follows the
+  /// Super Admin's configured starting side; after they do, it stops overriding them - otherwise
+  /// the app would keep yanking them back on every rebuild.
+  bool _modeChosenByUser = false;
+
   static const _socialTitles = ['Feed', 'Events', '', 'My Posts', 'Profile'];
   static const _erpTitles = ['Dashboard', 'Batches', '', 'Fees', 'Profile'];
 
@@ -50,12 +56,57 @@ class AppShellState extends ConsumerState<AppShell> {
         _erpIndex = index;
       });
 
+  /// Keeps [_mode] consistent with what the platform setting actually permits.
+  ///
+  /// Two separate jobs, and the order matters. First, a side that isn't available can never be
+  /// the current one - that's enforced on every build, because the setting can change under a
+  /// signed-in user. Second, the configured starting side is applied only until the user picks
+  /// for themselves; without that guard the shell would drag them back on every rebuild.
+  ///
+  /// Assigns [_mode] directly rather than calling setState: this runs DURING build, and calling
+  /// setState here would throw.
+  void _applyConfiguredMode({
+    required bool erpAvailable,
+    required bool socialAvailable,
+    required bool startsOnErp,
+  }) {
+    if (_mode == AppMode.erp && !erpAvailable) {
+      _mode = AppMode.social;
+      return;
+    }
+    if (_mode == AppMode.social && !socialAvailable) {
+      _mode = AppMode.erp;
+      return;
+    }
+    if (_modeChosenByUser) return;
+
+    final wanted = startsOnErp && erpAvailable ? AppMode.erp : AppMode.social;
+    if ((wanted == AppMode.erp && erpAvailable) || (wanted == AppMode.social && socialAvailable)) {
+      _mode = wanted;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final session = ref.watch(sessionControllerProvider);
     final user = session.user;
     final hasErpAccess = user?.hasErpAccess ?? false;
     final isSuperAdmin = user?.isSuperAdmin ?? false;
+
+    // Platform-wide rollout setting (Super Admin). Falls back to "both sides, ERP first" while it
+    // loads or if the call fails - briefly showing a toggle that then disappears is better than
+    // hiding a side the user is entitled to.
+    final settings = ref.watch(platformSettingsProvider).valueOrNull ?? PlatformSettings.fallback;
+
+    // A Guest or Artist has no ERP access at all, so ERP_ONLY would leave them staring at a blank
+    // app. They keep Social in that case - the setting is about not showing an unfinished Social
+    // side to ERP customers, not about locking social-only users out of the product entirely.
+    final erpAvailable = settings.allowsErp && hasErpAccess;
+    final socialAvailable = settings.allowsSocial || !erpAvailable;
+    final canToggle = erpAvailable && socialAvailable;
+
+    _applyConfiguredMode(erpAvailable: erpAvailable, socialAvailable: socialAvailable,
+        startsOnErp: settings.startsOnErp);
 
     final erpTitles = isSuperAdmin ? _superAdminErpTitles : _erpTitles;
     final title = _mode == AppMode.social ? _socialTitles[_socialIndex] : erpTitles[_erpIndex];
@@ -151,7 +202,7 @@ class AppShellState extends ConsumerState<AppShell> {
         mode: _mode,
         socialIndex: _socialIndex,
         erpIndex: _erpIndex,
-        canToggleErp: hasErpAccess,
+        canToggleErp: canToggle,
         isSuperAdmin: isSuperAdmin,
         onSocialTap: (i) => setState(() => _socialIndex = i),
         onErpTap: (i) => setState(() => _erpIndex = i),
@@ -160,8 +211,13 @@ class AppShellState extends ConsumerState<AppShell> {
           MaterialPageRoute(builder: (_) => const SearchProfilesScreen()),
         ),
         onToggle: () {
-          if (!hasErpAccess) return;
-          setState(() => _mode = _mode == AppMode.social ? AppMode.erp : AppMode.social);
+          // Both sides must actually be available - when the platform is set to one side only,
+          // there is nowhere to toggle to.
+          if (!canToggle) return;
+          setState(() {
+            _modeChosenByUser = true;
+            _mode = _mode == AppMode.social ? AppMode.erp : AppMode.social;
+          });
         },
       ),
     );

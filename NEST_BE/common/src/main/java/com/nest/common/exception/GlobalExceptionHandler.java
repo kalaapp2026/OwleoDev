@@ -9,10 +9,13 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import com.fasterxml.jackson.databind.exc.InvalidFormatException;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -70,6 +73,31 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.NOT_FOUND)
                 .body(ErrorResponse.of(HttpStatus.NOT_FOUND.value(), "Not Found", "NOT_FOUND",
                         "No endpoint matches " + request.getMethod() + " " + request.getRequestURI(), request.getRequestURI()));
+    }
+
+    /** An unparseable body - malformed JSON, or a value that doesn't fit its field, most often an
+     * unknown enum constant. Without this it fell through to the 500 below, which points the
+     * reader at a server fault when the request itself was wrong. */
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ErrorResponse> handleUnreadableBody(HttpMessageNotReadableException ex,
+                                                              HttpServletRequest request) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(ErrorResponse.of(HttpStatus.BAD_REQUEST.value(), "Bad Request", "MALFORMED_REQUEST",
+                        describeUnreadable(ex), request.getRequestURI()));
+    }
+
+    /** Jackson's own message leaks package names and class internals, so name the offending value
+     * and its allowed options instead - that's what the caller can act on. */
+    private String describeUnreadable(HttpMessageNotReadableException ex) {
+        if (ex.getCause() instanceof InvalidFormatException invalid) {
+            Class<?> target = invalid.getTargetType();
+            if (target != null && target.isEnum()) {
+                String allowed = Arrays.stream(target.getEnumConstants())
+                        .map(String::valueOf).collect(Collectors.joining(", "));
+                return "'" + invalid.getValue() + "' is not a valid value. Expected one of: " + allowed;
+            }
+        }
+        return "Request body could not be read - check the JSON and field types";
     }
 
     @ExceptionHandler(Exception.class)

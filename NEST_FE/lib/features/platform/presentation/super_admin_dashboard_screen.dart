@@ -6,6 +6,7 @@ import 'package:nest_fe/core/providers/core_providers.dart';
 import 'package:nest_fe/core/widgets/async_value_view.dart';
 import 'package:nest_fe/features/artist_application/presentation/artist_applications_screen.dart';
 import 'package:nest_fe/features/platform/data/platform_api.dart';
+import 'package:nest_fe/features/platform/presentation/platform_settings_screen.dart';
 import 'package:nest_fe/features/platform/presentation/console_layout.dart';
 
 final platformApiProvider = Provider((ref) => PlatformApi(ref.watch(dioClientProvider)));
@@ -81,6 +82,21 @@ class SuperAdminDashboardScreen extends ConsumerWidget {
                 ConsoleStat('Total events', '${data.social.totalEvents}', Icons.celebration_outlined),
                 ConsoleStat('Upcoming events', '${data.social.upcomingEvents}', Icons.event_available_outlined),
               ]),
+              const SizedBox(height: 24),
+
+              const ConsoleSectionTitle('Configure'),
+              Card(
+                margin: EdgeInsets.zero,
+                child: ListTile(
+                  leading: const Icon(Icons.tune),
+                  title: const Text('App mode'),
+                  subtitle: const Text('Which side the app opens on, and whether both are shown'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const PlatformSettingsScreen()),
+                  ),
+                ),
+              ),
               const SizedBox(height: 24),
 
               // Artist applications lost its own nav tab to Billing, so it needs a route from

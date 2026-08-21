@@ -53,8 +53,19 @@ class JwtTokenProviderTest {
     void tamperedTokenFailsVerification() {
         String token = provider.generateAccessToken(
                 new NestPrincipal(UUID.randomUUID(), "x", Role.GUEST, List.of(), null));
-        String tampered = token.substring(0, token.length() - 2) + "xx";
 
+        // Tamper with the PAYLOAD, not the tail of the signature. An HS256 signature is 32 bytes
+        // encoded as 43 base64url chars, so its final character carries only 2 significant bits -
+        // several different last characters decode to identical signature bytes. Rewriting the
+        // token's last two chars therefore sometimes produced a token that still verified, making
+        // this test fail roughly one run in a few dozen. Changing a payload character always
+        // changes the signed content, so the signature can never still match.
+        String[] parts = token.split("\\.");
+        char first = parts[1].charAt(0);
+        String tamperedPayload = (first == 'A' ? 'B' : 'A') + parts[1].substring(1);
+        String tampered = parts[0] + "." + tamperedPayload + "." + parts[2];
+
+        assertThat(tampered).as("tampering must actually change the token").isNotEqualTo(token);
         assertThatThrownBy(() -> provider.parse(tampered))
                 .isInstanceOf(com.nest.common.exception.UnauthorizedException.class);
     }
