@@ -131,6 +131,7 @@ class SessionController extends Notifier<SessionState> {
       role: user.role,
       temporaryPassword: user.temporaryPassword,
       themePreference: user.themePreference,
+      languagePreference: user.languagePreference,
       memberships: user.memberships,
       activeMembershipId: membershipId,
       profileImageUrl: user.profileImageUrl,

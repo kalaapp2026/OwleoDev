@@ -26,6 +26,9 @@ class UserProfile {
   final String role;
   final bool temporaryPassword;
   final ThemePreference themePreference;
+  /// BCP 47 tag ("en", "hi", "pt-BR"). Resolved via AppLanguage.fromTag, which falls back to
+  /// English for anything this build doesn't bundle.
+  final String languagePreference;
   final List<MembershipSummary> memberships;
   final String? activeMembershipId;
   final String? profileImageUrl;
@@ -41,6 +44,7 @@ class UserProfile {
     required this.role,
     required this.temporaryPassword,
     required this.themePreference,
+    required this.languagePreference,
     required this.memberships,
     required this.activeMembershipId,
     required this.profileImageUrl,
@@ -57,6 +61,7 @@ class UserProfile {
         role: json['role'] as String,
         temporaryPassword: json['temporaryPassword'] as bool? ?? false,
         themePreference: themePreferenceFromString(json['themePreference'] as String?),
+        languagePreference: json['languagePreference'] as String? ?? 'en',
         memberships: (json['memberships'] as List? ?? [])
             .map((m) => MembershipSummary.fromJson(m as Map<String, dynamic>))
             .toList(),

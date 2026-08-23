@@ -11,6 +11,11 @@ dependencies:
   flutter:
     sdk: flutter
 
+  # 12-language UI (see l10n.yaml + lib/l10n/*.arb). Also supplies the Material/Cupertino
+  # localisations, and for Arabic the RTL text direction Flutter then applies automatically.
+  flutter_localizations:
+    sdk: flutter
+
   cupertino_icons: ^1.0.8
 
   # State management
@@ -25,7 +30,7 @@ dependencies:
   # Secure token storage (Keychain/Keystore on mobile, localStorage on web)
   flutter_secure_storage: ^9.2.2
 
-  intl: ^0.19.0
+  intl: ^0.20.2
   fl_chart: ^0.69.2
 
   # Profile picture picker (works on web + Android + iOS with the same API)
@@ -54,5 +59,7 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  # Runs gen_l10n over lib/l10n/*.arb at build time, producing AppLocalizations.
+  generate: true
   assets:
     - assets/brand/

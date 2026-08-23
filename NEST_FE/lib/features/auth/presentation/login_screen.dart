@@ -5,6 +5,7 @@ import 'package:nest_fe/core/auth/session_controller.dart';
 import 'package:nest_fe/core/error/api_exception.dart';
 import 'package:nest_fe/core/widgets/app_notice.dart';
 import 'package:nest_fe/core/widgets/owleo_wordmark.dart';
+import 'package:nest_fe/l10n/app_localizations.dart';
 import 'package:nest_fe/features/auth/data/auth_api.dart';
 
 enum _Stage { identify, password, otp }
@@ -129,7 +130,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     const SizedBox(height: 8),
                     Center(
                       child: Text(
-                        'Your business. Organized. Automated.',
+                        AppLocalizations.of(context).appTagline,
                         style: Theme.of(context).textTheme.bodyMedium,
                         textAlign: TextAlign.center,
                       ),
@@ -161,9 +162,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         TextField(
           controller: _identifierController,
           autofocus: true,
-          decoration: const InputDecoration(
-            labelText: 'Username or mobile number',
-            prefixIcon: Icon(Icons.person_outline),
+          decoration: InputDecoration(
+            labelText: AppLocalizations.of(context).authUsernameOrMobile,
+            prefixIcon: const Icon(Icons.person_outline),
           ),
           textInputAction: TextInputAction.done,
           onSubmitted: (_) => _identify(),
@@ -173,13 +174,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           onPressed: _isLoading ? null : _identify,
           child: _isLoading
               ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2))
-              : const Text('Continue'),
+              : Text(AppLocalizations.of(context).authContinue),
         ),
         const SizedBox(height: 12),
         Center(
           child: TextButton(
             onPressed: _isLoading ? null : () => context.push('/signup'),
-            child: const Text('Create account'),
+            child: Text(AppLocalizations.of(context).authCreateAccount),
           ),
         ),
       ],
@@ -198,7 +199,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           autofocus: true,
           obscureText: _obscurePassword,
           decoration: InputDecoration(
-            labelText: 'Password',
+            labelText: AppLocalizations.of(context).authPassword,
             prefixIcon: const Icon(Icons.lock_outline),
             suffixIcon: IconButton(
               icon: Icon(_obscurePassword ? Icons.visibility_outlined : Icons.visibility_off_outlined),
@@ -212,7 +213,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           onPressed: _isLoading ? null : _submitPassword,
           child: _isLoading
               ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2))
-              : const Text('Log in'),
+              : Text(AppLocalizations.of(context).authLogIn),
         ),
       ],
     );
@@ -240,14 +241,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         const SizedBox(height: 6),
         Align(
           alignment: Alignment.centerLeft,
-          child: TextButton(onPressed: _isLoading ? null : _resendOtp, child: const Text('Resend code')),
+          child: TextButton(onPressed: _isLoading ? null : _resendOtp, child: Text(AppLocalizations.of(context).authResendCode)),
         ),
         const SizedBox(height: 16),
         ElevatedButton(
           onPressed: _isLoading ? null : _submitOtp,
           child: _isLoading
               ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2))
-              : const Text('Verify & log in'),
+              : Text(AppLocalizations.of(context).authVerifyAndLogIn),
         ),
       ],
     );
@@ -271,7 +272,7 @@ class _IdentifierBanner extends StatelessWidget {
         Expanded(
           child: Text(label, overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.bodyMedium),
         ),
-        TextButton(onPressed: onChange, child: const Text('Change')),
+        TextButton(onPressed: onChange, child: Text(AppLocalizations.of(context).authChange)),
       ],
     );
   }

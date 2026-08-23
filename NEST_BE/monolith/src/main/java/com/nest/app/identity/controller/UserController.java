@@ -2,6 +2,7 @@ package com.nest.app.identity.controller;
 
 import com.nest.common.security.TenantContext;
 import com.nest.app.identity.dto.PasswordResetResponse;
+import com.nest.app.identity.dto.LanguageUpdateRequest;
 import com.nest.app.identity.dto.ThemeUpdateRequest;
 import com.nest.app.identity.dto.UserProfileResponse;
 import com.nest.app.identity.dto.UserSearchResult;
@@ -49,6 +50,12 @@ public class UserController {
     @PatchMapping("/users/me/theme")
     public ResponseEntity<Void> updateTheme(@Valid @RequestBody ThemeUpdateRequest request) {
         userService.updateThemePreference(TenantContext.currentUserId(), request.themePreference());
+        return ResponseEntity.noContent().build();
+    }
+
+    @PatchMapping("/users/me/language")
+    public ResponseEntity<Void> updateLanguage(@Valid @RequestBody LanguageUpdateRequest request) {
+        userService.updateLanguagePreference(TenantContext.currentUserId(), request.languagePreference());
         return ResponseEntity.noContent().build();
     }
 

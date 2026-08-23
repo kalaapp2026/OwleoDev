@@ -17,6 +17,7 @@ public record UserProfileResponse(
         Role role,
         boolean temporaryPassword,
         ThemePreference themePreference,
+        String languagePreference,
         List<MembershipSummary> memberships,
         UUID activeMembershipId,
         String profileImageUrl

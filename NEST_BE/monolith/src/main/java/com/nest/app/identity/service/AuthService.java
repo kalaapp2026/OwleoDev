@@ -238,7 +238,7 @@ public class AuthService {
 
         UserProfileResponse profile = new UserProfileResponse(
                 user.getId(), user.getUsername(), user.getFullName(), maskPhone(user.getPhone()), user.getEmail(),
-                user.getCity(), user.getState(), user.getRole(), user.isTemporaryPassword(), user.getThemePreference(),
+                user.getCity(), user.getState(), user.getRole(), user.isTemporaryPassword(), user.getThemePreference(), user.getLanguagePreference(),
                 principalAssembler.summarise(user), principal.activeMembershipId(), user.getProfileImageUrl()
         );
 

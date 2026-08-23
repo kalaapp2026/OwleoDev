@@ -103,6 +103,13 @@ public class User {
     @Builder.Default
     private ThemePreference themePreference = ThemePreference.SYSTEM;
 
+    /** BCP 47 tag for the UI language ("en", "hi", "pt-BR"). Deliberately a String, not an enum:
+     * the shipped language set grows as translations land, and that shouldn't need a migration.
+     * The client falls back to English for any tag it doesn't bundle. */
+    @Column(name = "language_preference", nullable = false, length = 10)
+    @Builder.Default
+    private String languagePreference = "en";
+
     @Column(nullable = false)
     @Builder.Default
     private String status = "ACTIVE";

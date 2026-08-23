@@ -109,4 +109,9 @@ class AuthApi {
     return _client.callVoid(
         (dio) => dio.patch('/users/me/theme', data: {'themePreference': themePreferenceToApiString(preference)}));
   }
+
+  /// [tag] is a BCP 47 language tag ("en", "hi", "pt-BR").
+  Future<void> updateLanguage(String tag) {
+    return _client.callVoid((dio) => dio.patch('/users/me/language', data: {'languagePreference': tag}));
+  }
 }

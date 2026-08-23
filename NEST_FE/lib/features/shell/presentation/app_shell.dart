@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:nest_fe/core/auth/session_controller.dart';
+import 'package:nest_fe/l10n/app_localizations.dart';
 import 'package:nest_fe/core/widgets/owleo_wordmark.dart';
 import 'package:nest_fe/features/dashboard/presentation/dashboard_screen.dart';
 import 'package:nest_fe/features/enrolment/presentation/batches_screen.dart';
@@ -45,12 +46,17 @@ class AppShellState extends ConsumerState<AppShell> {
   /// the app would keep yanking them back on every rebuild.
   bool _modeChosenByUser = false;
 
-  static const _socialTitles = ['Feed', 'Events', '', 'My Posts', 'Profile'];
-  static const _erpTitles = ['Dashboard', 'Batches', '', 'Fees', 'Profile'];
+  // Built per frame from AppLocalizations rather than const lists - a const list can't change
+  // when the user switches language.
+  List<String> _socialTitles(AppLocalizations t) =>
+      [t.navFeed, t.navEvents, '', t.navMyPosts, t.navProfile];
+  List<String> _erpTitles(AppLocalizations t) =>
+      [t.navDashboard, t.navBatches, '', t.navFees, t.navProfile];
 
   /// A Super Admin belongs to no academy, so Batches and Fees - which are scoped to the active
   /// academy - have nothing to show them. Their ERP side is the platform console instead.
-  static const _superAdminErpTitles = ['Platform', 'Academies', '', 'Billing', 'Profile'];
+  List<String> _superAdminErpTitles(AppLocalizations t) =>
+      [t.navPlatform, t.navAcademies, '', t.navBilling, t.navProfile];
 
   void goToErpTab(int index) => setState(() {
         _mode = AppMode.erp;
@@ -109,8 +115,9 @@ class AppShellState extends ConsumerState<AppShell> {
     _applyConfiguredMode(erpAvailable: erpAvailable, socialAvailable: socialAvailable,
         startsOnErp: settings.startsOnErp);
 
-    final erpTitles = isSuperAdmin ? _superAdminErpTitles : _erpTitles;
-    final title = _mode == AppMode.social ? _socialTitles[_socialIndex] : erpTitles[_erpIndex];
+    final t = AppLocalizations.of(context);
+    final erpTitles = isSuperAdmin ? _superAdminErpTitles(t) : _erpTitles(t);
+    final title = _mode == AppMode.social ? _socialTitles(t)[_socialIndex] : erpTitles[_erpIndex];
 
     // The bell is per-module: in ERP it shows ERP notifications, in Social it shows Social ones -
     // so a Trainer on their fees dashboard never sees "someone liked your post" and vice versa.
@@ -134,7 +141,7 @@ class AppShellState extends ConsumerState<AppShell> {
           _NotificationBell(module: module),
           IconButton(
             icon: const Icon(Icons.person_outline),
-            tooltip: 'Profile',
+            tooltip: t.navProfile,
             onPressed: () => setState(() {
               if (_mode == AppMode.erp) {
                 _erpIndex = 4;
@@ -269,21 +276,22 @@ class _BottomNav extends StatelessWidget {
 
     // The ERP set differs for a Super Admin: they have no academy, so Batches/Fees are replaced by
     // the platform-level equivalents (see AppShellState's IndexedStack).
+    final t = AppLocalizations.of(context);
     final erpLeftIcons = isSuperAdmin
-        ? const [(Icons.insights_outlined, 'Platform'), (Icons.account_balance_outlined, 'Academies')]
-        : const [(Icons.dashboard_outlined, 'Dashboard'), (Icons.groups_outlined, 'Batches')];
+        ? [(Icons.insights_outlined, t.navPlatform), (Icons.account_balance_outlined, t.navAcademies)]
+        : [(Icons.dashboard_outlined, t.navDashboard), (Icons.groups_outlined, t.navBatches)];
     final erpRightIcons = isSuperAdmin
-        ? const [(Icons.receipt_long_outlined, 'Billing'), (Icons.apps_rounded, 'More')]
-        : const [(Icons.account_balance_wallet_outlined, 'Fees'), (Icons.apps_rounded, 'More')];
+        ? [(Icons.receipt_long_outlined, t.navBilling), (Icons.apps_rounded, t.navMore)]
+        : [(Icons.account_balance_wallet_outlined, t.navFees), (Icons.apps_rounded, t.navMore)];
 
     final leftIcons = isSocial
-        ? const [(Icons.dynamic_feed_outlined, 'Feed'), (Icons.celebration_outlined, 'Events')]
+        ? [(Icons.dynamic_feed_outlined, t.navFeed), (Icons.celebration_outlined, t.navEvents)]
         : erpLeftIcons;
     // Both sides now carry exactly 2 left + 2 right icons around the centre toggle, so the two
     // modes line up pixel-for-pixel when you switch - Social's Profile moved to the app-bar
     // (mirroring ERP), freeing this slot for My Posts + Search.
     final rightIcons = isSocial
-        ? const [(Icons.grid_on_outlined, 'My Posts'), (Icons.search, 'Search')]
+        ? [(Icons.grid_on_outlined, t.navMyPosts), (Icons.search, t.navSearch)]
         : erpRightIcons;
 
     Widget navItem(IconData icon, String label, int index, ValueChanged<int> onTap) {

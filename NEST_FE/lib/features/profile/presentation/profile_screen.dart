@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:nest_fe/app/theme/theme_controller.dart';
+import 'package:nest_fe/features/profile/presentation/user_settings_screen.dart';
+import 'package:nest_fe/l10n/app_localizations.dart';
 import 'package:nest_fe/core/auth/session_controller.dart';
 import 'package:nest_fe/core/widgets/app_notice.dart';
 import 'package:nest_fe/features/academy/presentation/academy_management_screen.dart';
@@ -13,7 +14,7 @@ class ProfileScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final user = ref.watch(sessionControllerProvider).user;
-    final themeMode = ref.watch(themeModeProvider);
+    final t = AppLocalizations.of(context);
     final colorScheme = Theme.of(context).colorScheme;
 
     if (user == null) return const SizedBox.shrink();
@@ -47,11 +48,11 @@ class ProfileScreen extends ConsumerWidget {
         const SizedBox(height: 28),
 
         if (user.isSuperAdmin) ...[
-          const _SectionLabel('Super Admin'),
+          _SectionLabel(t.profileSuperAdmin),
           Card(
             child: ListTile(
               leading: const Icon(Icons.account_balance_outlined),
-              title: const Text('Academies'),
+              title: Text(t.navAcademies),
               subtitle: const Text('Onboard, suspend or reactivate academies'),
               trailing: const Icon(Icons.chevron_right),
               onTap: () => Navigator.of(context).push(
@@ -89,7 +90,7 @@ class ProfileScreen extends ConsumerWidget {
         ],
 
         if (user.activeMemberships.isNotEmpty) ...[
-          const _SectionLabel('Academy memberships'),
+          _SectionLabel(t.profileAcademyMemberships),
           ...user.activeMemberships.map((m) => Card(
                 child: ListTile(
                   leading: const Icon(Icons.account_balance_outlined),
@@ -104,17 +105,17 @@ class ProfileScreen extends ConsumerWidget {
           const SizedBox(height: 20),
         ],
 
-        const _SectionLabel('Appearance'),
+        // Theme and language now share one Settings screen rather than the theme radios sitting
+        // inline here - a second full radio list for 12 languages would swamp the profile.
+        _SectionLabel(t.settingsTitle),
         Card(
-          child: RadioGroup<ThemeMode>(
-            groupValue: themeMode,
-            onChanged: (m) => ref.read(themeModeProvider.notifier).setThemeMode(m!),
-            child: const Column(
-              children: [
-                RadioListTile<ThemeMode>(title: Text('System'), value: ThemeMode.system),
-                RadioListTile<ThemeMode>(title: Text('Light'), value: ThemeMode.light),
-                RadioListTile<ThemeMode>(title: Text('Dark'), value: ThemeMode.dark),
-              ],
+          child: ListTile(
+            leading: const Icon(Icons.tune),
+            title: Text(t.settingsTitle),
+            subtitle: Text('${t.settingsTheme} · ${t.settingsLanguage}'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const UserSettingsScreen()),
             ),
           ),
         ),
@@ -124,14 +125,14 @@ class ProfileScreen extends ConsumerWidget {
           onPressed: () async {
             final confirmed = await AppNotice.confirm(
               context,
-              title: 'Log out',
-              message: "You'll need to log in again to continue.",
-              confirmLabel: 'Log out',
+              title: t.authLogOutConfirmTitle,
+              message: t.authLogOutConfirmMessage,
+              confirmLabel: t.authLogOut,
             );
             if (confirmed) await ref.read(sessionControllerProvider.notifier).logout();
           },
           icon: Icon(Icons.logout, color: colorScheme.error),
-          label: Text('Log out', style: TextStyle(color: colorScheme.error)),
+          label: Text(t.authLogOut, style: TextStyle(color: colorScheme.error)),
           style: OutlinedButton.styleFrom(side: BorderSide(color: colorScheme.error.withValues(alpha: 0.4))),
         ),
       ],

@@ -41,3 +41,7 @@ application-local.yml
 # OS
 .DS_Store
 Thumbs.db
+
+# gen_l10n's report of keys a locale hasn't translated yet - a build artifact, regenerated
+# every time. Useful to read locally, noise in a diff.
+NEST_FE/lib/l10n/untranslated.json

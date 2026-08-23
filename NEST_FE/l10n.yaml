@@ -1,0 +1,10 @@
+arb-dir: lib/l10n
+template-arb-file: app_en.arb
+output-localization-file: app_localizations.dart
+output-class: AppLocalizations
+
+# English is the template AND the fallback. Any key a translation hasn't covered yet falls back to
+# the English string rather than rendering blank or crashing - which is what makes it safe to ship
+# partially-translated locales and fill them in over time.
+untranslated-messages-file: lib/l10n/untranslated.json
+nullable-getter: false

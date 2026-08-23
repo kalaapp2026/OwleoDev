@@ -64,7 +64,7 @@ public class UserService {
 
         return new UserProfileResponse(
                 user.getId(), user.getUsername(), user.getFullName(), maskPhone(user.getPhone()), user.getEmail(),
-                user.getCity(), user.getState(), user.getRole(), user.isTemporaryPassword(), user.getThemePreference(),
+                user.getCity(), user.getState(), user.getRole(), user.isTemporaryPassword(), user.getThemePreference(), user.getLanguagePreference(),
                 principalAssembler.summarise(user), activeMembershipId, user.getProfileImageUrl()
         );
     }
@@ -88,6 +88,13 @@ public class UserService {
     public void updateThemePreference(UUID userId, ThemePreference preference) {
         User user = userRepository.findById(userId).orElseThrow(() -> new ResourceNotFoundException("User not found"));
         user.setThemePreference(preference);
+        userRepository.save(user);
+    }
+
+    @Transactional
+    public void updateLanguagePreference(UUID userId, String languageTag) {
+        User user = userRepository.findById(userId).orElseThrow(() -> new ResourceNotFoundException("User not found"));
+        user.setLanguagePreference(languageTag);
         userRepository.save(user);
     }
 
