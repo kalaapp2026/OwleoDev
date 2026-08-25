@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'app_colors.dart';
+import 'app_tokens.dart';
 
 /// Two fully-specified Material 3 themes built from [AppColors]. Every screen
 /// should read colors through `Theme.of(context).colorScheme` (or the
@@ -141,6 +142,17 @@ class AppTheme {
         backgroundColor: cardColor,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
       ),
+
+      // The refreshed design language (see app_tokens.dart), attached as a ThemeExtension so
+      // migrated widgets read `context.palette.*` and get the right brightness automatically.
+      //
+      // Purely additive right now: nothing below reads from it, so every un-migrated screen keeps
+      // rendering exactly as before. Modules opt in one at a time (Fees -> Batches -> Dashboard),
+      // which is what keeps the app from sitting in a half-restyled state where each individual
+      // screen looks broken rather than merely old.
+      extensions: <ThemeExtension<dynamic>>[
+        isDark ? AppPalette.dark : AppPalette.light,
+      ],
     );
   }
 
