@@ -1,3 +1,4 @@
+import 'package:nest_fe/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:nest_fe/core/error/api_exception.dart';
@@ -24,7 +25,7 @@ class ArtistApplicationsScreen extends ConsumerWidget {
     final applicationsAsync = ref.watch(pendingArtistApplicationsProvider);
 
     return Scaffold(
-      appBar: embedded ? null : AppBar(title: const Text('Artist Applications')),
+      appBar: embedded ? null : AppBar(title: Text(AppLocalizations.of(context).artistApplicationsTitle)),
       body: AsyncValueView<List<ArtistApplication>>(
         value: applicationsAsync,
         onRetry: () => ref.invalidate(pendingArtistApplicationsProvider),
@@ -116,13 +117,13 @@ class _ApplicationCardState extends ConsumerState<_ApplicationCard> {
               IconButton(
                 icon: const Icon(Icons.check_circle_outline),
                 color: Colors.green,
-                tooltip: 'Approve',
+                tooltip: AppLocalizations.of(context).actionApprove,
                 onPressed: () => _decide(true),
               ),
               IconButton(
                 icon: const Icon(Icons.cancel_outlined),
                 color: colorScheme.error,
-                tooltip: 'Reject',
+                tooltip: AppLocalizations.of(context).actionReject,
                 onPressed: () => _decide(false),
               ),
             ],

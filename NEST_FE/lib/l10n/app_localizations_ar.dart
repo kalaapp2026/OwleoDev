@@ -198,4 +198,106 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get languageChanged => 'تم تحديث اللغة.';
+
+  @override
+  String get dashWelcomeBack => 'مرحبًا بعودتك،';
+
+  @override
+  String get dashQuickActions => 'إجراءات سريعة';
+
+  @override
+  String get attTitle => 'الحضور';
+
+  @override
+  String get attLoadABatchClass => 'تحميل حصة المجموعة';
+
+  @override
+  String get attClassAdded => 'تمت إضافة الحصة.';
+
+  @override
+  String get attNoBatchesForCourse => 'لا توجد مجموعات ضمن هذه الدورة بعد.';
+
+  @override
+  String get attLoad => 'تحميل';
+
+  @override
+  String get attAddAClass => 'إضافة حصة';
+
+  @override
+  String get attSubmit => 'إرسال الحضور';
+
+  @override
+  String get attSubmitted => 'تم إرسال الحضور.';
+
+  @override
+  String get fieldCourse => 'الدورة';
+
+  @override
+  String get fieldBatch => 'المجموعة';
+
+  @override
+  String get fieldTitle => 'العنوان';
+
+  @override
+  String get fieldDescription => 'الوصف';
+
+  @override
+  String get fieldLocation => 'الموقع';
+
+  @override
+  String get fieldCaption => 'التعليق';
+
+  @override
+  String get socNewPost => 'منشور جديد';
+
+  @override
+  String get socPost => 'نشر';
+
+  @override
+  String get socNeedCaptionOrPhoto => 'أضف تعليقًا أو صورة واحدة على الأقل.';
+
+  @override
+  String get socInterested => 'مهتم';
+
+  @override
+  String get socSearchPeople => 'البحث عن أشخاص';
+
+  @override
+  String get artistApplicationsTitle => 'طلبات الفنانين';
+
+  @override
+  String get actionApprove => 'موافقة';
+
+  @override
+  String get actionReject => 'رفض';
+
+  @override
+  String get evtNewEvent => 'فعالية جديدة';
+
+  @override
+  String get evtCreateEvent => 'إنشاء فعالية';
+
+  @override
+  String get evtCreated => 'تم إنشاء الفعالية.';
+
+  @override
+  String get evtProgramme => 'برنامج';
+
+  @override
+  String get evtLookingForArtist => 'البحث عن فنان';
+
+  @override
+  String get evtVisibility => 'الظهور:';
+
+  @override
+  String get evtInHouse => 'داخلي';
+
+  @override
+  String get evtPublic => 'عام';
+
+  @override
+  String get evtDateTimeHint => 'التاريخ والوقت (YYYY-MM-DDTHH:mm:ss)';
+
+  @override
+  String get feedEventBadge => 'فعالية';
 }

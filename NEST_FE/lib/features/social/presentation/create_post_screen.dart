@@ -1,3 +1,4 @@
+import 'package:nest_fe/l10n/app_localizations.dart';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -37,7 +38,7 @@ class _CreatePostScreenState extends ConsumerState<CreatePostScreen> {
 
   Future<void> _post() async {
     if (_contentController.text.trim().isEmpty && _picked.isEmpty) {
-      AppNotice.error(context, 'Add a caption or at least one photo.');
+      AppNotice.error(context, AppLocalizations.of(context).socNeedCaptionOrPhoto);
       return;
     }
     setState(() => _isPosting = true);
@@ -69,13 +70,13 @@ class _CreatePostScreenState extends ConsumerState<CreatePostScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('New post'),
+        title: Text(AppLocalizations.of(context).socNewPost),
         actions: [
           TextButton(
             onPressed: _isPosting ? null : _post,
             child: _isPosting
                 ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                : const Text('Post'),
+                : Text(AppLocalizations.of(context).socPost),
           ),
         ],
       ),
@@ -85,7 +86,7 @@ class _CreatePostScreenState extends ConsumerState<CreatePostScreen> {
           TextField(
             controller: _contentController,
             maxLines: 5,
-            decoration: const InputDecoration(labelText: 'Caption', alignLabelWithHint: true),
+            decoration: InputDecoration(labelText: AppLocalizations.of(context).fieldCaption, alignLabelWithHint: true),
             textCapitalization: TextCapitalization.sentences,
           ),
           const SizedBox(height: 16),

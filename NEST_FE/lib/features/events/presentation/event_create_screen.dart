@@ -1,3 +1,4 @@
+import 'package:nest_fe/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:nest_fe/core/error/api_exception.dart';
@@ -34,7 +35,7 @@ class _EventCreateScreenState extends ConsumerState<EventCreateScreen> {
             visibility: _visibility,
           );
       if (mounted) {
-        AppNotice.success(context, 'Event created.');
+        AppNotice.success(context, AppLocalizations.of(context).evtCreated);
         Navigator.of(context).pop();
       }
     } on ApiException catch (e) {
@@ -47,39 +48,39 @@ class _EventCreateScreenState extends ConsumerState<EventCreateScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('New event')),
+      appBar: AppBar(title: Text(AppLocalizations.of(context).evtNewEvent)),
       body: ListView(
         padding: const EdgeInsets.all(20),
         children: [
           SegmentedButton<String>(
-            segments: const [
-              ButtonSegment(value: 'PROGRAMME', label: Text('Programme')),
-              ButtonSegment(value: 'LOOKING_FOR_ARTIST', label: Text('Looking for Artist')),
+            segments: [
+              ButtonSegment(value: 'PROGRAMME', label: Text(AppLocalizations.of(context).evtProgramme)),
+              ButtonSegment(value: 'LOOKING_FOR_ARTIST', label: Text(AppLocalizations.of(context).evtLookingForArtist)),
             ],
             selected: {_type},
             onSelectionChanged: (s) => setState(() => _type = s.first),
           ),
           const SizedBox(height: 14),
-          TextField(controller: _titleController, decoration: const InputDecoration(labelText: 'Title')),
+          TextField(controller: _titleController, decoration: InputDecoration(labelText: AppLocalizations.of(context).fieldTitle)),
           const SizedBox(height: 12),
-          TextField(controller: _descriptionController, maxLines: 3, decoration: const InputDecoration(labelText: 'Description')),
+          TextField(controller: _descriptionController, maxLines: 3, decoration: InputDecoration(labelText: AppLocalizations.of(context).fieldDescription)),
           const SizedBox(height: 12),
-          TextField(controller: _dateController, decoration: const InputDecoration(labelText: 'Date & time (YYYY-MM-DDTHH:mm:ss)')),
+          TextField(controller: _dateController, decoration: InputDecoration(labelText: AppLocalizations.of(context).evtDateTimeHint)),
           const SizedBox(height: 12),
-          TextField(controller: _locationController, decoration: const InputDecoration(labelText: 'Location')),
+          TextField(controller: _locationController, decoration: InputDecoration(labelText: AppLocalizations.of(context).fieldLocation)),
           const SizedBox(height: 14),
           Row(
             children: [
-              const Text('Visibility:'),
+              Text(AppLocalizations.of(context).evtVisibility),
               const SizedBox(width: 12),
               ChoiceChip(
-                label: const Text('In-house'),
+                label: Text(AppLocalizations.of(context).evtInHouse),
                 selected: _visibility == 'INHOUSE',
                 onSelected: (_) => setState(() => _visibility = 'INHOUSE'),
               ),
               const SizedBox(width: 8),
               ChoiceChip(
-                label: const Text('Public'),
+                label: Text(AppLocalizations.of(context).evtPublic),
                 selected: _visibility == 'PUBLIC',
                 onSelected: (_) => setState(() => _visibility = 'PUBLIC'),
               ),
@@ -98,7 +99,7 @@ class _EventCreateScreenState extends ConsumerState<EventCreateScreen> {
             onPressed: _isSaving ? null : _submit,
             child: _isSaving
                 ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                : const Text('Create event'),
+                : Text(AppLocalizations.of(context).evtCreateEvent),
           ),
         ],
       ),

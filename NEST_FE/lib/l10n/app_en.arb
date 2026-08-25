@@ -1,8 +1,6 @@
 {
   "@@locale": "en",
-
   "appTagline": "Your business. Organized. Automated.",
-
   "navFeed": "Feed",
   "navEvents": "Events",
   "navMyPosts": "My Posts",
@@ -16,7 +14,6 @@
   "navAcademies": "Academies",
   "navBilling": "Billing",
   "navApplications": "Applications",
-
   "authUsernameOrMobile": "Username or mobile number",
   "authPassword": "Password",
   "authContinue": "Continue",
@@ -33,7 +30,6 @@
   "authChange": "Change",
   "authLogOutConfirmTitle": "Log out",
   "authLogOutConfirmMessage": "You'll need to log in again to continue.",
-
   "settingsTitle": "Settings",
   "settingsAppearance": "Appearance",
   "settingsTheme": "Theme",
@@ -42,11 +38,9 @@
   "settingsThemeDark": "Dark",
   "settingsLanguage": "Language",
   "settingsLanguageSubtitle": "Applies across the whole app",
-
   "profileAcademyMemberships": "Academy memberships",
   "profileSuperAdmin": "Super Admin",
   "profileYourRole": "Your role",
-
   "commonSave": "Save",
   "commonCancel": "Cancel",
   "commonConfirm": "Confirm",
@@ -64,21 +58,70 @@
   "commonSomethingWentWrong": "Something went wrong",
   "commonNoDataYet": "Nothing here yet",
   "commonCouldNotReachServer": "Could not reach the server - check your connection.",
-
   "welcomeBack": "Welcome back,",
   "quickActions": "Quick actions",
   "activeCourses": "Active courses",
   "myCourses": "My courses",
-
   "languageChanged": "Language updated.",
-
-  "@appTagline": { "description": "Subtitle under the logo on the login screen" },
-  "@navFeed": { "description": "Bottom nav: social feed tab" },
-  "@navMore": { "description": "Bottom nav: opens the overflow menu of ERP actions" },
-  "@authCode": { "description": "Label for the one-time confirmation code field" },
-  "@settingsLanguageSubtitle": { "description": "Shown under the Language row in Settings" },
-  "@commonRequired": { "description": "Form validation message for an empty required field" },
-  "@welcomeBack": { "description": "Dashboard greeting, followed by the user's name on the next line" },
-  "@activeCourses": { "description": "Dashboard stat: number of active courses in the academy" },
-  "@myCourses": { "description": "Dashboard stat shown to students instead of activeCourses" }
+  "@appTagline": {
+    "description": "Subtitle under the logo on the login screen"
+  },
+  "@navFeed": {
+    "description": "Bottom nav: social feed tab"
+  },
+  "@navMore": {
+    "description": "Bottom nav: opens the overflow menu of ERP actions"
+  },
+  "@authCode": {
+    "description": "Label for the one-time confirmation code field"
+  },
+  "@settingsLanguageSubtitle": {
+    "description": "Shown under the Language row in Settings"
+  },
+  "@commonRequired": {
+    "description": "Form validation message for an empty required field"
+  },
+  "@welcomeBack": {
+    "description": "Dashboard greeting, followed by the user's name on the next line"
+  },
+  "@activeCourses": {
+    "description": "Dashboard stat: number of active courses in the academy"
+  },
+  "@myCourses": {
+    "description": "Dashboard stat shown to students instead of activeCourses"
+  },
+  "dashWelcomeBack": "Welcome back,",
+  "dashQuickActions": "Quick actions",
+  "attTitle": "Attendance",
+  "attLoadABatchClass": "Load a batch's class",
+  "attClassAdded": "Class added.",
+  "attNoBatchesForCourse": "No batches under this course yet.",
+  "attLoad": "Load",
+  "attAddAClass": "Add a class",
+  "attSubmit": "Submit attendance",
+  "attSubmitted": "Attendance submitted.",
+  "fieldCourse": "Course",
+  "fieldBatch": "Batch",
+  "fieldTitle": "Title",
+  "fieldDescription": "Description",
+  "fieldLocation": "Location",
+  "fieldCaption": "Caption",
+  "socNewPost": "New post",
+  "socPost": "Post",
+  "socNeedCaptionOrPhoto": "Add a caption or at least one photo.",
+  "socInterested": "Interested",
+  "socSearchPeople": "Search people",
+  "artistApplicationsTitle": "Artist Applications",
+  "actionApprove": "Approve",
+  "actionReject": "Reject",
+  "evtNewEvent": "New event",
+  "evtCreateEvent": "Create event",
+  "evtCreated": "Event created.",
+  "evtProgramme": "Programme",
+  "evtLookingForArtist": "Looking for Artist",
+  "evtVisibility": "Visibility:",
+  "evtInHouse": "In-house",
+  "evtPublic": "Public",
+  "evtDateTimeHint": "Date & time (YYYY-MM-DDTHH:mm:ss)",
+  "feedEventBadge": "EVENT"
 }

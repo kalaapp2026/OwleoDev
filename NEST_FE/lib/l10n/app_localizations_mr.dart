@@ -198,4 +198,106 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get languageChanged => 'भाषा अद्ययावत झाली.';
+
+  @override
+  String get dashWelcomeBack => 'पुन्हा स्वागत आहे,';
+
+  @override
+  String get dashQuickActions => 'जलद क्रिया';
+
+  @override
+  String get attTitle => 'उपस्थिती';
+
+  @override
+  String get attLoadABatchClass => 'बॅचचा वर्ग लोड करा';
+
+  @override
+  String get attClassAdded => 'वर्ग जोडला.';
+
+  @override
+  String get attNoBatchesForCourse => 'या अभ्यासक्रमाखाली अजून बॅच नाहीत.';
+
+  @override
+  String get attLoad => 'लोड करा';
+
+  @override
+  String get attAddAClass => 'वर्ग जोडा';
+
+  @override
+  String get attSubmit => 'उपस्थिती सबमिट करा';
+
+  @override
+  String get attSubmitted => 'उपस्थिती सबमिट झाली.';
+
+  @override
+  String get fieldCourse => 'अभ्यासक्रम';
+
+  @override
+  String get fieldBatch => 'बॅच';
+
+  @override
+  String get fieldTitle => 'शीर्षक';
+
+  @override
+  String get fieldDescription => 'वर्णन';
+
+  @override
+  String get fieldLocation => 'स्थान';
+
+  @override
+  String get fieldCaption => 'मथळा';
+
+  @override
+  String get socNewPost => 'नवीन पोस्ट';
+
+  @override
+  String get socPost => 'पोस्ट करा';
+
+  @override
+  String get socNeedCaptionOrPhoto => 'मथळा किंवा किमान एक फोटो जोडा.';
+
+  @override
+  String get socInterested => 'स्वारस्य';
+
+  @override
+  String get socSearchPeople => 'लोक शोधा';
+
+  @override
+  String get artistApplicationsTitle => 'कलाकार अर्ज';
+
+  @override
+  String get actionApprove => 'मंजूर करा';
+
+  @override
+  String get actionReject => 'नाकारा';
+
+  @override
+  String get evtNewEvent => 'नवीन कार्यक्रम';
+
+  @override
+  String get evtCreateEvent => 'कार्यक्रम तयार करा';
+
+  @override
+  String get evtCreated => 'कार्यक्रम तयार झाला.';
+
+  @override
+  String get evtProgramme => 'कार्यक्रम';
+
+  @override
+  String get evtLookingForArtist => 'कलाकार हवा आहे';
+
+  @override
+  String get evtVisibility => 'दृश्यमानता:';
+
+  @override
+  String get evtInHouse => 'अंतर्गत';
+
+  @override
+  String get evtPublic => 'सार्वजनिक';
+
+  @override
+  String get evtDateTimeHint => 'दिनांक व वेळ (YYYY-MM-DDTHH:mm:ss)';
+
+  @override
+  String get feedEventBadge => 'कार्यक्रम';
 }

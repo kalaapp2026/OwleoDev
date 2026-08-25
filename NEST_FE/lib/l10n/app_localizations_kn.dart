@@ -198,4 +198,106 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get languageChanged => 'ಭಾಷೆ ನವೀಕರಿಸಲಾಗಿದೆ.';
+
+  @override
+  String get dashWelcomeBack => 'ಮತ್ತೆ ಸ್ವಾಗತ,';
+
+  @override
+  String get dashQuickActions => 'ತ್ವರಿತ ಕ್ರಿಯೆಗಳು';
+
+  @override
+  String get attTitle => 'ಹಾಜರಾತಿ';
+
+  @override
+  String get attLoadABatchClass => 'ಬ್ಯಾಚ್‌ನ ತರಗತಿ ಲೋಡ್ ಮಾಡಿ';
+
+  @override
+  String get attClassAdded => 'ತರಗತಿ ಸೇರಿಸಲಾಗಿದೆ.';
+
+  @override
+  String get attNoBatchesForCourse => 'ಈ ಕೋರ್ಸ್ ಅಡಿಯಲ್ಲಿ ಇನ್ನೂ ಬ್ಯಾಚ್‌ಗಳಿಲ್ಲ.';
+
+  @override
+  String get attLoad => 'ಲೋಡ್';
+
+  @override
+  String get attAddAClass => 'ತರಗತಿ ಸೇರಿಸಿ';
+
+  @override
+  String get attSubmit => 'ಹಾಜರಾತಿ ಸಲ್ಲಿಸಿ';
+
+  @override
+  String get attSubmitted => 'ಹಾಜರಾತಿ ಸಲ್ಲಿಸಲಾಗಿದೆ.';
+
+  @override
+  String get fieldCourse => 'ಕೋರ್ಸ್';
+
+  @override
+  String get fieldBatch => 'ಬ್ಯಾಚ್';
+
+  @override
+  String get fieldTitle => 'ಶೀರ್ಷಿಕೆ';
+
+  @override
+  String get fieldDescription => 'ವಿವರಣೆ';
+
+  @override
+  String get fieldLocation => 'ಸ್ಥಳ';
+
+  @override
+  String get fieldCaption => 'ಶೀರ್ಷಿಕೆ';
+
+  @override
+  String get socNewPost => 'ಹೊಸ ಪೋಸ್ಟ್';
+
+  @override
+  String get socPost => 'ಪೋಸ್ಟ್';
+
+  @override
+  String get socNeedCaptionOrPhoto => 'ಶೀರ್ಷಿಕೆ ಅಥವಾ ಕನಿಷ್ಠ ಒಂದು ಫೋಟೋ ಸೇರಿಸಿ.';
+
+  @override
+  String get socInterested => 'ಆಸಕ್ತಿ';
+
+  @override
+  String get socSearchPeople => 'ಜನರನ್ನು ಹುಡುಕಿ';
+
+  @override
+  String get artistApplicationsTitle => 'ಕಲಾವಿದ ಅರ್ಜಿಗಳು';
+
+  @override
+  String get actionApprove => 'ಅನುಮೋದಿಸಿ';
+
+  @override
+  String get actionReject => 'ತಿರಸ್ಕರಿಸಿ';
+
+  @override
+  String get evtNewEvent => 'ಹೊಸ ಕಾರ್ಯಕ್ರಮ';
+
+  @override
+  String get evtCreateEvent => 'ಕಾರ್ಯಕ್ರಮ ರಚಿಸಿ';
+
+  @override
+  String get evtCreated => 'ಕಾರ್ಯಕ್ರಮ ರಚಿಸಲಾಗಿದೆ.';
+
+  @override
+  String get evtProgramme => 'ಕಾರ್ಯಕ್ರಮ';
+
+  @override
+  String get evtLookingForArtist => 'ಕಲಾವಿದರ ಅಗತ್ಯವಿದೆ';
+
+  @override
+  String get evtVisibility => 'ಗೋಚರತೆ:';
+
+  @override
+  String get evtInHouse => 'ಆಂತರಿಕ';
+
+  @override
+  String get evtPublic => 'ಸಾರ್ವಜನಿಕ';
+
+  @override
+  String get evtDateTimeHint => 'ದಿನಾಂಕ ಮತ್ತು ಸಮಯ (YYYY-MM-DDTHH:mm:ss)';
+
+  @override
+  String get feedEventBadge => 'ಕಾರ್ಯಕ್ರಮ';
 }

@@ -197,4 +197,107 @@ class AppLocalizationsMl extends AppLocalizations {
 
   @override
   String get languageChanged => 'ഭാഷ അപ്‌ഡേറ്റ് ചെയ്തു.';
+
+  @override
+  String get dashWelcomeBack => 'വീണ്ടും സ്വാഗതം,';
+
+  @override
+  String get dashQuickActions => 'പെട്ടെന്നുള്ള പ്രവർത്തനങ്ങൾ';
+
+  @override
+  String get attTitle => 'ഹാജർ';
+
+  @override
+  String get attLoadABatchClass => 'ബാച്ചിന്റെ ക്ലാസ് ലോഡ് ചെയ്യുക';
+
+  @override
+  String get attClassAdded => 'ക്ലാസ് ചേർത്തു.';
+
+  @override
+  String get attNoBatchesForCourse => 'ഈ കോഴ്‌സിന് കീഴിൽ ഇതുവരെ ബാച്ചുകളില്ല.';
+
+  @override
+  String get attLoad => 'ലോഡ്';
+
+  @override
+  String get attAddAClass => 'ക്ലാസ് ചേർക്കുക';
+
+  @override
+  String get attSubmit => 'ഹാജർ സമർപ്പിക്കുക';
+
+  @override
+  String get attSubmitted => 'ഹാജർ സമർപ്പിച്ചു.';
+
+  @override
+  String get fieldCourse => 'കോഴ്‌സ്';
+
+  @override
+  String get fieldBatch => 'ബാച്ച്';
+
+  @override
+  String get fieldTitle => 'തലക്കെട്ട്';
+
+  @override
+  String get fieldDescription => 'വിവരണം';
+
+  @override
+  String get fieldLocation => 'സ്ഥലം';
+
+  @override
+  String get fieldCaption => 'അടിക്കുറിപ്പ്';
+
+  @override
+  String get socNewPost => 'പുതിയ പോസ്റ്റ്';
+
+  @override
+  String get socPost => 'പോസ്റ്റ്';
+
+  @override
+  String get socNeedCaptionOrPhoto =>
+      'ഒരു അടിക്കുറിപ്പോ ചുരുങ്ങിയത് ഒരു ഫോട്ടോയോ ചേർക്കുക.';
+
+  @override
+  String get socInterested => 'താൽപ്പര്യമുണ്ട്';
+
+  @override
+  String get socSearchPeople => 'ആളുകളെ തിരയുക';
+
+  @override
+  String get artistApplicationsTitle => 'കലാകാരൻ അപേക്ഷകൾ';
+
+  @override
+  String get actionApprove => 'അംഗീകരിക്കുക';
+
+  @override
+  String get actionReject => 'നിരസിക്കുക';
+
+  @override
+  String get evtNewEvent => 'പുതിയ പരിപാടി';
+
+  @override
+  String get evtCreateEvent => 'പരിപാടി സൃഷ്ടിക്കുക';
+
+  @override
+  String get evtCreated => 'പരിപാടി സൃഷ്ടിച്ചു.';
+
+  @override
+  String get evtProgramme => 'പരിപാടി';
+
+  @override
+  String get evtLookingForArtist => 'കലാകാരനെ തേടുന്നു';
+
+  @override
+  String get evtVisibility => 'ദൃശ്യത:';
+
+  @override
+  String get evtInHouse => 'ആന്തരികം';
+
+  @override
+  String get evtPublic => 'പൊതു';
+
+  @override
+  String get evtDateTimeHint => 'തീയതിയും സമയവും (YYYY-MM-DDTHH:mm:ss)';
+
+  @override
+  String get feedEventBadge => 'പരിപാടി';
 }

@@ -1,3 +1,4 @@
+import 'package:nest_fe/l10n/app_localizations.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -64,8 +65,8 @@ class _SearchProfilesScreenState extends ConsumerState<SearchProfilesScreen> {
           controller: _controller,
           autofocus: true,
           onChanged: _onChanged,
-          decoration: const InputDecoration(
-            hintText: 'Search people',
+          decoration: InputDecoration(
+            hintText: AppLocalizations.of(context).socSearchPeople,
             border: InputBorder.none,
           ),
         ),

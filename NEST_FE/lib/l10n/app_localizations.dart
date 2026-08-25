@@ -496,6 +496,210 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Language updated.'**
   String get languageChanged;
+
+  /// No description provided for @dashWelcomeBack.
+  ///
+  /// In en, this message translates to:
+  /// **'Welcome back,'**
+  String get dashWelcomeBack;
+
+  /// No description provided for @dashQuickActions.
+  ///
+  /// In en, this message translates to:
+  /// **'Quick actions'**
+  String get dashQuickActions;
+
+  /// No description provided for @attTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Attendance'**
+  String get attTitle;
+
+  /// No description provided for @attLoadABatchClass.
+  ///
+  /// In en, this message translates to:
+  /// **'Load a batch\'s class'**
+  String get attLoadABatchClass;
+
+  /// No description provided for @attClassAdded.
+  ///
+  /// In en, this message translates to:
+  /// **'Class added.'**
+  String get attClassAdded;
+
+  /// No description provided for @attNoBatchesForCourse.
+  ///
+  /// In en, this message translates to:
+  /// **'No batches under this course yet.'**
+  String get attNoBatchesForCourse;
+
+  /// No description provided for @attLoad.
+  ///
+  /// In en, this message translates to:
+  /// **'Load'**
+  String get attLoad;
+
+  /// No description provided for @attAddAClass.
+  ///
+  /// In en, this message translates to:
+  /// **'Add a class'**
+  String get attAddAClass;
+
+  /// No description provided for @attSubmit.
+  ///
+  /// In en, this message translates to:
+  /// **'Submit attendance'**
+  String get attSubmit;
+
+  /// No description provided for @attSubmitted.
+  ///
+  /// In en, this message translates to:
+  /// **'Attendance submitted.'**
+  String get attSubmitted;
+
+  /// No description provided for @fieldCourse.
+  ///
+  /// In en, this message translates to:
+  /// **'Course'**
+  String get fieldCourse;
+
+  /// No description provided for @fieldBatch.
+  ///
+  /// In en, this message translates to:
+  /// **'Batch'**
+  String get fieldBatch;
+
+  /// No description provided for @fieldTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Title'**
+  String get fieldTitle;
+
+  /// No description provided for @fieldDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Description'**
+  String get fieldDescription;
+
+  /// No description provided for @fieldLocation.
+  ///
+  /// In en, this message translates to:
+  /// **'Location'**
+  String get fieldLocation;
+
+  /// No description provided for @fieldCaption.
+  ///
+  /// In en, this message translates to:
+  /// **'Caption'**
+  String get fieldCaption;
+
+  /// No description provided for @socNewPost.
+  ///
+  /// In en, this message translates to:
+  /// **'New post'**
+  String get socNewPost;
+
+  /// No description provided for @socPost.
+  ///
+  /// In en, this message translates to:
+  /// **'Post'**
+  String get socPost;
+
+  /// No description provided for @socNeedCaptionOrPhoto.
+  ///
+  /// In en, this message translates to:
+  /// **'Add a caption or at least one photo.'**
+  String get socNeedCaptionOrPhoto;
+
+  /// No description provided for @socInterested.
+  ///
+  /// In en, this message translates to:
+  /// **'Interested'**
+  String get socInterested;
+
+  /// No description provided for @socSearchPeople.
+  ///
+  /// In en, this message translates to:
+  /// **'Search people'**
+  String get socSearchPeople;
+
+  /// No description provided for @artistApplicationsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Artist Applications'**
+  String get artistApplicationsTitle;
+
+  /// No description provided for @actionApprove.
+  ///
+  /// In en, this message translates to:
+  /// **'Approve'**
+  String get actionApprove;
+
+  /// No description provided for @actionReject.
+  ///
+  /// In en, this message translates to:
+  /// **'Reject'**
+  String get actionReject;
+
+  /// No description provided for @evtNewEvent.
+  ///
+  /// In en, this message translates to:
+  /// **'New event'**
+  String get evtNewEvent;
+
+  /// No description provided for @evtCreateEvent.
+  ///
+  /// In en, this message translates to:
+  /// **'Create event'**
+  String get evtCreateEvent;
+
+  /// No description provided for @evtCreated.
+  ///
+  /// In en, this message translates to:
+  /// **'Event created.'**
+  String get evtCreated;
+
+  /// No description provided for @evtProgramme.
+  ///
+  /// In en, this message translates to:
+  /// **'Programme'**
+  String get evtProgramme;
+
+  /// No description provided for @evtLookingForArtist.
+  ///
+  /// In en, this message translates to:
+  /// **'Looking for Artist'**
+  String get evtLookingForArtist;
+
+  /// No description provided for @evtVisibility.
+  ///
+  /// In en, this message translates to:
+  /// **'Visibility:'**
+  String get evtVisibility;
+
+  /// No description provided for @evtInHouse.
+  ///
+  /// In en, this message translates to:
+  /// **'In-house'**
+  String get evtInHouse;
+
+  /// No description provided for @evtPublic.
+  ///
+  /// In en, this message translates to:
+  /// **'Public'**
+  String get evtPublic;
+
+  /// No description provided for @evtDateTimeHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Date & time (YYYY-MM-DDTHH:mm:ss)'**
+  String get evtDateTimeHint;
+
+  /// No description provided for @feedEventBadge.
+  ///
+  /// In en, this message translates to:
+  /// **'EVENT'**
+  String get feedEventBadge;
 }
 
 class _AppLocalizationsDelegate

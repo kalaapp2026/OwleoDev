@@ -198,4 +198,107 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get languageChanged => 'ভাষা আপডেট হয়েছে।';
+
+  @override
+  String get dashWelcomeBack => 'আবার স্বাগতম,';
+
+  @override
+  String get dashQuickActions => 'দ্রুত ক্রিয়া';
+
+  @override
+  String get attTitle => 'উপস্থিতি';
+
+  @override
+  String get attLoadABatchClass => 'ব্যাচের ক্লাস লোড করুন';
+
+  @override
+  String get attClassAdded => 'ক্লাস যোগ হয়েছে।';
+
+  @override
+  String get attNoBatchesForCourse => 'এই কোর্সের অধীনে এখনও কোনো ব্যাচ নেই।';
+
+  @override
+  String get attLoad => 'লোড';
+
+  @override
+  String get attAddAClass => 'ক্লাস যোগ করুন';
+
+  @override
+  String get attSubmit => 'উপস্থিতি জমা দিন';
+
+  @override
+  String get attSubmitted => 'উপস্থিতি জমা হয়েছে।';
+
+  @override
+  String get fieldCourse => 'কোর্স';
+
+  @override
+  String get fieldBatch => 'ব্যাচ';
+
+  @override
+  String get fieldTitle => 'শিরোনাম';
+
+  @override
+  String get fieldDescription => 'বিবরণ';
+
+  @override
+  String get fieldLocation => 'অবস্থান';
+
+  @override
+  String get fieldCaption => 'ক্যাপশন';
+
+  @override
+  String get socNewPost => 'নতুন পোস্ট';
+
+  @override
+  String get socPost => 'পোস্ট';
+
+  @override
+  String get socNeedCaptionOrPhoto =>
+      'একটি ক্যাপশন বা অন্তত একটি ছবি যোগ করুন।';
+
+  @override
+  String get socInterested => 'আগ্রহী';
+
+  @override
+  String get socSearchPeople => 'মানুষ খুঁজুন';
+
+  @override
+  String get artistApplicationsTitle => 'শিল্পী আবেদন';
+
+  @override
+  String get actionApprove => 'অনুমোদন';
+
+  @override
+  String get actionReject => 'প্রত্যাখ্যান';
+
+  @override
+  String get evtNewEvent => 'নতুন ইভেন্ট';
+
+  @override
+  String get evtCreateEvent => 'ইভেন্ট তৈরি করুন';
+
+  @override
+  String get evtCreated => 'ইভেন্ট তৈরি হয়েছে।';
+
+  @override
+  String get evtProgramme => 'অনুষ্ঠান';
+
+  @override
+  String get evtLookingForArtist => 'শিল্পী খুঁজছি';
+
+  @override
+  String get evtVisibility => 'দৃশ্যমানতা:';
+
+  @override
+  String get evtInHouse => 'অভ্যন্তরীণ';
+
+  @override
+  String get evtPublic => 'সর্বজনীন';
+
+  @override
+  String get evtDateTimeHint => 'তারিখ ও সময় (YYYY-MM-DDTHH:mm:ss)';
+
+  @override
+  String get feedEventBadge => 'ইভেন্ট';
 }

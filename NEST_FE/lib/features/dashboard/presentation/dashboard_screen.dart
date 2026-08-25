@@ -1,3 +1,4 @@
+import 'package:nest_fe/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -38,7 +39,7 @@ class DashboardScreen extends ConsumerWidget {
       child: ListView(
         padding: const EdgeInsets.all(20),
         children: [
-          Text('Welcome back,', style: Theme.of(context).textTheme.bodyMedium),
+          Text(AppLocalizations.of(context).dashWelcomeBack, style: Theme.of(context).textTheme.bodyMedium),
           Text(user.fullName, style: Theme.of(context).textTheme.headlineSmall),
           if (membership?.academyName != null) ...[
             const SizedBox(height: 4),
@@ -65,7 +66,7 @@ class DashboardScreen extends ConsumerWidget {
             ],
           ),
           const SizedBox(height: 28),
-          Text('Quick actions', style: Theme.of(context).textTheme.titleMedium),
+          Text(AppLocalizations.of(context).dashQuickActions, style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 14),
           GridView.count(
             crossAxisCount: 4,

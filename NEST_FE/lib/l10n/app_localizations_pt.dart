@@ -198,6 +198,109 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get languageChanged => 'Idioma atualizado.';
+
+  @override
+  String get dashWelcomeBack => 'Bem-vindo de volta,';
+
+  @override
+  String get dashQuickActions => 'Ações rápidas';
+
+  @override
+  String get attTitle => 'Presença';
+
+  @override
+  String get attLoadABatchClass => 'Carregar a aula de uma turma';
+
+  @override
+  String get attClassAdded => 'Aula adicionada.';
+
+  @override
+  String get attNoBatchesForCourse => 'Ainda não há turmas neste curso.';
+
+  @override
+  String get attLoad => 'Carregar';
+
+  @override
+  String get attAddAClass => 'Adicionar uma aula';
+
+  @override
+  String get attSubmit => 'Enviar presença';
+
+  @override
+  String get attSubmitted => 'Presença enviada.';
+
+  @override
+  String get fieldCourse => 'Curso';
+
+  @override
+  String get fieldBatch => 'Turma';
+
+  @override
+  String get fieldTitle => 'Título';
+
+  @override
+  String get fieldDescription => 'Descrição';
+
+  @override
+  String get fieldLocation => 'Local';
+
+  @override
+  String get fieldCaption => 'Legenda';
+
+  @override
+  String get socNewPost => 'Nova publicação';
+
+  @override
+  String get socPost => 'Publicar';
+
+  @override
+  String get socNeedCaptionOrPhoto =>
+      'Adicione uma legenda ou pelo menos uma foto.';
+
+  @override
+  String get socInterested => 'Tenho interesse';
+
+  @override
+  String get socSearchPeople => 'Buscar pessoas';
+
+  @override
+  String get artistApplicationsTitle => 'Solicitações de artista';
+
+  @override
+  String get actionApprove => 'Aprovar';
+
+  @override
+  String get actionReject => 'Rejeitar';
+
+  @override
+  String get evtNewEvent => 'Novo evento';
+
+  @override
+  String get evtCreateEvent => 'Criar evento';
+
+  @override
+  String get evtCreated => 'Evento criado.';
+
+  @override
+  String get evtProgramme => 'Programa';
+
+  @override
+  String get evtLookingForArtist => 'Procurando artista';
+
+  @override
+  String get evtVisibility => 'Visibilidade:';
+
+  @override
+  String get evtInHouse => 'Interno';
+
+  @override
+  String get evtPublic => 'Público';
+
+  @override
+  String get evtDateTimeHint => 'Data e hora (YYYY-MM-DDTHH:mm:ss)';
+
+  @override
+  String get feedEventBadge => 'EVENTO';
 }
 
 /// The translations for Portuguese, as used in Brazil (`pt_BR`).
@@ -394,4 +497,107 @@ class AppLocalizationsPtBr extends AppLocalizationsPt {
 
   @override
   String get languageChanged => 'Idioma atualizado.';
+
+  @override
+  String get dashWelcomeBack => 'Bem-vindo de volta,';
+
+  @override
+  String get dashQuickActions => 'Ações rápidas';
+
+  @override
+  String get attTitle => 'Presença';
+
+  @override
+  String get attLoadABatchClass => 'Carregar a aula de uma turma';
+
+  @override
+  String get attClassAdded => 'Aula adicionada.';
+
+  @override
+  String get attNoBatchesForCourse => 'Ainda não há turmas neste curso.';
+
+  @override
+  String get attLoad => 'Carregar';
+
+  @override
+  String get attAddAClass => 'Adicionar uma aula';
+
+  @override
+  String get attSubmit => 'Enviar presença';
+
+  @override
+  String get attSubmitted => 'Presença enviada.';
+
+  @override
+  String get fieldCourse => 'Curso';
+
+  @override
+  String get fieldBatch => 'Turma';
+
+  @override
+  String get fieldTitle => 'Título';
+
+  @override
+  String get fieldDescription => 'Descrição';
+
+  @override
+  String get fieldLocation => 'Local';
+
+  @override
+  String get fieldCaption => 'Legenda';
+
+  @override
+  String get socNewPost => 'Nova publicação';
+
+  @override
+  String get socPost => 'Publicar';
+
+  @override
+  String get socNeedCaptionOrPhoto =>
+      'Adicione uma legenda ou pelo menos uma foto.';
+
+  @override
+  String get socInterested => 'Tenho interesse';
+
+  @override
+  String get socSearchPeople => 'Buscar pessoas';
+
+  @override
+  String get artistApplicationsTitle => 'Solicitações de artista';
+
+  @override
+  String get actionApprove => 'Aprovar';
+
+  @override
+  String get actionReject => 'Rejeitar';
+
+  @override
+  String get evtNewEvent => 'Novo evento';
+
+  @override
+  String get evtCreateEvent => 'Criar evento';
+
+  @override
+  String get evtCreated => 'Evento criado.';
+
+  @override
+  String get evtProgramme => 'Programa';
+
+  @override
+  String get evtLookingForArtist => 'Procurando artista';
+
+  @override
+  String get evtVisibility => 'Visibilidade:';
+
+  @override
+  String get evtInHouse => 'Interno';
+
+  @override
+  String get evtPublic => 'Público';
+
+  @override
+  String get evtDateTimeHint => 'Data e hora (YYYY-MM-DDTHH:mm:ss)';
+
+  @override
+  String get feedEventBadge => 'EVENTO';
 }

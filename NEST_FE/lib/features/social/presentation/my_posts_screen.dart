@@ -1,3 +1,4 @@
+import 'package:nest_fe/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:nest_fe/core/auth/session_controller.dart';
@@ -30,7 +31,7 @@ class MyPostsScreen extends ConsumerWidget {
       floatingActionButton: canPost
           ? FloatingActionButton.extended(
               icon: const Icon(Icons.add),
-              label: const Text('New post'),
+              label: Text(AppLocalizations.of(context).socNewPost),
               onPressed: () async {
                 final posted = await Navigator.of(context).push<bool>(
                   MaterialPageRoute(builder: (_) => const CreatePostScreen()),

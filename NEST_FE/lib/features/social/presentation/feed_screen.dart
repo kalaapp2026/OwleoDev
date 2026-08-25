@@ -1,3 +1,4 @@
+import 'package:nest_fe/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:nest_fe/core/network/api_config.dart';
@@ -94,7 +95,7 @@ class _PostCard extends StatelessWidget {
                         color: colorScheme.secondary.withValues(alpha: 0.15),
                         borderRadius: BorderRadius.circular(6),
                       ),
-                      child: Text('EVENT', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: colorScheme.secondary)),
+                      child: Text(AppLocalizations.of(context).feedEventBadge, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: colorScheme.secondary)),
                     ),
                   ),
                 if (post.content != null && post.content!.isNotEmpty)

@@ -1,3 +1,4 @@
+import 'package:nest_fe/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:nest_fe/core/error/api_exception.dart';
@@ -58,7 +59,7 @@ class _AttendanceScreenState extends ConsumerState<AttendanceScreen> {
             startTime: picked.startTime,
             endTime: picked.endTime,
           );
-      if (mounted) AppNotice.success(context, 'Class added.');
+      if (mounted) AppNotice.success(context, AppLocalizations.of(context).attClassAdded);
       await _loadInstances();
     } on ApiException catch (e) {
       if (mounted) AppNotice.error(context, e.message);
@@ -72,7 +73,7 @@ class _AttendanceScreenState extends ConsumerState<AttendanceScreen> {
     final coursesAsync = ref.watch(activeCoursesProvider);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Attendance')),
+      appBar: AppBar(title: Text(AppLocalizations.of(context).attTitle)),
       body: ListView(
         padding: const EdgeInsets.all(20),
         children: [
@@ -89,7 +90,7 @@ class _AttendanceScreenState extends ConsumerState<AttendanceScreen> {
                       final validValue = courses.any((c) => c.id == _selectedCourseId) ? _selectedCourseId : null;
                       return DropdownButtonFormField<String>(
                         initialValue: validValue,
-                        decoration: const InputDecoration(labelText: 'Course'),
+                        decoration: InputDecoration(labelText: AppLocalizations.of(context).fieldCourse),
                         items: courses.map((c) => DropdownMenuItem(value: c.id, child: Text(c.name))).toList(),
                         onChanged: (id) => setState(() {
                           _selectedCourseId = id;
@@ -117,7 +118,7 @@ class _AttendanceScreenState extends ConsumerState<AttendanceScreen> {
                             final validValue = batches.any((b) => b.id == _selectedBatchId) ? _selectedBatchId : null;
                             return DropdownButtonFormField<String>(
                               initialValue: validValue,
-                              decoration: const InputDecoration(labelText: 'Batch'),
+                              decoration: InputDecoration(labelText: AppLocalizations.of(context).fieldBatch),
                               items: batches.map((b) => DropdownMenuItem(value: b.id, child: Text(b.name))).toList(),
                               onChanged: (id) => setState(() {
                                 _selectedBatchId = id;
@@ -140,7 +141,7 @@ class _AttendanceScreenState extends ConsumerState<AttendanceScreen> {
                     onPressed: _isLoading || _selectedBatchId == null ? null : _loadInstances,
                     child: _isLoading
                         ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                        : const Text('Load'),
+                        : Text(AppLocalizations.of(context).attLoad),
                   ),
                 ],
               ),
@@ -155,7 +156,7 @@ class _AttendanceScreenState extends ConsumerState<AttendanceScreen> {
                 icon: _isAddingClass
                     ? const SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2))
                     : const Icon(Icons.add, size: 18),
-                label: const Text('Add a class'),
+                label: Text(AppLocalizations.of(context).attAddAClass),
               ),
             ),
             const SizedBox(height: 8),
@@ -260,7 +261,7 @@ class _MarkAttendanceScreenState extends ConsumerState<_MarkAttendanceScreen> {
     try {
       await ref.read(attendanceApiProvider).submitSheet(widget.classInstance.id, _statusByMember);
       if (mounted) {
-        AppNotice.success(context, 'Attendance submitted.');
+        AppNotice.success(context, AppLocalizations.of(context).attSubmitted);
         Navigator.of(context).pop();
       }
     } on ApiException catch (e) {
@@ -301,7 +302,7 @@ class _MarkAttendanceScreenState extends ConsumerState<_MarkAttendanceScreen> {
                           onPressed: _isSubmitting ? null : _submit,
                           child: _isSubmitting
                               ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                              : const Text('Submit attendance'),
+                              : Text(AppLocalizations.of(context).attSubmit),
                         ),
                       ],
                     ),

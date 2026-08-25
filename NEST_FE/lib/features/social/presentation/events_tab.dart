@@ -1,3 +1,4 @@
+import 'package:nest_fe/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:nest_fe/core/providers/core_providers.dart';
@@ -80,7 +81,7 @@ class _EventCard extends ConsumerWidget {
                 const Spacer(),
                 TextButton(
                   onPressed: () => ref.read(eventsApiProvider).markInterested(event.id),
-                  child: const Text('Interested'),
+                  child: Text(AppLocalizations.of(context).socInterested),
                 ),
               ],
             ),

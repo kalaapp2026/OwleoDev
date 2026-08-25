@@ -198,4 +198,106 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get languageChanged => 'భాష నవీకరించబడింది.';
+
+  @override
+  String get dashWelcomeBack => 'తిరిగి స్వాగతం,';
+
+  @override
+  String get dashQuickActions => 'త్వరిత చర్యలు';
+
+  @override
+  String get attTitle => 'హాజరు';
+
+  @override
+  String get attLoadABatchClass => 'బ్యాచ్ తరగతిని లోడ్ చేయండి';
+
+  @override
+  String get attClassAdded => 'తరగతి జోడించబడింది.';
+
+  @override
+  String get attNoBatchesForCourse => 'ఈ కోర్సు కింద ఇంకా బ్యాచ్‌లు లేవు.';
+
+  @override
+  String get attLoad => 'లోడ్';
+
+  @override
+  String get attAddAClass => 'తరగతిని జోడించండి';
+
+  @override
+  String get attSubmit => 'హాజరును సమర్పించండి';
+
+  @override
+  String get attSubmitted => 'హాజరు సమర్పించబడింది.';
+
+  @override
+  String get fieldCourse => 'కోర్సు';
+
+  @override
+  String get fieldBatch => 'బ్యాచ్';
+
+  @override
+  String get fieldTitle => 'శీర్షిక';
+
+  @override
+  String get fieldDescription => 'వివరణ';
+
+  @override
+  String get fieldLocation => 'స్థానం';
+
+  @override
+  String get fieldCaption => 'క్యాప్షన్';
+
+  @override
+  String get socNewPost => 'కొత్త పోస్ట్';
+
+  @override
+  String get socPost => 'పోస్ట్';
+
+  @override
+  String get socNeedCaptionOrPhoto => 'క్యాప్షన్ లేదా కనీసం ఒక ఫోటో జోడించండి.';
+
+  @override
+  String get socInterested => 'ఆసక్తి';
+
+  @override
+  String get socSearchPeople => 'వ్యక్తులను వెతకండి';
+
+  @override
+  String get artistApplicationsTitle => 'కళాకారుల దరఖాస్తులు';
+
+  @override
+  String get actionApprove => 'ఆమోదించు';
+
+  @override
+  String get actionReject => 'తిరస్కరించు';
+
+  @override
+  String get evtNewEvent => 'కొత్త కార్యక్రమం';
+
+  @override
+  String get evtCreateEvent => 'కార్యక్రమాన్ని సృష్టించండి';
+
+  @override
+  String get evtCreated => 'కార్యక్రమం సృష్టించబడింది.';
+
+  @override
+  String get evtProgramme => 'కార్యక్రమం';
+
+  @override
+  String get evtLookingForArtist => 'కళాకారుడు కావాలి';
+
+  @override
+  String get evtVisibility => 'కనిపించే విధానం:';
+
+  @override
+  String get evtInHouse => 'అంతర్గత';
+
+  @override
+  String get evtPublic => 'పబ్లిక్';
+
+  @override
+  String get evtDateTimeHint => 'తేదీ & సమయం (YYYY-MM-DDTHH:mm:ss)';
+
+  @override
+  String get feedEventBadge => 'కార్యక్రమం';
 }
