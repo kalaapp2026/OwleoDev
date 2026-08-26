@@ -1,6 +1,8 @@
 package com.nest.app.fees.controller;
 
 import com.nest.app.fees.dto.FeeBalanceResponse;
+import com.nest.app.fees.dto.FeeRosterResponse;
+import com.nest.app.fees.dto.ReverseFeeEntryRequest;
 import com.nest.app.fees.dto.FeeSlipResponse;
 import com.nest.app.fees.dto.FeeTransactionResponse;
 import com.nest.app.fees.dto.RecordFeeEntryRequest;
@@ -40,6 +42,28 @@ public class FeesController {
     @RequiresFeature(FeatureKey.FEES_ENTRY)
     public FeeTransactionResponse recordEntry(@Valid @RequestBody RecordFeeEntryRequest request) {
         return feesService.recordEntry(request);
+    }
+
+    /**
+     * The whole batch's fee position for a period. One call, so the roster screen doesn't make a
+     * balance request per student.
+     */
+    @GetMapping("/fees/roster")
+    @RequiresFeature(FeatureKey.FEES_ENTRY)
+    public FeeRosterResponse roster(@RequestParam UUID courseId, @RequestParam UUID batchId,
+                                    @RequestParam String period) {
+        return feesService.roster(courseId, batchId, period);
+    }
+
+    /**
+     * Undo a payment. Posts a compensating negative transaction - the ledger is append-only, so
+     * there is deliberately no DELETE here and never will be.
+     */
+    @PostMapping("/fees/entries/{transactionId}/reverse")
+    @RequiresFeature(FeatureKey.FEES_ENTRY)
+    public FeeTransactionResponse reverseEntry(@PathVariable UUID transactionId,
+                                               @RequestBody(required = false) ReverseFeeEntryRequest request) {
+        return feesService.reverseEntry(transactionId, request == null ? null : request.reason());
     }
 
     @GetMapping("/fees/balance")

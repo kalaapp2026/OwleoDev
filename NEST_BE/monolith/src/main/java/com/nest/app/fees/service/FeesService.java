@@ -1,10 +1,15 @@
 package com.nest.app.fees.service;
 
 import com.nest.app.curriculum.entity.Course;
+import com.nest.app.enrolment.entity.BatchMember;
+import com.nest.app.enrolment.repository.BatchMemberRepository;
 import com.nest.app.curriculum.repository.CourseRepository;
+import com.nest.app.fees.dto.FeeRosterResponse;
+import com.nest.app.fees.dto.PaymentStatus;
 import com.nest.app.fees.dto.FeeBalanceResponse;
 import com.nest.app.fees.dto.FeeTransactionResponse;
 import com.nest.app.fees.dto.RecordFeeEntryRequest;
+import com.nest.app.fees.entity.FeeMode;
 import com.nest.app.fees.entity.FeeCategory;
 import com.nest.app.fees.entity.FeeSlip;
 import com.nest.app.fees.entity.FeeSlipStatus;
@@ -32,6 +37,9 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.YearMonth;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.Objects;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -56,11 +64,12 @@ public class FeesService {
     private final AcademyMembershipRepository membershipRepository;
     private final UserRepository userRepository;
     private final CourseFeatureGuard courseFeatureGuard;
+    private final BatchMemberRepository batchMemberRepository;
 
     public FeesService(FeeTransactionRepository feeTransactionRepository, CourseMapRepository courseMapRepository,
                         FeeSlipRepository feeSlipRepository, CourseRepository courseRepository,
                         AcademyMembershipRepository membershipRepository, UserRepository userRepository,
-                        CourseFeatureGuard courseFeatureGuard) {
+                        CourseFeatureGuard courseFeatureGuard, BatchMemberRepository batchMemberRepository) {
         this.feeTransactionRepository = feeTransactionRepository;
         this.courseMapRepository = courseMapRepository;
         this.feeSlipRepository = feeSlipRepository;
@@ -68,6 +77,7 @@ public class FeesService {
         this.membershipRepository = membershipRepository;
         this.userRepository = userRepository;
         this.courseFeatureGuard = courseFeatureGuard;
+        this.batchMemberRepository = batchMemberRepository;
     }
 
     /** closePeriod=true ("Close") writes off whatever's left unpaid in this period for good -
@@ -104,6 +114,133 @@ public class FeesService {
             closePeriod(request.membershipId(), request.courseId(), request.period());
         }
         return response;
+    }
+
+    /**
+     * Every student in one batch with their fee position for one period, in one response.
+     *
+     * <p>Deliberately bulk. The obvious implementation - list the batch, then call getBalance per
+     * student - is one query per student on the screen an admin opens most often. Everything here
+     * is four queries regardless of batch size, then joined in memory.</p>
+     *
+     * <p>Students are drawn from the batch, then intersected with who is actually enrolled in the
+     * course: a Temporary batch pulls students across several Regular batches, and someone in the
+     * batch but not enrolled in this course has no fee for it and must not appear owing money.</p>
+     */
+    @Transactional(readOnly = true)
+    public FeeRosterResponse roster(UUID courseId, UUID batchId, String period) {
+        courseFeatureGuard.assertCourseFeature(courseId, FeatureKey.FEES_ENTRY);
+
+        List<UUID> batchMemberIds = batchMemberRepository.findByBatchId(batchId).stream()
+                .map(BatchMember::getMembershipId).toList();
+        if (batchMemberIds.isEmpty()) {
+            return new FeeRosterResponse(courseId, batchId, period, 0, 0, BigDecimal.ZERO, BigDecimal.ZERO, List.of());
+        }
+
+        // agreedFee per student, and the intersection with "actually enrolled in this course".
+        Map<UUID, BigDecimal> agreedFeeByMembership = courseMapRepository.findByCourseId(courseId).stream()
+                .filter(CourseMap::isActive)
+                .filter(cm -> batchMemberIds.contains(cm.getMembershipId()))
+                .collect(Collectors.toMap(CourseMap::getMembershipId,
+                        cm -> cm.getAgreedFee() != null ? cm.getAgreedFee() : BigDecimal.ZERO));
+
+        List<AcademyMembership> students = membershipRepository.findAllById(agreedFeeByMembership.keySet()).stream()
+                .filter(m -> m.getRoleType() == Role.STUDENT && m.getStatus() == MembershipStatus.ACTIVE)
+                .toList();
+        Map<UUID, User> usersById = userRepository.findAllById(
+                students.stream().map(AcademyMembership::getUserId).collect(Collectors.toSet())
+        ).stream().collect(Collectors.toMap(User::getId, u -> u));
+
+        // A generated slip's amountDue wins over the flat agreed fee - it already includes anything
+        // carried forward from an unpaid earlier period.
+        Map<UUID, FeeSlip> slipByMembership = feeSlipRepository.findByCourseIdAndPeriod(courseId, period).stream()
+                .collect(Collectors.toMap(FeeSlip::getMembershipId, s -> s, (a, b) -> a));
+
+        List<FeeTransaction> transactions = feeTransactionRepository.findByCourseIdAndPeriod(courseId, period);
+        Map<UUID, List<FeeTransaction>> txByMembership = transactions.stream()
+                .collect(Collectors.groupingBy(FeeTransaction::getMembershipId));
+        // Which payments have already been undone, so the roster doesn't offer to undo them twice.
+        Set<UUID> reversedIds = transactions.stream()
+                .map(FeeTransaction::getReversalOfTransactionId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+
+        LocalDate today = LocalDate.now();
+        List<FeeRosterResponse.FeeRosterEntry> entries = new ArrayList<>();
+        BigDecimal expected = BigDecimal.ZERO;
+        BigDecimal collected = BigDecimal.ZERO;
+        int paidCount = 0;
+
+        for (AcademyMembership membership : students) {
+            List<FeeTransaction> rows = txByMembership.getOrDefault(membership.getId(), List.of());
+            FeeSlip slip = slipByMembership.get(membership.getId());
+
+            BigDecimal due = slip != null ? slip.getAmountDue()
+                    : agreedFeeByMembership.getOrDefault(membership.getId(), BigDecimal.ZERO);
+            // Signed sum, so a reversal's negative row takes itself back out with no special case.
+            BigDecimal paid = rows.stream().map(FeeTransaction::getAmountPaid)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+            BigDecimal balance = due.subtract(paid);
+
+            // The payment an "undo" would reverse: most recent, not itself a reversal, not already
+            // reversed.
+            FeeTransaction lastPayment = rows.stream()
+                    .filter(t -> !t.isReversal())
+                    .filter(t -> !reversedIds.contains(t.getId()))
+                    .max(Comparator.comparing(FeeTransaction::getCreatedAt,
+                            Comparator.nullsFirst(Comparator.naturalOrder())))
+                    .orElse(null);
+
+            boolean closed = slip != null && slip.getStatus() == FeeSlipStatus.CLOSED;
+            PaymentStatus status = deriveStatus(closed, due, paid, balance, lastPayment, slip, today);
+            if (status == PaymentStatus.PAID_MANUAL || status == PaymentStatus.PAID_GATEWAY
+                    || status == PaymentStatus.CLOSED) {
+                paidCount++;
+            }
+
+            expected = expected.add(due);
+            collected = collected.add(paid);
+
+            User user = usersById.get(membership.getUserId());
+            entries.add(new FeeRosterResponse.FeeRosterEntry(
+                    membership.getId(),
+                    user == null ? "Unknown" : user.getFullName(),
+                    due, paid, balance, status,
+                    lastPayment == null ? null : lastPayment.getId()));
+        }
+
+        // Alphabetical: an admin works down a printed or spoken list of names, not a list of ids.
+        entries.sort(Comparator.comparing(FeeRosterResponse.FeeRosterEntry::studentName,
+                String.CASE_INSENSITIVE_ORDER));
+
+        return new FeeRosterResponse(courseId, batchId, period, entries.size(), paidCount,
+                expected, collected, entries);
+    }
+
+    /**
+     * Status is derived, never stored - see {@link PaymentStatus}. "Due" in particular is just
+     * NOT_PAID that has run out of road, so it changes on its own as the date passes rather than
+     * needing a job to go and update rows.
+     */
+    private PaymentStatus deriveStatus(boolean closed, BigDecimal due, BigDecimal paid,
+                                       BigDecimal balance, FeeTransaction lastPayment,
+                                       FeeSlip slip, LocalDate today) {
+        if (closed) {
+            return PaymentStatus.CLOSED;
+        }
+        if (balance.compareTo(BigDecimal.ZERO) <= 0 && due.compareTo(BigDecimal.ZERO) > 0) {
+            // Which "paid" it is comes from how the money actually arrived, so the badge tells an
+            // admin whether to expect it in the cash box or the gateway statement.
+            return lastPayment != null && lastPayment.getMode() == FeeMode.GATEWAY
+                    ? PaymentStatus.PAID_GATEWAY
+                    : PaymentStatus.PAID_MANUAL;
+        }
+        if (paid.compareTo(BigDecimal.ZERO) > 0) {
+            return PaymentStatus.PARTIAL;
+        }
+        boolean overdue = slip != null && slip.getBillingPeriodEnd() != null
+                && slip.getBillingPeriodEnd().isBefore(today);
+        return overdue ? PaymentStatus.DUE : PaymentStatus.NOT_PAID;
     }
 
     /**
