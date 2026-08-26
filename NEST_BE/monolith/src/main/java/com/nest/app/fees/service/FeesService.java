@@ -5,6 +5,7 @@ import com.nest.app.curriculum.repository.CourseRepository;
 import com.nest.app.fees.dto.FeeBalanceResponse;
 import com.nest.app.fees.dto.FeeTransactionResponse;
 import com.nest.app.fees.dto.RecordFeeEntryRequest;
+import com.nest.app.fees.entity.FeeCategory;
 import com.nest.app.fees.entity.FeeSlip;
 import com.nest.app.fees.entity.FeeSlipStatus;
 import com.nest.app.fees.entity.FeeTransaction;
@@ -18,6 +19,7 @@ import com.nest.app.identity.repository.AcademyMembershipRepository;
 import com.nest.app.identity.repository.CourseMapRepository;
 import com.nest.app.identity.repository.UserRepository;
 import com.nest.common.audit.Auditable;
+import com.nest.common.exception.ConflictException;
 import com.nest.common.exception.ResourceNotFoundException;
 import com.nest.common.security.Role;
 import com.nest.app.identity.service.CourseFeatureGuard;
@@ -28,6 +30,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.YearMonth;
 import java.util.List;
 import java.util.Map;
@@ -78,6 +81,8 @@ public class FeesService {
         // (the coarse @RequiresFeature only checked the union). Admins bypass inside the guard.
         courseFeatureGuard.assertCourseFeature(request.courseId(), FeatureKey.FEES_ENTRY);
         FeeTransaction tx = FeeTransaction.builder()
+                .academyId(TenantContext.currentAcademyId())
+                .category(FeeCategory.REGULAR)
                 .membershipId(request.membershipId())
                 .courseId(request.courseId())
                 .period(request.period())
@@ -86,6 +91,10 @@ public class FeesService {
                 .note(request.note())
                 .gatewayRef(request.gatewayRef())
                 .recordedBy(TenantContext.currentUserId())
+                // The date money changed hands, which the caller may backdate for cash taken
+                // earlier. Defaults to today rather than being derived from createdAt, so the
+                // statement's day grouping never depends on when someone got around to keying it in.
+                .occurredOn(request.receivedOn() != null ? request.receivedOn() : LocalDate.now())
                 .build();
         // saveAndFlush: see PostService's identical note - @CreationTimestamp isn't populated
         // in-memory until the INSERT runs, which save() alone can defer past this read-back.
@@ -95,6 +104,62 @@ public class FeesService {
             closePeriod(request.membershipId(), request.courseId(), request.period());
         }
         return response;
+    }
+
+    /**
+     * Undo a payment by posting a compensating row, never by deleting the original.
+     *
+     * <p>The ledger is append-only (the database enforces it), so "un-mark paid" writes a negative
+     * transaction pointing at the one it cancels. The balance is SUM(amountPaid) either way, so it
+     * corrects itself with no stored total to keep in step - and the statement still shows that
+     * money was taken and later returned, which is what actually happened.</p>
+     *
+     * <p>Reversing a reversal is refused rather than allowed to net out. Two rows cancelling a
+     * third is not something any screen can render honestly, and "pay again" is the correct way to
+     * express that, since it records a new date and mode.</p>
+     */
+    @Transactional
+    @Auditable(action = "FEE_ENTRY_REVERSED", entityType = "fee_transaction")
+    public FeeTransactionResponse reverseEntry(UUID transactionId, String reason) {
+        UUID academyId = TenantContext.currentAcademyId();
+        // By id AND academy: a transaction id is client-supplied, and findById alone would let one
+        // academy reverse another's payment.
+        FeeTransaction original = feeTransactionRepository.findByIdAndAcademyId(transactionId, academyId)
+                .orElseThrow(() -> new ResourceNotFoundException("Transaction not found: " + transactionId));
+
+        if (original.isReversal()) {
+            throw new ConflictException("This entry is itself a reversal and cannot be reversed. "
+                    + "Record a new payment instead.");
+        }
+        if (original.getCategory() == FeeCategory.REGULAR) {
+            courseFeatureGuard.assertCourseFeature(original.getCourseId(), FeatureKey.FEES_ENTRY);
+        }
+        // Checked here for a clear message; the partial unique index is what actually guarantees it
+        // under two concurrent undos, where both would pass this read.
+        if (feeTransactionRepository.existsByReversalOfTransactionId(transactionId)) {
+            throw new ConflictException("This payment has already been reversed.");
+        }
+
+        FeeTransaction reversal = FeeTransaction.builder()
+                .academyId(original.getAcademyId())
+                .category(original.getCategory())
+                .membershipId(original.getMembershipId())
+                .courseId(original.getCourseId())
+                .period(original.getPeriod())
+                .feeTypeId(original.getFeeTypeId())
+                .studentFeeId(original.getStudentFeeId())
+                .amountPaid(original.getAmountPaid().negate())
+                .mode(original.getMode())
+                .reversalOfTransactionId(original.getId())
+                .reversalReason(reason)
+                .recordedBy(TenantContext.currentUserId())
+                // Dated today, not backdated to the original. The reversal is a thing that happened
+                // now; filing it under the original's date would make a past day's totals change
+                // retroactively.
+                .occurredOn(LocalDate.now())
+                .build();
+
+        return toResponse(feeTransactionRepository.saveAndFlush(reversal));
     }
 
     /** Marks this (membership, course, period)'s fee slip CLOSED, creating a minimal one first if

@@ -2,6 +2,7 @@ package com.nest.app.fees.service;
 
 import com.nest.app.curriculum.repository.CourseRepository;
 import com.nest.app.fees.dto.RecordFeeEntryRequest;
+import com.nest.app.fees.entity.FeeCategory;
 import com.nest.app.fees.entity.FeeMode;
 import com.nest.app.fees.entity.FeeSlip;
 import com.nest.app.fees.entity.FeeSlipStatus;
@@ -13,6 +14,7 @@ import com.nest.app.identity.repository.AcademyMembershipRepository;
 import com.nest.app.identity.repository.CourseMapRepository;
 import com.nest.app.identity.repository.UserRepository;
 import com.nest.common.exception.ResourceNotFoundException;
+import com.nest.common.security.MembershipClaim;
 import com.nest.common.security.NestPrincipal;
 import com.nest.common.security.Role;
 import com.nest.common.security.TenantContext;
@@ -25,7 +27,9 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.List;
+import java.util.Set;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -60,12 +64,20 @@ class FeesServiceTest {
 
     private final UUID membershipId = UUID.randomUUID();
     private final UUID courseId = UUID.randomUUID();
+    private final UUID academyId = UUID.randomUUID();
 
     @BeforeEach
     void setUp() {
         feesService = new FeesService(feeTransactionRepository, courseMapRepository, feeSlipRepository,
                 courseRepository, membershipRepository, userRepository, courseFeatureGuard);
-        TenantContext.set(new NestPrincipal(UUID.randomUUID(), "meera", Role.ACADEMY_ADMIN, List.of(), null));
+        // An active membership, not just a user: the ledger stamps academy_id on every row, so
+        // recording a payment without a resolvable academy is now a ForbiddenException rather
+        // than a row that belongs to no tenant.
+        UUID adminMembershipId = UUID.randomUUID();
+        MembershipClaim claim = new MembershipClaim(adminMembershipId, academyId, "Kalakshetra",
+                Role.ACADEMY_ADMIN, Set.of(), Set.of(courseId));
+        TenantContext.set(new NestPrincipal(UUID.randomUUID(), "meera", Role.ACADEMY_ADMIN,
+                List.of(claim), adminMembershipId));
     }
 
     @AfterEach
@@ -108,7 +120,11 @@ class FeesServiceTest {
     @Test
     void recordEntryStampsRecordingUserForAudit() {
         UUID adminUserId = UUID.randomUUID();
-        TenantContext.set(new NestPrincipal(adminUserId, "meera", Role.ACADEMY_ADMIN, List.of(), null));
+        UUID adminMembershipId = UUID.randomUUID();
+        TenantContext.set(new NestPrincipal(adminUserId, "meera", Role.ACADEMY_ADMIN,
+                List.of(new MembershipClaim(adminMembershipId, academyId, "Kalakshetra",
+                        Role.ACADEMY_ADMIN, Set.of(), Set.of(courseId))),
+                adminMembershipId));
         when(feeTransactionRepository.saveAndFlush(any(FeeTransaction.class))).thenAnswer(inv -> {
             FeeTransaction tx = inv.getArgument(0);
             tx.setId(UUID.randomUUID());
@@ -116,9 +132,16 @@ class FeesServiceTest {
         });
 
         var response = feesService.recordEntry(new RecordFeeEntryRequest(
-                membershipId, courseId, "2026-07", new BigDecimal("750.00"), FeeMode.CASH, "Half fee - attendance", null, null));
+                membershipId, courseId, "2026-07", new BigDecimal("750.00"), FeeMode.CASH, "Half fee - attendance", null, null, null));
 
         assertThat(response.recordedBy()).isEqualTo(adminUserId);
+        // The ledger is tenant-scoped by column, not by inference through membership, so every
+        // row has to carry the academy it belongs to.
+        ArgumentCaptor<FeeTransaction> saved = ArgumentCaptor.forClass(FeeTransaction.class);
+        verify(feeTransactionRepository).saveAndFlush(saved.capture());
+        assertThat(saved.getValue().getAcademyId()).isEqualTo(academyId);
+        assertThat(saved.getValue().getCategory()).isEqualTo(FeeCategory.REGULAR);
+        assertThat(saved.getValue().getOccurredOn()).isEqualTo(LocalDate.now());
         assertThat(response.amountPaid()).isEqualByComparingTo("750.00");
         verify(feeSlipRepository, never()).save(any(FeeSlip.class));
     }
@@ -137,7 +160,7 @@ class FeesServiceTest {
         when(feeSlipRepository.save(any(FeeSlip.class))).thenAnswer(inv -> inv.getArgument(0));
 
         feesService.recordEntry(new RecordFeeEntryRequest(
-                membershipId, courseId, "2026-07", new BigDecimal("500.00"), FeeMode.CASH, "Paying half, writing off the rest", null, true));
+                membershipId, courseId, "2026-07", new BigDecimal("500.00"), FeeMode.CASH, "Paying half, writing off the rest", null, true, null));
 
         ArgumentCaptor<FeeSlip> captor = ArgumentCaptor.forClass(FeeSlip.class);
         verify(feeSlipRepository).save(captor.capture());
@@ -158,7 +181,7 @@ class FeesServiceTest {
         when(feeSlipRepository.save(any(FeeSlip.class))).thenAnswer(inv -> inv.getArgument(0));
 
         feesService.recordEntry(new RecordFeeEntryRequest(
-                membershipId, courseId, "2026-07", new BigDecimal("500.00"), FeeMode.CASH, null, null, true));
+                membershipId, courseId, "2026-07", new BigDecimal("500.00"), FeeMode.CASH, null, null, true, null));
 
         ArgumentCaptor<FeeSlip> captor = ArgumentCaptor.forClass(FeeSlip.class);
         verify(feeSlipRepository).save(captor.capture());

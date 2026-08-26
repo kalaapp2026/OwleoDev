@@ -17,6 +17,7 @@ import org.hibernate.annotations.CreationTimestamp;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.UUID;
 
 /**
@@ -71,4 +72,49 @@ public class FeeTransaction {
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)
     private Instant createdAt;
+
+    /**
+     * The tenant this row belongs to. Stored rather than reached through {@code membershipId} so
+     * every ledger query can filter on an indexed column of this table - a cross-academy read is
+     * the one bug in a fees module that must not be possible by omission.
+     */
+    @Column(name = "academy_id", nullable = false)
+    private UUID academyId;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    @Builder.Default
+    private FeeCategory category = FeeCategory.REGULAR;
+
+    /** Set for an OTHER row raised from the academy's shared fee-type catalogue. */
+    @Column(name = "fee_type_id")
+    private UUID feeTypeId;
+
+    /** Set for an OTHER row raised as a one-off against a single student. */
+    @Column(name = "student_fee_id")
+    private UUID studentFeeId;
+
+    /**
+     * Points at the transaction this row cancels out. Undoing a payment posts a compensating
+     * negative row instead of deleting the original, so the statement still shows that money was
+     * taken and later returned - which is what actually happened.
+     */
+    @Column(name = "reversal_of_transaction_id")
+    private UUID reversalOfTransactionId;
+
+    @Column(name = "reversal_reason")
+    private String reversalReason;
+
+    /**
+     * The date the money changed hands, which is not always the date it was keyed in. Cash taken
+     * on Saturday and entered on Monday belongs to Saturday on the statement and in the
+     * received-date filter.
+     */
+    @Column(name = "occurred_on", nullable = false)
+    private LocalDate occurredOn;
+
+    /** True for the compensating row itself, not for the payment it reverses. */
+    public boolean isReversal() {
+        return reversalOfTransactionId != null;
+    }
 }

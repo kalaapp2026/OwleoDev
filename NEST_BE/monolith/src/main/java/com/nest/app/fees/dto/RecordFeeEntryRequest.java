@@ -6,6 +6,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.UUID;
 
 /** closePeriod is the "Close" choice on a partial payment - "remaining amount should not carry
@@ -19,6 +20,9 @@ public record RecordFeeEntryRequest(
         @NotNull FeeMode mode,
         String note,
         String gatewayRef,
-        Boolean closePeriod
+        Boolean closePeriod,
+        /* The date the money actually changed hands. Optional; defaults to today. Lets an admin
+         * enter Saturday's cash on Monday and have it file under Saturday on the statement. */
+        LocalDate receivedOn
 ) {
 }
