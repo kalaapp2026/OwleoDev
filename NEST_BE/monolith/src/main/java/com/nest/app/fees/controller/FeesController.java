@@ -4,6 +4,8 @@ import com.nest.app.fees.dto.FeeBalanceResponse;
 import com.nest.app.fees.dto.FeeRosterResponse;
 import com.nest.app.fees.dto.ReverseFeeEntryRequest;
 import com.nest.app.fees.dto.StudentFeeProfileResponse;
+import com.nest.app.fees.dto.StudentStatementResponse;
+import com.nest.app.fees.entity.FeeCategory;
 import com.nest.app.fees.dto.UpdateAgreedFeeRequest;
 import com.nest.app.fees.dto.FeeSlipResponse;
 import com.nest.app.fees.dto.FeeTransactionResponse;
@@ -85,6 +87,32 @@ public class FeesController {
     @RequiresFeature(FeatureKey.FEES_ENTRY)
     public FeeBalanceResponse updateAgreedFee(@Valid @RequestBody UpdateAgreedFeeRequest request) {
         return feesService.updateAgreedFee(request);
+    }
+
+    /**
+     * A student's whole fee history. Optional category filter, mirroring the screen's own chips.
+     */
+    @GetMapping("/students/{membershipId}/statement")
+    @RequiresFeature(FeatureKey.FEES_ENTRY)
+    public StudentStatementResponse statement(@PathVariable UUID membershipId,
+                                              @RequestParam(required = false) FeeCategory category) {
+        return feesService.statement(membershipId, category);
+    }
+
+    /**
+     * The statement as a CSV download. Takes the same category filter as the screen, so the file
+     * is exactly what the reader was looking at rather than silently widening to everything.
+     */
+    @GetMapping("/students/{membershipId}/statement/report")
+    @RequiresFeature(FeatureKey.FEES_ENTRY)
+    public ResponseEntity<byte[]> statementReport(@PathVariable UUID membershipId,
+                                                  @RequestParam(required = false) FeeCategory category) {
+        byte[] csv = feesService.generateStatementCsv(membershipId, category)
+                .getBytes(StandardCharsets.UTF_8);
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=fee-statement.csv")
+                .contentType(MediaType.parseMediaType("text/csv"))
+                .body(csv);
     }
 
     @GetMapping("/fees/balance")

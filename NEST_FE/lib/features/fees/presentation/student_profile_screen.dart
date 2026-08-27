@@ -11,6 +11,7 @@ import 'package:nest_fe/core/design/toast.dart';
 import 'package:nest_fe/features/fees/data/fee_roster.dart';
 import 'package:nest_fe/features/fees/data/student_fee_profile.dart';
 import 'package:nest_fe/features/fees/presentation/fee_format.dart';
+import 'package:nest_fe/features/fees/presentation/statement_screen.dart';
 import 'package:nest_fe/features/fees/presentation/fees_screen.dart' show feesApiProvider;
 
 typedef _ProfileKey = ({String membershipId, String period});
@@ -305,7 +306,9 @@ class _StudentProfileScreenState extends ConsumerState<StudentProfileScreen> {
                 style: TextStyle(
                     fontSize: AppType.md, fontWeight: AppType.bold, color: palette.text)),
             Pressable(
-              onTap: () => showAppToast(context, 'The statement screen is the next phase'),
+              onTap: () => Navigator.of(context).push(MaterialPageRoute(
+                builder: (_) => StatementScreen(membershipId: widget.membershipId),
+              )),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [

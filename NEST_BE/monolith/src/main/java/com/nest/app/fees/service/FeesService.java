@@ -8,6 +8,7 @@ import com.nest.app.enrolment.entity.BatchMember;
 import com.nest.app.enrolment.repository.BatchMemberRepository;
 import com.nest.app.curriculum.repository.CourseRepository;
 import com.nest.app.fees.dto.StudentFeeProfileResponse;
+import com.nest.app.fees.dto.StudentStatementResponse;
 import com.nest.app.fees.dto.UpdateAgreedFeeRequest;
 import com.nest.app.fees.dto.FeeRosterResponse;
 import com.nest.app.fees.dto.PaymentStatus;
@@ -45,6 +46,7 @@ import java.time.YearMonth;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.Objects;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -331,6 +333,147 @@ public class FeesService {
                 period,
                 totalDue, totalPaid, totalDue.subtract(totalPaid),
                 rows);
+    }
+
+    /**
+     * A student's whole fee history, one row per period per course.
+     *
+     * <p>Per period rather than per transaction on purpose: a month settled in three instalments
+     * is one line on a statement. The instalments are how the money arrived, which the ledger
+     * keeps, but not what the family is being told they owed.</p>
+     *
+     * <p>Periods are drawn from the union of generated slips and actual payments, so a period
+     * that was paid without a slip ever being generated still appears - otherwise money taken
+     * would be missing from the very document meant to account for it.</p>
+     */
+    @Transactional(readOnly = true)
+    public StudentStatementResponse statement(UUID membershipId, FeeCategory category) {
+        AcademyMembership membership = membershipRepository.findById(membershipId)
+                .orElseThrow(() -> new ResourceNotFoundException("Student not found: " + membershipId));
+        if (!membership.getAcademyId().equals(TenantContext.currentAcademyId())) {
+            throw new ResourceNotFoundException("Student not found: " + membershipId);
+        }
+
+        Map<UUID, BigDecimal> agreedFeeByCourse = courseMapRepository.findByMembershipId(membershipId).stream()
+                .filter(cm -> cm.getAgreedFee() != null)
+                .filter(cm -> courseFeatureGuard.hasCourseFeature(cm.getCourseId(), FeatureKey.FEES_ENTRY))
+                .collect(Collectors.toMap(CourseMap::getCourseId, CourseMap::getAgreedFee, (a, b) -> a));
+
+        Map<UUID, String> courseNames = courseRepository.findAllById(agreedFeeByCourse.keySet()).stream()
+                .collect(Collectors.toMap(Course::getId, Course::getName));
+
+        List<FeeSlip> slips = feeSlipRepository.findByMembershipIdOrderByGeneratedAtDesc(membershipId).stream()
+                .filter(s -> agreedFeeByCourse.containsKey(s.getCourseId()))
+                .toList();
+        List<FeeTransaction> transactions = feeTransactionRepository
+                .findByMembershipIdOrderByCreatedAtDesc(membershipId).stream()
+                .filter(t -> t.getCourseId() == null || agreedFeeByCourse.containsKey(t.getCourseId()))
+                .toList();
+
+        Set<UUID> reversedIds = transactions.stream()
+                .map(FeeTransaction::getReversalOfTransactionId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+
+        // Every (course, period) that has either a slip or a payment against it.
+        record CoursePeriod(UUID courseId, String period) {}
+        Set<CoursePeriod> keys = new LinkedHashSet<>();
+        slips.forEach(s -> keys.add(new CoursePeriod(s.getCourseId(), s.getPeriod())));
+        transactions.stream()
+                .filter(t -> t.getCourseId() != null && t.getPeriod() != null)
+                .forEach(t -> keys.add(new CoursePeriod(t.getCourseId(), t.getPeriod())));
+
+        Map<CoursePeriod, FeeSlip> slipByKey = slips.stream().collect(Collectors.toMap(
+                s -> new CoursePeriod(s.getCourseId(), s.getPeriod()), s -> s, (a, b) -> a));
+        Map<CoursePeriod, List<FeeTransaction>> txByKey = transactions.stream()
+                .filter(t -> t.getCourseId() != null && t.getPeriod() != null)
+                .collect(Collectors.groupingBy(t -> new CoursePeriod(t.getCourseId(), t.getPeriod())));
+
+        LocalDate today = LocalDate.now();
+        List<StudentStatementResponse.StatementRow> rows = new ArrayList<>();
+        BigDecimal totalBilled = BigDecimal.ZERO;
+        BigDecimal totalPaid = BigDecimal.ZERO;
+
+        for (CoursePeriod key : keys) {
+            FeeSlip slip = slipByKey.get(key);
+            List<FeeTransaction> rowTx = txByKey.getOrDefault(key, List.of());
+
+            BigDecimal fee = slip != null ? slip.getAmountDue()
+                    : agreedFeeByCourse.getOrDefault(key.courseId(), BigDecimal.ZERO);
+            BigDecimal paid = rowTx.stream().map(FeeTransaction::getAmountPaid)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+            FeeTransaction lastPayment = rowTx.stream()
+                    .filter(t -> !t.isReversal())
+                    .filter(t -> !reversedIds.contains(t.getId()))
+                    .max(Comparator.comparing(FeeTransaction::getOccurredOn,
+                            Comparator.nullsFirst(Comparator.naturalOrder())))
+                    .orElse(null);
+
+            boolean closed = slip != null && slip.getStatus() == FeeSlipStatus.CLOSED;
+            rows.add(new StudentStatementResponse.StatementRow(
+                    key.period(),
+                    FeeCategory.REGULAR,
+                    courseNames.getOrDefault(key.courseId(), "Unknown course"),
+                    fee, paid,
+                    deriveStatus(closed, fee, paid, fee.subtract(paid), lastPayment, slip, today),
+                    lastPayment == null ? null : lastPayment.getOccurredOn(),
+                    lastPayment == null ? null : lastPayment.getMode()));
+
+            totalBilled = totalBilled.add(fee);
+            totalPaid = totalPaid.add(paid);
+        }
+
+        if (category != null) {
+            rows.removeIf(r -> r.category() != category);
+            // Totals follow the filter, so the summary always describes the rows on screen rather
+            // than a dataset the reader can't see.
+            totalBilled = rows.stream().map(StudentStatementResponse.StatementRow::fee)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+            totalPaid = rows.stream().map(StudentStatementResponse.StatementRow::paid)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+        }
+
+        // Most recently paid first; anything unpaid sorts to the end, since it has no date to
+        // place it and is what the reader is being asked to act on.
+        rows.sort(Comparator.comparing(StudentStatementResponse.StatementRow::paidOn,
+                Comparator.nullsLast(Comparator.reverseOrder())));
+
+        User user = userRepository.findById(membership.getUserId()).orElse(null);
+        return new StudentStatementResponse(
+                membershipId,
+                user == null ? "Unknown" : user.getFullName(),
+                totalBilled, totalPaid, totalBilled.subtract(totalPaid),
+                rows);
+    }
+
+    /**
+     * The statement as CSV.
+     *
+     * <p>Takes the same category filter the screen does, so the download is exactly what the
+     * reader is looking at. A report that silently widens to the full dataset is worse than no
+     * report - it gets sent to a parent with other people's periods in it.</p>
+     */
+    @Transactional(readOnly = true)
+    public String generateStatementCsv(UUID membershipId, FeeCategory category) {
+        StudentStatementResponse statement = statement(membershipId, category);
+        StringBuilder csv = new StringBuilder();
+        csv.append("Period,Category,Context,Fee,Paid,Balance,Status,Payment Date,Mode\n");
+        for (StudentStatementResponse.StatementRow row : statement.rows()) {
+            csv.append(csvField(row.label())).append(',')
+                    .append(row.category()).append(',')
+                    .append(csvField(row.context())).append(',')
+                    .append(row.fee()).append(',')
+                    .append(row.paid()).append(',')
+                    .append(row.fee().subtract(row.paid())).append(',')
+                    .append(row.status()).append(',')
+                    .append(row.paidOn() == null ? "-" : row.paidOn()).append(',')
+                    .append(row.mode() == null ? "-" : row.mode()).append('\n');
+        }
+        csv.append("\nTotal billed,").append(statement.totalBilled()).append('\n');
+        csv.append("Total paid,").append(statement.totalPaid()).append('\n');
+        csv.append("Outstanding,").append(statement.outstanding()).append('\n');
+        return csv.toString();
     }
 
     /**

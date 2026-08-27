@@ -3,6 +3,7 @@ import 'package:nest_fe/core/network/dio_client.dart';
 import 'package:nest_fe/features/fees/data/fee_roster.dart';
 import 'package:nest_fe/features/fees/data/fee_transaction.dart';
 import 'package:nest_fe/features/fees/data/student_fee_profile.dart';
+import 'package:nest_fe/features/fees/data/student_statement.dart';
 
 class FeesApi {
   FeesApi(this._client);
@@ -96,6 +97,29 @@ class FeesApi {
         'agreedFee': agreedFee,
       }),
       (_) {},
+    );
+  }
+
+  /// A student's whole fee history. The optional category matches the screen's own chips, and
+  /// the totals come back filtered to it.
+  Future<StudentStatement> statement({required String membershipId, FeeCategory? category}) {
+    return _client.call(
+      (dio) => dio.get('/students//statement',
+          queryParameters: {'category': ?category?.wire}),
+      (data) => StudentStatement.fromJson(data as Map<String, dynamic>),
+    );
+  }
+
+  /// The statement as CSV, filtered exactly as the screen is - a download that silently widens to
+  /// everything is worse than none, since it gets sent to a parent with other periods in it.
+  Future<List<int>> downloadStatement({required String membershipId, FeeCategory? category}) {
+    return _client.call(
+      (dio) => dio.get(
+        '/students//statement/report',
+        queryParameters: {'category': ?category?.wire},
+        options: Options(responseType: ResponseType.bytes),
+      ),
+      (data) => data as List<int>,
     );
   }
 
