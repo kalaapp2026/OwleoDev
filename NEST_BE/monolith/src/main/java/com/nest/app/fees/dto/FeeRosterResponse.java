@@ -1,6 +1,9 @@
 package com.nest.app.fees.dto;
 
+import com.nest.app.fees.entity.FeeMode;
+
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 
@@ -36,7 +39,12 @@ public record FeeRosterResponse(
             BigDecimal totalPaid,
             BigDecimal balance,
             PaymentStatus status,
-            UUID lastPaymentId
+            UUID lastPaymentId,
+            /* When the most recent payment was received. The roster shows it beside the amount,
+             * so an admin can answer "when did they pay?" without opening the student. */
+            LocalDate lastPaidOn,
+            /* How that payment arrived, so the row can say Cash/UPI vs Gateway. */
+            FeeMode lastPaymentMode
     ) {
     }
 }

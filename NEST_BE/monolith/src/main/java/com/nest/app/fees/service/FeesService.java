@@ -206,7 +206,9 @@ public class FeesService {
                     membership.getId(),
                     user == null ? "Unknown" : user.getFullName(),
                     due, paid, balance, status,
-                    lastPayment == null ? null : lastPayment.getId()));
+                    lastPayment == null ? null : lastPayment.getId(),
+                    lastPayment == null ? null : lastPayment.getOccurredOn(),
+                    lastPayment == null ? null : lastPayment.getMode()));
         }
 
         // Alphabetical: an admin works down a printed or spoken list of names, not a list of ids.

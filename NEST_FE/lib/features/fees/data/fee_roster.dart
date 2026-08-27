@@ -22,6 +22,17 @@ enum PaymentStatus {
   static PaymentStatus fromWire(String? value) => PaymentStatus.values
       .firstWhere((s) => s.wire == value, orElse: () => PaymentStatus.notPaid);
 
+  /// The pill fill for this status. The design specifies exact alphas per status rather than a
+  /// uniform tint, so these are named rather than derived.
+  Color softColor(AppPalette palette) => switch (this) {
+        PaymentStatus.notPaid => palette.notPaidSoft,
+        PaymentStatus.due => palette.dueSoft,
+        PaymentStatus.partial => palette.partialSoft,
+        PaymentStatus.paidManual => palette.paidManualSoft,
+        PaymentStatus.paidGateway => palette.gatewaySoft,
+        PaymentStatus.closed => palette.surfaceHigh,
+      };
+
   bool get isSettled =>
       this == PaymentStatus.paidManual ||
       this == PaymentStatus.paidGateway ||
@@ -50,6 +61,8 @@ class FeeRosterEntry {
     required this.balance,
     required this.status,
     this.lastPaymentId,
+    this.lastPaidOn,
+    this.lastPaymentMode,
   });
 
   final String membershipId;
@@ -63,6 +76,12 @@ class FeeRosterEntry {
   /// action rather than offering one the server would refuse.
   final String? lastPaymentId;
 
+  /// When the most recent payment was received. Null when nothing has been paid.
+  final DateTime? lastPaidOn;
+
+  /// How that payment arrived - CASH, UPI or GATEWAY.
+  final String? lastPaymentMode;
+
   bool get canUndo => lastPaymentId != null;
 
   factory FeeRosterEntry.fromJson(Map<String, dynamic> json) => FeeRosterEntry(
@@ -73,6 +92,8 @@ class FeeRosterEntry {
         balance: json['balance'] as num? ?? 0,
         status: PaymentStatus.fromWire(json['status'] as String?),
         lastPaymentId: json['lastPaymentId'] as String?,
+        lastPaidOn: DateTime.tryParse(json['lastPaidOn'] as String? ?? ''),
+        lastPaymentMode: json['lastPaymentMode'] as String?,
       );
 }
 
