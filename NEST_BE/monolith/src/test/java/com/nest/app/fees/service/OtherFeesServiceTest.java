@@ -281,6 +281,70 @@ class OtherFeesServiceTest {
         assertThat(entry.lastPaymentId()).isNull();
     }
 
+    // ---- the academy-wide ledger ----
+
+    @Test
+    void theLedgerIncludesReversalsSoTheTotalsCanBeReconciled() {
+        // The totals are net. Hiding the undone rows would leave an admin unable to explain why
+        // the figure is lower than the payments listed.
+        UUID student = UUID.randomUUID();
+        FeeTransaction paid = otherPayment(student, "750", FeeMode.CASH);
+        FeeTransaction reversal = otherPayment(student, "-750", FeeMode.CASH);
+        reversal.setReversalOfTransactionId(paid.getId());
+        wireLedger(List.of(paid, reversal), student);
+
+        var ledger = service.ledger(LocalDate.now().minusDays(30), LocalDate.now(), null, null);
+
+        assertThat(ledger.entries()).hasSize(2);
+        assertThat(ledger.entries()).anyMatch(e -> e.reversal() && e.amount().signum() < 0);
+        assertThat(ledger.otherTotal()).isEqualByComparingTo("0");
+        assertThat(ledger.total()).isEqualByComparingTo("0");
+    }
+
+    @Test
+    void filteringByCategoryMovesTheTotalsWithTheRows() {
+        UUID student = UUID.randomUUID();
+        wireLedger(List.of(otherPayment(student, "750", FeeMode.CASH)), student);
+
+        var regularOnly = service.ledger(
+                LocalDate.now().minusDays(30), LocalDate.now(), FeeCategory.REGULAR, null);
+
+        assertThat(regularOnly.entries()).isEmpty();
+        assertThat(regularOnly.otherTotal()).isEqualByComparingTo("0");
+        assertThat(regularOnly.total()).isEqualByComparingTo("0");
+    }
+
+    @Test
+    void searchingByNameNarrowsBothTheRowsAndTheTotals() {
+        UUID student = UUID.randomUUID();
+        wireLedger(List.of(otherPayment(student, "750", FeeMode.CASH)), student);
+
+        var noMatch = service.ledger(
+                LocalDate.now().minusDays(30), LocalDate.now(), null, "zzz");
+
+        assertThat(noMatch.entries()).isEmpty();
+        assertThat(noMatch.total()).isEqualByComparingTo("0");
+    }
+
+    private void wireLedger(List<FeeTransaction> transactions, UUID studentId) {
+        when(feeTransactionRepository
+                .findByAcademyIdAndOccurredOnBetweenOrderByOccurredOnDesc(
+                        org.mockito.ArgumentMatchers.eq(academyId), any(), any()))
+                .thenReturn(transactions);
+        UUID userId = UUID.randomUUID();
+        lenient().when(membershipRepository.findAllById(anyIterable())).thenReturn(List.of(
+                AcademyMembership.builder().id(studentId).userId(userId).academyId(academyId)
+                        .roleType(Role.STUDENT).status(MembershipStatus.ACTIVE).build()));
+        User u = new User();
+        u.setId(userId);
+        u.setFullName("Savish Holla");
+        lenient().when(userRepository.findAllById(anyIterable())).thenReturn(List.of(u));
+        lenient().when(courseRepository.findAllById(anyIterable())).thenReturn(List.of());
+        lenient().when(feeTypeRepository.findAllById(anyIterable()))
+                .thenReturn(List.of(feeType("750", null)));
+        lenient().when(studentFeeRepository.findAllById(anyIterable())).thenReturn(List.of());
+    }
+
     private FeeTransaction otherPayment(UUID membershipId, String amount, FeeMode mode) {
         return FeeTransaction.builder()
                 .id(UUID.randomUUID()).academyId(academyId).category(FeeCategory.OTHER)

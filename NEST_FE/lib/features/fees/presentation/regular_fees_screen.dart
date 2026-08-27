@@ -10,6 +10,7 @@ import 'package:nest_fe/features/curriculum/data/curriculum_api.dart';
 import 'package:nest_fe/features/enrolment/data/batch.dart';
 import 'package:nest_fe/features/enrolment/presentation/batches_screen.dart';
 import 'package:nest_fe/features/fees/data/fee_roster.dart';
+import 'package:nest_fe/features/fees/presentation/all_transactions_screen.dart';
 import 'package:nest_fe/features/fees/presentation/fee_format.dart';
 import 'package:nest_fe/features/fees/presentation/other_fees_screen.dart';
 import 'package:nest_fe/features/fees/presentation/student_profile_screen.dart';
@@ -174,50 +175,52 @@ class _RegularFeesScreenState extends ConsumerState<RegularFeesScreen> {
           Padding(
             padding: const EdgeInsets.fromLTRB(
                 AppSpacing.xl, AppSpacing.sm, AppSpacing.xl, 0),
-            child: Row(
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                context_,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontSize: AppType.smd, color: palette.textMuted),
+              ),
+            ),
+          ),
+          // Scrolls horizontally rather than wrapping: three links plus a context line do not fit
+          // across a phone, and a Wrap would push the selectors down a row on narrow screens.
+          SizedBox(
+            height: 26,
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl),
               children: [
-                Expanded(
-                  child: Text(
-                    context_,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(fontSize: AppType.smd, color: palette.textMuted),
-                  ),
-                ),
-                // The report download, fee slips and per-student history still live on the old
-                // screen - they are a later phase of this port. Keeping a door to them means the
-                // redesign doesn't take working features away in the meantime.
-                Pressable(
+                _NavLink(
+                  icon: Icons.auto_awesome_outlined,
+                  label: 'Other Fees',
+                  color: palette.gateway,
                   onTap: () => Navigator.of(context).push(MaterialPageRoute(
                     builder: (_) => const OtherFeesScreen(),
                   )),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.auto_awesome_outlined, size: 13, color: palette.gateway),
-                      const SizedBox(width: AppSpacing.xxs),
-                      Text('Other Fees',
-                          style: TextStyle(
-                              fontSize: AppType.xs,
-                              fontWeight: AppType.bold,
-                              color: palette.gateway)),
-                    ],
-                  ),
                 ),
-                const SizedBox(width: AppSpacing.md),
-                Pressable(
+                const SizedBox(width: AppSpacing.lg),
+                _NavLink(
+                  icon: Icons.receipt_long_outlined,
+                  label: 'Transactions',
+                  color: palette.revenue,
+                  onTap: () => Navigator.of(context).push(MaterialPageRoute(
+                    builder: (_) => const AllTransactionsScreen(),
+                  )),
+                ),
+                const SizedBox(width: AppSpacing.lg),
+                // The report download and fee slips still live on the old screen - a later phase of
+                // this port. Keeping a door to them means the redesign doesn't take working
+                // features away in the meantime.
+                _NavLink(
+                  icon: Icons.description_outlined,
+                  label: 'Reports',
+                  color: palette.textMuted,
                   onTap: () => Navigator.of(context).push(MaterialPageRoute(
                     builder: (_) => const _LegacyFeesPage(),
                   )),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.description_outlined, size: 13, color: palette.textMuted),
-                      const SizedBox(width: AppSpacing.xxs),
-                      Text('Reports',
-                          style: TextStyle(fontSize: AppType.xs, color: palette.textMuted)),
-                    ],
-                  ),
                 ),
               ],
             ),
@@ -437,6 +440,38 @@ class _StepButton extends StatelessWidget {
         height: 36,
         alignment: Alignment.center,
         child: Icon(icon, size: 18, color: onTap == null ? palette.textFaint : palette.text),
+      ),
+    );
+  }
+}
+
+/// A small labelled link in the screen's action row.
+class _NavLink extends StatelessWidget {
+  const _NavLink({
+    required this.icon,
+    required this.label,
+    required this.color,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final Color color;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Pressable(
+      onTap: onTap,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 13, color: color),
+          const SizedBox(width: AppSpacing.xxs),
+          Text(label,
+              style: TextStyle(
+                  fontSize: AppType.xs, fontWeight: AppType.bold, color: color)),
+        ],
       ),
     );
   }

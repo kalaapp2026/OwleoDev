@@ -5,6 +5,7 @@ import 'package:nest_fe/features/fees/data/fee_type.dart';
 import 'package:nest_fe/features/fees/data/fee_transaction.dart';
 import 'package:nest_fe/features/fees/data/student_fee_profile.dart';
 import 'package:nest_fe/features/fees/data/student_statement.dart';
+import 'package:nest_fe/features/fees/data/transaction_ledger.dart';
 
 class FeesApi {
   FeesApi(this._client);
@@ -121,6 +122,25 @@ class FeesApi {
         options: Options(responseType: ResponseType.bytes),
       ),
       (data) => data as List<int>,
+    );
+  }
+
+  /// Every payment the academy took between two dates. Totals come back matching the filters.
+  Future<TransactionLedger> transactions({
+    required DateTime from,
+    required DateTime to,
+    FeeCategory? category,
+    String? query,
+  }) {
+    String day(DateTime d) => d.toIso8601String().split('T').first;
+    return _client.call(
+      (dio) => dio.get('/fees/transactions', queryParameters: {
+        'from': day(from),
+        'to': day(to),
+        'category': ?category?.wire,
+        'query': ?(query != null && query.trim().isNotEmpty ? query.trim() : null),
+      }),
+      (data) => TransactionLedger.fromJson(data as Map<String, dynamic>),
     );
   }
 

@@ -6,6 +6,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -73,6 +74,11 @@ public interface FeeTransactionRepository extends JpaRepository<FeeTransaction, 
     List<FeeTransaction> findByFeeTypeId(UUID feeTypeId);
 
     List<FeeTransaction> findByStudentFeeId(UUID studentFeeId);
+
+    /** The academy-wide ledger for a date range, newest first. Indexed by
+     * idx_fee_tx_academy_occurred, which exists for exactly this query. */
+    List<FeeTransaction> findByAcademyIdAndOccurredOnBetweenOrderByOccurredOnDesc(
+            UUID academyId, LocalDate from, LocalDate to);
 
     boolean existsByReversalOfTransactionId(UUID reversalOfTransactionId);
 

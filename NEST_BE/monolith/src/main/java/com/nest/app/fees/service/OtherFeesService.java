@@ -313,6 +313,93 @@ public class OtherFeesService {
     }
 
     /**
+     * Every payment the academy took in a date range, across both categories.
+     *
+     * <p>Lives here rather than in {@link FeesService} because it spans both halves and neither
+     * owns it. Reversals are included: the totals are net, so omitting them would make the figures
+     * impossible to reconcile against the rows.</p>
+     */
+    @Transactional(readOnly = true)
+    public com.nest.app.fees.dto.TransactionLedgerResponse ledger(
+            LocalDate from, LocalDate to, FeeCategory category, String query) {
+        UUID academyId = TenantContext.currentAcademyId();
+        List<FeeTransaction> transactions = feeTransactionRepository
+                .findByAcademyIdAndOccurredOnBetweenOrderByOccurredOnDesc(academyId, from, to);
+        if (transactions.isEmpty()) {
+            return new com.nest.app.fees.dto.TransactionLedgerResponse(
+                    BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, List.of());
+        }
+
+        Map<UUID, String> studentNames = resolveStudentNames(transactions.stream()
+                .map(FeeTransaction::getMembershipId).collect(Collectors.toSet()));
+
+        Map<UUID, String> courseNames = courseRepository.findAllById(transactions.stream()
+                        .map(FeeTransaction::getCourseId).filter(Objects::nonNull)
+                        .collect(Collectors.toSet())).stream()
+                .collect(Collectors.toMap(Course::getId, Course::getName));
+
+        Map<UUID, String> feeTypeNames = feeTypeRepository.findAllById(transactions.stream()
+                        .map(FeeTransaction::getFeeTypeId).filter(Objects::nonNull)
+                        .collect(Collectors.toSet())).stream()
+                .collect(Collectors.toMap(FeeType::getId, FeeType::getName));
+
+        Map<UUID, String> studentFeeNames = studentFeeRepository.findAllById(transactions.stream()
+                        .map(FeeTransaction::getStudentFeeId).filter(Objects::nonNull)
+                        .collect(Collectors.toSet())).stream()
+                .collect(Collectors.toMap(StudentFee::getId, StudentFee::getName));
+
+        String needle = query == null ? null : query.trim().toLowerCase();
+        List<com.nest.app.fees.dto.TransactionLedgerResponse.LedgerEntry> entries = new ArrayList<>();
+        BigDecimal regularTotal = BigDecimal.ZERO;
+        BigDecimal otherTotal = BigDecimal.ZERO;
+
+        for (FeeTransaction tx : transactions) {
+            if (category != null && tx.getCategory() != category) {
+                continue;
+            }
+            String name = studentNames.getOrDefault(tx.getMembershipId(), "Unknown");
+            if (needle != null && !needle.isEmpty() && !name.toLowerCase().contains(needle)) {
+                continue;
+            }
+
+            String context = switch (tx.getCategory()) {
+                case REGULAR -> courseNames.getOrDefault(tx.getCourseId(), "Unknown course")
+                        + (tx.getPeriod() == null ? "" : " · " + tx.getPeriod());
+                case OTHER -> tx.getFeeTypeId() != null
+                        ? feeTypeNames.getOrDefault(tx.getFeeTypeId(), "Fee")
+                        : studentFeeNames.getOrDefault(tx.getStudentFeeId(), "Individual fee");
+            };
+
+            entries.add(new com.nest.app.fees.dto.TransactionLedgerResponse.LedgerEntry(
+                    tx.getId(), tx.getMembershipId(), name, tx.getCategory(), context,
+                    tx.getAmountPaid(), tx.getMode(), tx.getOccurredOn(), tx.isReversal()));
+
+            // Totals follow the same filters as the rows, so the tiles always explain the list.
+            if (tx.getCategory() == FeeCategory.REGULAR) {
+                regularTotal = regularTotal.add(tx.getAmountPaid());
+            } else {
+                otherTotal = otherTotal.add(tx.getAmountPaid());
+            }
+        }
+
+        return new com.nest.app.fees.dto.TransactionLedgerResponse(
+                regularTotal, otherTotal, regularTotal.add(otherTotal), entries);
+    }
+
+    private Map<UUID, String> resolveStudentNames(Set<UUID> membershipIds) {
+        List<AcademyMembership> memberships = membershipRepository.findAllById(membershipIds);
+        Map<UUID, User> usersById = userRepository.findAllById(
+                memberships.stream().map(AcademyMembership::getUserId).collect(Collectors.toSet())
+        ).stream().collect(Collectors.toMap(User::getId, u -> u));
+        return memberships.stream().collect(Collectors.toMap(
+                AcademyMembership::getId,
+                m -> {
+                    User user = usersById.get(m.getUserId());
+                    return user == null ? "Unknown" : user.getFullName();
+                }));
+    }
+
+    /**
      * Status for an Other fee. Simpler than the regular one: there is no billing period and no
      * closing, so "due" is driven by the fee type's own last date to pay.
      */

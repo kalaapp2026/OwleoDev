@@ -5,6 +5,11 @@ import com.nest.app.fees.dto.CreateStudentFeeRequest;
 import com.nest.app.fees.dto.FeeRosterResponse;
 import com.nest.app.fees.dto.FeeTypeResponse;
 import com.nest.app.fees.dto.RecordOtherFeeRequest;
+import com.nest.app.fees.dto.TransactionLedgerResponse;
+import com.nest.app.fees.entity.FeeCategory;
+import org.springframework.format.annotation.DateTimeFormat;
+
+import java.time.LocalDate;
 import com.nest.app.fees.service.OtherFeesService;
 import com.nest.common.security.FeatureKey;
 import com.nest.common.security.RequiresFeature;
@@ -34,6 +39,20 @@ public class OtherFeesController {
 
     public OtherFeesController(OtherFeesService otherFeesService) {
         this.otherFeesService = otherFeesService;
+    }
+
+    /**
+     * Every payment the academy took in a date range, across both categories. The filters are the
+     * screen's own, and the totals follow them - so the tiles always explain the list beneath.
+     */
+    @GetMapping("/fees/transactions")
+    @RequiresFeature(FeatureKey.FEES_ENTRY)
+    public TransactionLedgerResponse ledger(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
+            @RequestParam(required = false) FeeCategory category,
+            @RequestParam(required = false) String query) {
+        return otherFeesService.ledger(from, to, category, query);
     }
 
     @GetMapping("/fees/other/types")
