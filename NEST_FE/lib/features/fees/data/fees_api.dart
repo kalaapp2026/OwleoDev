@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:nest_fe/core/network/dio_client.dart';
 import 'package:nest_fe/features/fees/data/fee_roster.dart';
+import 'package:nest_fe/features/fees/data/fee_type.dart';
 import 'package:nest_fe/features/fees/data/fee_transaction.dart';
 import 'package:nest_fe/features/fees/data/student_fee_profile.dart';
 import 'package:nest_fe/features/fees/data/student_statement.dart';
@@ -120,6 +121,85 @@ class FeesApi {
         options: Options(responseType: ResponseType.bytes),
       ),
       (data) => data as List<int>,
+    );
+  }
+
+  // ---- Other Fees ----
+
+  Future<List<FeeType>> feeTypes({bool includeRetired = false}) {
+    return _client.call(
+      (dio) => dio.get('/fees/other/types',
+          queryParameters: {'includeRetired': includeRetired}),
+      (data) => (data as List).map((e) => FeeType.fromJson(e as Map<String, dynamic>)).toList(),
+    );
+  }
+
+  Future<FeeType> createFeeType({
+    required String name,
+    required num amount,
+    required List<String> batchIds,
+    DateTime? dueDate,
+    String? defaultMode,
+  }) {
+    return _client.call(
+      (dio) => dio.post('/fees/other/types', data: {
+        'name': name,
+        'amount': amount,
+        'batchIds': batchIds,
+        'dueDate': ?dueDate?.toIso8601String().split('T').first,
+        'defaultMode': ?defaultMode,
+      }),
+      (data) => FeeType.fromJson(data as Map<String, dynamic>),
+    );
+  }
+
+  Future<FeeRoster> otherRoster({required String feeTypeId, required String batchId}) {
+    return _client.call(
+      (dio) => dio.get('/fees/other/roster',
+          queryParameters: {'feeTypeId': feeTypeId, 'batchId': batchId}),
+      (data) => FeeRoster.fromJson(data as Map<String, dynamic>),
+    );
+  }
+
+  Future<void> recordOtherPayment({
+    required String membershipId,
+    String? feeTypeId,
+    String? studentFeeId,
+    required num amountPaid,
+    required String mode,
+    String? gatewayRef,
+  }) {
+    return _client.call(
+      (dio) => dio.post('/fees/other/entries', data: {
+        'membershipId': membershipId,
+        'feeTypeId': ?feeTypeId,
+        'studentFeeId': ?studentFeeId,
+        'amountPaid': amountPaid,
+        'mode': mode,
+        'gatewayRef': ?gatewayRef,
+      }),
+      (_) {},
+    );
+  }
+
+  Future<void> createStudentFee({
+    required String membershipId,
+    required String name,
+    required num amount,
+    DateTime? dueDate,
+    String? defaultMode,
+    String? note,
+  }) {
+    return _client.call(
+      (dio) => dio.post('/fees/other/student-fees', data: {
+        'membershipId': membershipId,
+        'name': name,
+        'amount': amount,
+        'dueDate': ?dueDate?.toIso8601String().split('T').first,
+        'defaultMode': ?defaultMode,
+        'note': ?note,
+      }),
+      (_) {},
     );
   }
 

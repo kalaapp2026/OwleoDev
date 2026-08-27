@@ -69,6 +69,11 @@ public interface FeeTransactionRepository extends JpaRepository<FeeTransaction, 
             """)
     List<UUID> findReversedTransactionIds(@Param("transactionIds") List<UUID> transactionIds);
 
+    /** Every payment against one Other fee type, across all its batches. */
+    List<FeeTransaction> findByFeeTypeId(UUID feeTypeId);
+
+    List<FeeTransaction> findByStudentFeeId(UUID studentFeeId);
+
     boolean existsByReversalOfTransactionId(UUID reversalOfTransactionId);
 
     /** Tenant-scoped lookup. Every read path that serves an academy must go through one of these

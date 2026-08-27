@@ -11,6 +11,7 @@ import 'package:nest_fe/features/enrolment/data/batch.dart';
 import 'package:nest_fe/features/enrolment/presentation/batches_screen.dart';
 import 'package:nest_fe/features/fees/data/fee_roster.dart';
 import 'package:nest_fe/features/fees/presentation/fee_format.dart';
+import 'package:nest_fe/features/fees/presentation/other_fees_screen.dart';
 import 'package:nest_fe/features/fees/presentation/student_profile_screen.dart';
 import 'package:nest_fe/features/fees/presentation/fees_screen.dart'
     show FeesScreen, feesApiProvider;
@@ -188,6 +189,24 @@ class _RegularFeesScreenState extends ConsumerState<RegularFeesScreen> {
                 // redesign doesn't take working features away in the meantime.
                 Pressable(
                   onTap: () => Navigator.of(context).push(MaterialPageRoute(
+                    builder: (_) => const OtherFeesScreen(),
+                  )),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.auto_awesome_outlined, size: 13, color: palette.gateway),
+                      const SizedBox(width: AppSpacing.xxs),
+                      Text('Other Fees',
+                          style: TextStyle(
+                              fontSize: AppType.xs,
+                              fontWeight: AppType.bold,
+                              color: palette.gateway)),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: AppSpacing.md),
+                Pressable(
+                  onTap: () => Navigator.of(context).push(MaterialPageRoute(
                     builder: (_) => const _LegacyFeesPage(),
                   )),
                   child: Row(
@@ -195,7 +214,7 @@ class _RegularFeesScreenState extends ConsumerState<RegularFeesScreen> {
                     children: [
                       Icon(Icons.description_outlined, size: 13, color: palette.textMuted),
                       const SizedBox(width: AppSpacing.xxs),
-                      Text('Reports & history',
+                      Text('Reports',
                           style: TextStyle(fontSize: AppType.xs, color: palette.textMuted)),
                     ],
                   ),

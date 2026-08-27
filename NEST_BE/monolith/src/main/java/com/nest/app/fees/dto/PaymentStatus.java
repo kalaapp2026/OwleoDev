@@ -25,5 +25,15 @@ public enum PaymentStatus {
     PAID_GATEWAY,
 
     /** The period was explicitly closed - any shortfall is written off, not carried forward. */
-    CLOSED
+    CLOSED;
+
+    /**
+     * Nothing further is owed on this row.
+     *
+     * <p>CLOSED counts: the shortfall was deliberately written off, so it is settled business even
+     * though less than the full amount arrived.</p>
+     */
+    public boolean isSettled() {
+        return this == PAID_MANUAL || this == PAID_GATEWAY || this == CLOSED;
+    }
 }

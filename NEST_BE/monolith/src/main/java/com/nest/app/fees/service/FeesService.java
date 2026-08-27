@@ -203,8 +203,7 @@ public class FeesService {
 
             boolean closed = slip != null && slip.getStatus() == FeeSlipStatus.CLOSED;
             PaymentStatus status = deriveStatus(closed, due, paid, balance, lastPayment, slip, today);
-            if (status == PaymentStatus.PAID_MANUAL || status == PaymentStatus.PAID_GATEWAY
-                    || status == PaymentStatus.CLOSED) {
+            if (status.isSettled()) {
                 paidCount++;
             }
 
