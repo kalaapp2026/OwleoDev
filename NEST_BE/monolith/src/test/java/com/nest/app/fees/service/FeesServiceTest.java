@@ -61,6 +61,8 @@ class FeesServiceTest {
     private com.nest.app.identity.service.CourseFeatureGuard courseFeatureGuard;
     @Mock
     private com.nest.app.enrolment.repository.BatchMemberRepository batchMemberRepository;
+    @Mock
+    private com.nest.app.enrolment.repository.BatchRepository batchRepository;
 
     private FeesService feesService;
 
@@ -71,7 +73,7 @@ class FeesServiceTest {
     @BeforeEach
     void setUp() {
         feesService = new FeesService(feeTransactionRepository, courseMapRepository, feeSlipRepository,
-                courseRepository, membershipRepository, userRepository, courseFeatureGuard, batchMemberRepository);
+                courseRepository, membershipRepository, userRepository, courseFeatureGuard, batchMemberRepository, batchRepository);
         // An active membership, not just a user: the ledger stamps academy_id on every row, so
         // recording a payment without a resolvable academy is now a ForbiddenException rather
         // than a row that belongs to no tenant.

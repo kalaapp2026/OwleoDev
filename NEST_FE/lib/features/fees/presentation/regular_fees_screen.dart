@@ -11,6 +11,7 @@ import 'package:nest_fe/features/enrolment/data/batch.dart';
 import 'package:nest_fe/features/enrolment/presentation/batches_screen.dart';
 import 'package:nest_fe/features/fees/data/fee_roster.dart';
 import 'package:nest_fe/features/fees/presentation/fee_format.dart';
+import 'package:nest_fe/features/fees/presentation/student_profile_screen.dart';
 import 'package:nest_fe/features/fees/presentation/fees_screen.dart'
     show FeesScreen, feesApiProvider;
 import 'package:nest_fe/features/fees/presentation/widgets/student_list_body.dart';
@@ -128,6 +129,18 @@ class _RegularFeesScreenState extends ConsumerState<RegularFeesScreen> {
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+  }
+
+  /// The profile can change what is owed - a payment, or an edited agreed fee - so the roster is
+  /// refreshed on return rather than left showing a figure the student's own screen contradicts.
+  Future<void> _openProfile(FeeRosterEntry entry) async {
+    await Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => StudentProfileScreen(
+        membershipId: entry.membershipId,
+        period: _period,
+      ),
+    ));
+    _refresh();
   }
 
   void _refresh() {
@@ -265,8 +278,7 @@ class _RegularFeesScreenState extends ConsumerState<RegularFeesScreen> {
                       emptyText: 'No students in this batch yet.',
                       onMarkPaid: _markPaid,
                       onUndo: _undo,
-                      onOpenProfile: (entry) => showAppToast(
-                          context, 'Student profile is coming in the next phase'),
+                      onOpenProfile: _openProfile,
                       onScrolled: (scrolled) =>
                           setState(() => _selectorsVisible = !scrolled),
                     ),

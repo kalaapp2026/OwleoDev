@@ -1,9 +1,14 @@
 package com.nest.app.fees.service;
 
 import com.nest.app.curriculum.entity.Course;
+import com.nest.app.enrolment.entity.Batch;
+import com.nest.app.enrolment.entity.BatchStatus;
+import com.nest.app.enrolment.repository.BatchRepository;
 import com.nest.app.enrolment.entity.BatchMember;
 import com.nest.app.enrolment.repository.BatchMemberRepository;
 import com.nest.app.curriculum.repository.CourseRepository;
+import com.nest.app.fees.dto.StudentFeeProfileResponse;
+import com.nest.app.fees.dto.UpdateAgreedFeeRequest;
 import com.nest.app.fees.dto.FeeRosterResponse;
 import com.nest.app.fees.dto.PaymentStatus;
 import com.nest.app.fees.dto.FeeBalanceResponse;
@@ -65,11 +70,13 @@ public class FeesService {
     private final UserRepository userRepository;
     private final CourseFeatureGuard courseFeatureGuard;
     private final BatchMemberRepository batchMemberRepository;
+    private final BatchRepository batchRepository;
 
     public FeesService(FeeTransactionRepository feeTransactionRepository, CourseMapRepository courseMapRepository,
                         FeeSlipRepository feeSlipRepository, CourseRepository courseRepository,
                         AcademyMembershipRepository membershipRepository, UserRepository userRepository,
-                        CourseFeatureGuard courseFeatureGuard, BatchMemberRepository batchMemberRepository) {
+                        CourseFeatureGuard courseFeatureGuard, BatchMemberRepository batchMemberRepository,
+                        BatchRepository batchRepository) {
         this.feeTransactionRepository = feeTransactionRepository;
         this.courseMapRepository = courseMapRepository;
         this.feeSlipRepository = feeSlipRepository;
@@ -78,6 +85,7 @@ public class FeesService {
         this.userRepository = userRepository;
         this.courseFeatureGuard = courseFeatureGuard;
         this.batchMemberRepository = batchMemberRepository;
+        this.batchRepository = batchRepository;
     }
 
     /** closePeriod=true ("Close") writes off whatever's left unpaid in this period for good -
@@ -217,6 +225,145 @@ public class FeesService {
 
         return new FeeRosterResponse(courseId, batchId, period, entries.size(), paidCount,
                 expected, collected, entries);
+    }
+
+    /**
+     * One student's fee position for a period, across every course they are enrolled in.
+     *
+     * <p>Built across all their courses rather than the one the admin arrived from: a student can
+     * be enrolled in several, and recording a payment against the wrong one is silent and
+     * expensive to unpick. The screen makes the admin pick which course they are collecting for,
+     * which it can only do if the server tells it what the options are.</p>
+     */
+    @Transactional(readOnly = true)
+    public StudentFeeProfileResponse feeProfile(UUID membershipId, String period) {
+        AcademyMembership membership = membershipRepository.findById(membershipId)
+                .orElseThrow(() -> new ResourceNotFoundException("Student not found: " + membershipId));
+        // A membership id is client-supplied; without this an admin could read a student who
+        // belongs to another academy.
+        if (!membership.getAcademyId().equals(TenantContext.currentAcademyId())) {
+            throw new ResourceNotFoundException("Student not found: " + membershipId);
+        }
+
+        List<CourseMap> enrolments = courseMapRepository.findByMembershipId(membershipId).stream()
+                .filter(CourseMap::isActive)
+                .filter(cm -> cm.getAgreedFee() != null)
+                .toList();
+
+        Map<UUID, Course> coursesById = courseRepository
+                .findAllById(enrolments.stream().map(CourseMap::getCourseId).collect(Collectors.toSet()))
+                .stream().collect(Collectors.toMap(Course::getId, c -> c));
+
+        // Only courses this trainer may see. An admin passes the guard for all of them.
+        List<CourseMap> visible = enrolments.stream()
+                .filter(cm -> courseFeatureGuard.hasCourseFeature(cm.getCourseId(), FeatureKey.FEES_ENTRY))
+                .toList();
+
+        // Which batch they sit in, per course - context for the row, never part of the fee key.
+        Set<UUID> batchIds = batchMemberRepository.findByMembershipId(membershipId).stream()
+                .map(BatchMember::getBatchId).collect(Collectors.toSet());
+        Map<UUID, String> batchNameByCourse = batchRepository.findAllById(batchIds).stream()
+                .filter(b -> b.getStatus() == BatchStatus.ACTIVE)
+                .collect(Collectors.toMap(Batch::getCourseId, Batch::getName, (a, b) -> a));
+
+        Map<UUID, FeeSlip> slipByCourse = feeSlipRepository
+                .findByMembershipIdOrderByGeneratedAtDesc(membershipId).stream()
+                .filter(s -> period.equals(s.getPeriod()))
+                .collect(Collectors.toMap(FeeSlip::getCourseId, s -> s, (a, b) -> a));
+
+        List<FeeTransaction> transactions = feeTransactionRepository
+                .findByMembershipIdAndPeriod(membershipId, period);
+        Map<UUID, List<FeeTransaction>> txByCourse = transactions.stream()
+                .filter(t -> t.getCourseId() != null)
+                .collect(Collectors.groupingBy(FeeTransaction::getCourseId));
+        Set<UUID> reversedIds = transactions.stream()
+                .map(FeeTransaction::getReversalOfTransactionId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+
+        LocalDate today = LocalDate.now();
+        List<StudentFeeProfileResponse.CourseFeeRow> rows = new ArrayList<>();
+        BigDecimal totalDue = BigDecimal.ZERO;
+        BigDecimal totalPaid = BigDecimal.ZERO;
+
+        for (CourseMap enrolment : visible) {
+            UUID courseId = enrolment.getCourseId();
+            List<FeeTransaction> courseRows = txByCourse.getOrDefault(courseId, List.of());
+            FeeSlip slip = slipByCourse.get(courseId);
+
+            BigDecimal due = slip != null ? slip.getAmountDue() : enrolment.getAgreedFee();
+            BigDecimal paid = courseRows.stream().map(FeeTransaction::getAmountPaid)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+            BigDecimal balance = due.subtract(paid);
+
+            FeeTransaction lastPayment = courseRows.stream()
+                    .filter(t -> !t.isReversal())
+                    .filter(t -> !reversedIds.contains(t.getId()))
+                    .max(Comparator.comparing(FeeTransaction::getCreatedAt,
+                            Comparator.nullsFirst(Comparator.naturalOrder())))
+                    .orElse(null);
+
+            boolean closed = slip != null && slip.getStatus() == FeeSlipStatus.CLOSED;
+            Course course = coursesById.get(courseId);
+
+            rows.add(new StudentFeeProfileResponse.CourseFeeRow(
+                    courseId,
+                    course == null ? "Unknown course" : course.getName(),
+                    batchNameByCourse.get(courseId),
+                    due, paid, balance,
+                    deriveStatus(closed, due, paid, balance, lastPayment, slip, today),
+                    lastPayment == null ? null : lastPayment.getId(),
+                    lastPayment == null ? null : lastPayment.getOccurredOn(),
+                    lastPayment == null ? null : lastPayment.getMode(),
+                    closed));
+
+            totalDue = totalDue.add(due);
+            totalPaid = totalPaid.add(paid);
+        }
+
+        rows.sort(Comparator.comparing(StudentFeeProfileResponse.CourseFeeRow::courseName,
+                String.CASE_INSENSITIVE_ORDER));
+
+        User user = userRepository.findById(membership.getUserId()).orElse(null);
+        return new StudentFeeProfileResponse(
+                membershipId,
+                user == null ? "Unknown" : user.getFullName(),
+                period,
+                totalDue, totalPaid, totalDue.subtract(totalPaid),
+                rows);
+    }
+
+    /**
+     * Change what one student is charged for one course.
+     *
+     * <p>Only the agreed fee moves. Nothing recalculates and no status is written, because status
+     * is derived - the next read simply compares the new fee against the same ledger. A student
+     * who had paid 1000 against a 1000 fee reads as PARTIAL the moment the fee rises to 1200,
+     * with no migration of anything.</p>
+     */
+    @Transactional
+    @Auditable(action = "AGREED_FEE_UPDATED", entityType = "course_map")
+    public FeeBalanceResponse updateAgreedFee(UpdateAgreedFeeRequest request) {
+        courseFeatureGuard.assertCourseFeature(request.courseId(), FeatureKey.FEES_ENTRY);
+
+        AcademyMembership membership = membershipRepository.findById(request.membershipId())
+                .orElseThrow(() -> new ResourceNotFoundException("Student not found: " + request.membershipId()));
+        if (!membership.getAcademyId().equals(TenantContext.currentAcademyId())) {
+            throw new ResourceNotFoundException("Student not found: " + request.membershipId());
+        }
+
+        CourseMap enrolment = courseMapRepository
+                .findByMembershipIdAndCourseId(request.membershipId(), request.courseId())
+                .orElseThrow(() -> new ResourceNotFoundException("This student is not enrolled in that course"));
+
+        enrolment.setAgreedFee(request.agreedFee());
+        courseMapRepository.save(enrolment);
+
+        return getBalance(request.membershipId(), request.courseId(), currentPeriod());
+    }
+
+    private String currentPeriod() {
+        return YearMonth.now().toString();
     }
 
     /**

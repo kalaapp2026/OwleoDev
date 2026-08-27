@@ -3,6 +3,8 @@ package com.nest.app.fees.controller;
 import com.nest.app.fees.dto.FeeBalanceResponse;
 import com.nest.app.fees.dto.FeeRosterResponse;
 import com.nest.app.fees.dto.ReverseFeeEntryRequest;
+import com.nest.app.fees.dto.StudentFeeProfileResponse;
+import com.nest.app.fees.dto.UpdateAgreedFeeRequest;
 import com.nest.app.fees.dto.FeeSlipResponse;
 import com.nest.app.fees.dto.FeeTransactionResponse;
 import com.nest.app.fees.dto.RecordFeeEntryRequest;
@@ -16,6 +18,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -64,6 +67,24 @@ public class FeesController {
     public FeeTransactionResponse reverseEntry(@PathVariable UUID transactionId,
                                                @RequestBody(required = false) ReverseFeeEntryRequest request) {
         return feesService.reverseEntry(transactionId, request == null ? null : request.reason());
+    }
+
+    /**
+     * One student's fee position for a period across every course they're enrolled in. The profile
+     * screen makes the admin pick which course a payment is for, so it needs the whole set.
+     */
+    @GetMapping("/students/{membershipId}/fee-profile")
+    @RequiresFeature(FeatureKey.FEES_ENTRY)
+    public StudentFeeProfileResponse feeProfile(@PathVariable UUID membershipId,
+                                                @RequestParam String period) {
+        return feesService.feeProfile(membershipId, period);
+    }
+
+    /** Change what one student is charged for one course - sibling discount, scholarship, revision. */
+    @PatchMapping("/fees/agreed-fee")
+    @RequiresFeature(FeatureKey.FEES_ENTRY)
+    public FeeBalanceResponse updateAgreedFee(@Valid @RequestBody UpdateAgreedFeeRequest request) {
+        return feesService.updateAgreedFee(request);
     }
 
     @GetMapping("/fees/balance")

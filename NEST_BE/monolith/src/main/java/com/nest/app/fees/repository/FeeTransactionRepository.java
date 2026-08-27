@@ -36,6 +36,10 @@ public interface FeeTransactionRepository extends JpaRepository<FeeTransaction, 
             """)
     List<Object[]> sumCollectedByAcademyGrouped();
 
+    /** Every course's transactions for one student in one period, so the profile screen builds its
+     * whole breakdown from a single query rather than one per enrolment. */
+    List<FeeTransaction> findByMembershipIdAndPeriod(UUID membershipId, String period);
+
     // ---- ledger ----
 
     /**

@@ -30,20 +30,30 @@ public class CourseFeatureGuard {
     }
 
     public void assertCourseFeature(UUID courseId, String featureKey) {
+        if (!hasCourseFeature(courseId, featureKey)) {
+            throw new ForbiddenException(
+                    "You don't have the '" + featureKey + "' permission for this course");
+        }
+    }
+
+    /**
+     * The same check as {@link #assertCourseFeature}, as a question rather than an assertion.
+     *
+     * <p>For deciding what to include in a response - a student's fee profile lists only the
+     * courses the caller may see. Filtering a list by catching the assert's exception per element
+     * would be both slower and a lie about what exceptions are for.</p>
+     */
+    public boolean hasCourseFeature(UUID courseId, String featureKey) {
         NestPrincipal principal = TenantContext.require();
         if (principal.isSuperAdmin()) {
-            return;
+            return true;
         }
         MembershipClaim membership = principal.activeMembership()
                 .orElseThrow(() -> new ForbiddenException("Request has no active academy membership"));
         if (membership.roleType() == Role.ACADEMY_ADMIN) {
-            return;
+            return true;
         }
-        boolean granted = courseFeatureGrantRepository
+        return courseFeatureGrantRepository
                 .existsByMembershipIdAndCourseIdAndFeatureKey(membership.membershipId(), courseId, featureKey);
-        if (!granted) {
-            throw new ForbiddenException(
-                    "You don't have the '" + featureKey + "' permission for this course");
-        }
     }
 }
