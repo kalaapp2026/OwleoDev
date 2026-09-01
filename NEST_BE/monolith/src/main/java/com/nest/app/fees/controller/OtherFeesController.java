@@ -5,6 +5,7 @@ import com.nest.app.fees.dto.CreateStudentFeeRequest;
 import com.nest.app.fees.dto.FeeRosterResponse;
 import com.nest.app.fees.dto.FeeTypeResponse;
 import com.nest.app.fees.dto.RecordOtherFeeRequest;
+import com.nest.app.fees.dto.StudentOtherFeesResponse;
 import com.nest.app.fees.dto.TransactionLedgerResponse;
 import com.nest.app.fees.entity.FeeCategory;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -18,6 +19,7 @@ import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -73,6 +75,13 @@ public class OtherFeesController {
     @RequiresFeature(FeatureKey.FEES_ENTRY)
     public FeeRosterResponse roster(@RequestParam UUID feeTypeId, @RequestParam UUID batchId) {
         return otherFeesService.roster(feeTypeId, batchId);
+    }
+
+    /** Every Other fee that applies to one student - shared types plus their own one-offs. */
+    @GetMapping("/students/{membershipId}/other-fees")
+    @RequiresFeature(FeatureKey.FEES_ENTRY)
+    public StudentOtherFeesResponse studentOtherFees(@PathVariable UUID membershipId) {
+        return otherFeesService.studentOtherFees(membershipId);
     }
 
     @PostMapping("/fees/other/entries")

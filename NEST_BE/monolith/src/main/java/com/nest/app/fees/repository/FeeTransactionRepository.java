@@ -1,5 +1,6 @@
 package com.nest.app.fees.repository;
 
+import com.nest.app.fees.entity.FeeCategory;
 import com.nest.app.fees.entity.FeeTransaction;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -79,6 +80,12 @@ public interface FeeTransactionRepository extends JpaRepository<FeeTransaction, 
      * idx_fee_tx_academy_occurred, which exists for exactly this query. */
     List<FeeTransaction> findByAcademyIdAndOccurredOnBetweenOrderByOccurredOnDesc(
             UUID academyId, LocalDate from, LocalDate to);
+
+    /** Every Other-fee payment in an academy. Other fees have no billing period, so there is
+     * nothing to scope them to a month by. */
+    List<FeeTransaction> findByAcademyIdAndCategory(UUID academyId, FeeCategory category);
+
+    List<FeeTransaction> findByAcademyIdAndCategoryAndPeriod(UUID academyId, FeeCategory category, String period);
 
     boolean existsByReversalOfTransactionId(UUID reversalOfTransactionId);
 

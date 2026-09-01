@@ -5,7 +5,7 @@ import 'package:nest_fe/l10n/app_localizations.dart';
 import 'package:nest_fe/core/widgets/owleo_wordmark.dart';
 import 'package:nest_fe/features/dashboard/presentation/dashboard_screen.dart';
 import 'package:nest_fe/features/enrolment/presentation/batches_screen.dart';
-import 'package:nest_fe/features/fees/presentation/regular_fees_screen.dart';
+import 'package:nest_fe/features/fees/presentation/fees_landing_screen.dart';
 import 'package:nest_fe/features/notification/data/notification_api.dart';
 import 'package:nest_fe/features/notification/presentation/notifications_screen.dart';
 import 'package:nest_fe/features/platform/data/platform_settings_api.dart';
@@ -211,7 +211,7 @@ class AppShellState extends ConsumerState<AppShell> {
                     DashboardScreen(),
                     BatchesScreen(),
                     SizedBox.shrink(),
-                    RegularFeesScreen(),
+                    FeesLandingScreen(),
                     ProfileScreen(),
                   ],
           ),

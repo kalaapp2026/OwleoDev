@@ -15,6 +15,9 @@ public interface CourseMapRepository extends JpaRepository<CourseMap, UUID> {
 
     List<CourseMap> findByCourseId(UUID courseId);
 
+    /** Every enrolment across a set of courses - the fees dashboard sums over a whole academy. */
+    List<CourseMap> findByCourseIdIn(List<UUID> courseIds);
+
     Optional<CourseMap> findByMembershipIdAndCourseId(UUID membershipId, UUID courseId);
 
     // Bulk delete, not derived load-then-remove - see CourseFeatureGrantRepository's

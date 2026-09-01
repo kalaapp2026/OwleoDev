@@ -1,9 +1,11 @@
 import 'package:dio/dio.dart';
 import 'package:nest_fe/core/network/dio_client.dart';
 import 'package:nest_fe/features/fees/data/fee_roster.dart';
+import 'package:nest_fe/features/fees/data/fee_summary.dart';
 import 'package:nest_fe/features/fees/data/fee_type.dart';
 import 'package:nest_fe/features/fees/data/fee_transaction.dart';
 import 'package:nest_fe/features/fees/data/student_fee_profile.dart';
+import 'package:nest_fe/features/fees/data/student_other_fees.dart';
 import 'package:nest_fe/features/fees/data/student_statement.dart';
 import 'package:nest_fe/features/fees/data/transaction_ledger.dart';
 
@@ -141,6 +143,35 @@ class FeesApi {
         'query': ?(query != null && query.trim().isNotEmpty ? query.trim() : null),
       }),
       (data) => TransactionLedger.fromJson(data as Map<String, dynamic>),
+    );
+  }
+
+  /// Both categories' totals for the landing, optionally narrowed to a course and/or batch.
+  Future<FeeSummary> summary({required String period, String? courseId, String? batchId}) {
+    return _client.call(
+      (dio) => dio.get('/fees/summary', queryParameters: {
+        'period': period,
+        'courseId': ?courseId,
+        'batchId': ?batchId,
+      }),
+      (data) => FeeSummary.fromJson(data as Map<String, dynamic>),
+    );
+  }
+
+  Future<List<StudentSearchResult>> searchStudents(String query) {
+    return _client.call(
+      (dio) => dio.get('/fees/students/search', queryParameters: {'query': query}),
+      (data) => (data as List)
+          .map((e) => StudentSearchResult.fromJson(e as Map<String, dynamic>))
+          .toList(),
+    );
+  }
+
+  /// Every Other fee that applies to one student - shared types plus their own one-offs.
+  Future<StudentOtherFees> studentOtherFees(String membershipId) {
+    return _client.call(
+      (dio) => dio.get('/students//other-fees'),
+      (data) => StudentOtherFees.fromJson(data as Map<String, dynamic>),
     );
   }
 

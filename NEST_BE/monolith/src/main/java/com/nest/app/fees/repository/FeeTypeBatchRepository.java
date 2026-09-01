@@ -17,6 +17,9 @@ public interface FeeTypeBatchRepository extends JpaRepository<FeeTypeBatch, UUID
 
     List<FeeTypeBatch> findByBatchId(UUID batchId);
 
+    /** Which fee types apply to any of these batches - a student sits in several. */
+    List<FeeTypeBatch> findByBatchIdIn(List<UUID> batchIds);
+
     /**
      * Bulk delete, not the derived deleteBy. A derived delete loads the rows and queues per-row
      * removals, and Hibernate flushes inserts before deletes - so re-saving an unchanged binding

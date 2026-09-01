@@ -313,6 +313,108 @@ public class OtherFeesService {
     }
 
     /**
+     * Every Other fee that applies to one student.
+     *
+     * <p>Two sources, deliberately merged into one list: the shared fee types bound to batches
+     * this student is in, and one-off charges raised against them personally. An admin collecting
+     * from a student does not care which kind a charge is, only what is owed.</p>
+     *
+     * <p>Returns an empty list rather than failing when a student has neither. That is the case
+     * the prototype calls a "virtual profile" - a newly joined student still needs a screen to
+     * open, or there is nowhere to add their first one-off fee from.</p>
+     */
+    @Transactional(readOnly = true)
+    public com.nest.app.fees.dto.StudentOtherFeesResponse studentOtherFees(UUID membershipId) {
+        UUID academyId = TenantContext.currentAcademyId();
+        AcademyMembership membership = membershipRepository.findById(membershipId)
+                .orElseThrow(() -> new ResourceNotFoundException("Student not found: " + membershipId));
+        if (!membership.getAcademyId().equals(academyId)) {
+            throw new ResourceNotFoundException("Student not found: " + membershipId);
+        }
+
+        Set<UUID> studentBatchIds = batchMemberRepository.findByMembershipId(membershipId).stream()
+                .map(BatchMember::getBatchId).collect(Collectors.toSet());
+
+        // Fee types bound to any batch this student sits in. A type bound to two of their batches
+        // is still one obligation, so this is a set of types, not of bindings.
+        Set<UUID> applicableTypeIds = studentBatchIds.isEmpty() ? Set.of()
+                : feeTypeBatchRepository.findByBatchIdIn(new ArrayList<>(studentBatchIds)).stream()
+                        .map(FeeTypeBatch::getFeeTypeId).collect(Collectors.toSet());
+
+        List<FeeType> types = applicableTypeIds.isEmpty() ? List.of()
+                : feeTypeRepository.findAllById(applicableTypeIds).stream()
+                        .filter(t -> t.getAcademyId().equals(academyId))
+                        .filter(FeeType::isActive)
+                        .toList();
+
+        List<StudentFee> customFees =
+                studentFeeRepository.findByMembershipIdAndAcademyIdOrderByCreatedAtDesc(membershipId, academyId);
+
+        List<FeeTransaction> transactions = feeTransactionRepository
+                .findByAcademyIdAndCategory(academyId, FeeCategory.OTHER).stream()
+                .filter(t -> t.getMembershipId().equals(membershipId))
+                .toList();
+        Set<UUID> reversedIds = transactions.stream()
+                .map(FeeTransaction::getReversalOfTransactionId)
+                .filter(Objects::nonNull).collect(Collectors.toSet());
+
+        LocalDate today = LocalDate.now();
+        List<com.nest.app.fees.dto.StudentOtherFeesResponse.OtherFeeRow> rows = new ArrayList<>();
+        BigDecimal totalAmount = BigDecimal.ZERO;
+        BigDecimal totalPaid = BigDecimal.ZERO;
+
+        for (FeeType type : types) {
+            List<FeeTransaction> rowTx = transactions.stream()
+                    .filter(t -> type.getId().equals(t.getFeeTypeId())).toList();
+            rows.add(buildRow(type.getId(), null, type.getName(), type.getAmount(),
+                    type.getDueDate(), rowTx, reversedIds, today, false));
+            totalAmount = totalAmount.add(type.getAmount());
+            totalPaid = totalPaid.add(sum(rowTx));
+        }
+
+        for (StudentFee fee : customFees) {
+            List<FeeTransaction> rowTx = transactions.stream()
+                    .filter(t -> fee.getId().equals(t.getStudentFeeId())).toList();
+            rows.add(buildRow(null, fee.getId(), fee.getName(), fee.getAmount(),
+                    fee.getDueDate(), rowTx, reversedIds, today, true));
+            totalAmount = totalAmount.add(fee.getAmount());
+            totalPaid = totalPaid.add(sum(rowTx));
+        }
+
+        User user = userRepository.findById(membership.getUserId()).orElse(null);
+        return new com.nest.app.fees.dto.StudentOtherFeesResponse(
+                membershipId,
+                user == null ? "Unknown" : user.getFullName(),
+                totalAmount, totalPaid, totalAmount.subtract(totalPaid), rows);
+    }
+
+    private BigDecimal sum(List<FeeTransaction> transactions) {
+        return transactions.stream().map(FeeTransaction::getAmountPaid)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
+
+    private com.nest.app.fees.dto.StudentOtherFeesResponse.OtherFeeRow buildRow(
+            UUID feeTypeId, UUID studentFeeId, String name, BigDecimal amount, LocalDate dueDate,
+            List<FeeTransaction> rowTx, Set<UUID> reversedIds, LocalDate today, boolean custom) {
+        BigDecimal paid = sum(rowTx);
+        BigDecimal balance = amount.subtract(paid);
+        FeeTransaction lastPayment = rowTx.stream()
+                .filter(t -> !t.isReversal())
+                .filter(t -> !reversedIds.contains(t.getId()))
+                .max(Comparator.comparing(FeeTransaction::getCreatedAt,
+                        Comparator.nullsFirst(Comparator.naturalOrder())))
+                .orElse(null);
+        return new com.nest.app.fees.dto.StudentOtherFeesResponse.OtherFeeRow(
+                feeTypeId, studentFeeId, name, amount, paid, balance,
+                deriveStatus(amount, paid, balance, lastPayment, dueDate, today),
+                dueDate,
+                lastPayment == null ? null : lastPayment.getOccurredOn(),
+                lastPayment == null ? null : lastPayment.getMode(),
+                lastPayment == null ? null : lastPayment.getId(),
+                custom);
+    }
+
+    /**
      * Every payment the academy took in a date range, across both categories.
      *
      * <p>Lives here rather than in {@link FeesService} because it spans both halves and neither

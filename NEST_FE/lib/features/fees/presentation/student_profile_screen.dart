@@ -12,6 +12,7 @@ import 'package:nest_fe/features/fees/data/fee_roster.dart';
 import 'package:nest_fe/features/fees/data/student_fee_profile.dart';
 import 'package:nest_fe/features/fees/presentation/fee_format.dart';
 import 'package:nest_fe/features/fees/presentation/statement_screen.dart';
+import 'package:nest_fe/features/fees/presentation/widgets/student_other_fees_tab.dart';
 import 'package:nest_fe/features/fees/presentation/fees_screen.dart' show feesApiProvider;
 
 typedef _ProfileKey = ({String membershipId, String period});
@@ -54,6 +55,10 @@ class _StudentProfileScreenState extends ConsumerState<StudentProfileScreen> {
   bool _breakdownOpen = false;
   bool _busy = false;
   String? _editingCourseId;
+
+  /// Which half of the profile is showing. Regular and Other are the same student seen two ways,
+  /// not two screens, so this switches the body rather than pushing a second page.
+  bool _showOther = false;
   final _feeController = TextEditingController();
 
   _ProfileKey get _key => (membershipId: widget.membershipId, period: widget.period);
@@ -219,7 +224,18 @@ class _StudentProfileScreenState extends ConsumerState<StudentProfileScreen> {
           'Student fee profile · ${_periodLabel(profile.period)}',
           style: TextStyle(fontSize: AppType.smd, color: palette.textMuted),
         ),
+        const SizedBox(height: AppSpacing.md),
+        _CategoryToggle(
+          showOther: _showOther,
+          onChanged: (other) => setState(() => _showOther = other),
+        ),
         const SizedBox(height: AppSpacing.lg),
+        if (_showOther)
+          StudentOtherFeesTab(
+            membershipId: widget.membershipId,
+            studentName: profile.studentName,
+          )
+        else ...[
         Row(
           children: [
             StatBox(
@@ -298,6 +314,7 @@ class _StudentProfileScreenState extends ConsumerState<StudentProfileScreen> {
             color: palette.paidManual,
             soft: palette.paidManualSoft,
           ),
+        ],
         const SizedBox(height: AppSpacing.xxl),
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -325,11 +342,14 @@ class _StudentProfileScreenState extends ConsumerState<StudentProfileScreen> {
           ],
         ),
         const SizedBox(height: AppSpacing.sm),
-        for (final row in profile.courses)
-          Padding(
-            padding: const EdgeInsets.only(bottom: AppSpacing.xs),
-            child: _SlipRow(row: row),
-          ),
+        // Only the Regular side has fee slips - an Other fee is a one-time charge with no
+        // billing period to generate a slip for.
+        if (!_showOther)
+          for (final row in profile.courses)
+            Padding(
+              padding: const EdgeInsets.only(bottom: AppSpacing.xs),
+              child: _SlipRow(row: row),
+            ),
       ],
     );
   }
@@ -344,6 +364,66 @@ class _StudentProfileScreenState extends ConsumerState<StudentProfileScreen> {
       'July', 'August', 'September', 'October', 'November', 'December'
     ];
     return '${names[month - 1]} ${parts[0]}';
+  }
+}
+
+/// Regular / Other. Both halves are the same student, so this switches the body in place.
+class _CategoryToggle extends StatelessWidget {
+  const _CategoryToggle({required this.showOther, required this.onChanged});
+
+  final bool showOther;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.palette;
+    return Container(
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: palette.surfaceRaised,
+        borderRadius: AppRadii.all(AppRadii.lg),
+        border: Border.all(color: palette.border),
+      ),
+      child: Row(
+        children: [
+          Expanded(child: _ToggleHalf(label: 'Regular Fees', selected: !showOther, onTap: () => onChanged(false))),
+          Expanded(child: _ToggleHalf(label: 'Other Fees', selected: showOther, onTap: () => onChanged(true))),
+        ],
+      ),
+    );
+  }
+}
+
+class _ToggleHalf extends StatelessWidget {
+  const _ToggleHalf({required this.label, required this.selected, required this.onTap});
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.palette;
+    return Pressable(
+      onTap: selected ? null : onTap,
+      child: AnimatedContainer(
+        duration: AppMotion.fade,
+        padding: const EdgeInsets.symmetric(vertical: 9),
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: selected ? palette.primary : Colors.transparent,
+          borderRadius: AppRadii.all(AppRadii.md),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: AppType.md,
+            fontWeight: AppType.bold,
+            color: selected ? palette.onPrimary : palette.textMuted,
+          ),
+        ),
+      ),
+    );
   }
 }
 
