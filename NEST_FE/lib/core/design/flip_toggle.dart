@@ -27,6 +27,8 @@ class FlipToggle extends StatefulWidget {
     this.offSoftColor,
     this.width = 118,
     this.height = 34,
+    this.onIcon,
+    this.offIcon,
   });
 
   final bool isOn;
@@ -38,6 +40,11 @@ class FlipToggle extends StatefulWidget {
   final Color? onSoftColor;
   final Color? offColor;
   final Color? offSoftColor;
+
+  /// Overrides the default tick/cross. Attendance uses filled circles so the toggle matches the
+  /// Present/Absent icons used everywhere else on that screen.
+  final IconData? onIcon;
+  final IconData? offIcon;
 
   /// Fixed by default. The label changes length between states ("Mark Paid" / "Mark Not Paid"),
   /// and letting the button resize mid-flip makes the whole list row jump.
@@ -125,7 +132,9 @@ class _FlipToggleState extends State<FlipToggle> with SingleTickerProviderStateM
             mainAxisSize: MainAxisSize.min,
             children: [
               Icon(
-                _displayOn ? Icons.check : Icons.close,
+                _displayOn
+                    ? (widget.onIcon ?? Icons.check)
+                    : (widget.offIcon ?? Icons.close),
                 size: 13,
                 color: _displayOn ? onFg : offFg,
               ),

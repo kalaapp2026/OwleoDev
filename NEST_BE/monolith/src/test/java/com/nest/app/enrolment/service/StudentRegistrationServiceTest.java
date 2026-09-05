@@ -98,7 +98,10 @@ class StudentRegistrationServiceTest {
 
     private RegisterStudentRequest request(String email) {
         return new RegisterStudentRequest("student1", "New Student", "9000000001", LocalDate.of(2005, 1, 1), email,
-                null, null, null, List.of(new CourseFeeSelection(courseId, BigDecimal.valueOf(500))));
+                null, null, null, List.of(new CourseFeeSelection(courseId, BigDecimal.valueOf(500))),
+                // No profile details - these tests are about the registration paths, and the
+                // form fields are optional by design.
+                null);
     }
 
     @Test

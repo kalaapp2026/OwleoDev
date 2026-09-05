@@ -104,7 +104,7 @@ public class CalendarService {
     }
 
     private Set<UUID> batchIdsForAcademy(UUID academyId) {
-        Set<UUID> courseIds = courseRepository.findByAcademyId(academyId).stream()
+        Set<UUID> courseIds = courseRepository.findByAcademyIdOrderByNameAsc(academyId).stream()
                 .map(Course::getId).collect(Collectors.toSet());
         if (courseIds.isEmpty()) {
             return Set.of();

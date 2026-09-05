@@ -56,6 +56,8 @@ class TrainerRegistrationServiceTest {
     private com.nest.app.curriculum.repository.CourseRepository courseRepository;
     @Mock
     private com.nest.app.identity.service.MembershipConfirmationService membershipConfirmationService;
+    @Mock
+    private com.nest.app.identity.repository.TrainerCourseBatchRepository trainerCourseBatchRepository;
 
     private TrainerRegistrationService trainerRegistrationService;
 
@@ -79,12 +81,12 @@ class TrainerRegistrationServiceTest {
     @Test
     void trainerCannotDelegateASuperiorFeatureSet() {
         trainerRegistrationService = new TrainerRegistrationService(identityRegistrationService, courseMapRepository,
-                membershipRepository, userRepository, courseFeatureGrantRepository, courseRepository, membershipConfirmationService);
+                membershipRepository, userRepository, courseFeatureGrantRepository, courseRepository, membershipConfirmationService, trainerCourseBatchRepository);
         actingAsTrainerWithFeatures(Set.of(FeatureKey.ATTENDANCE, FeatureKey.BATCH_SCHEDULING));
 
         var request = new RegisterTrainerRequest("junior", "Junior Trainer", "9000000001", "junior@example.com",
                 java.time.LocalDate.of(1995, 1, 1), null, null, null, null,
-                Map.of(UUID.randomUUID(), Set.of(FeatureKey.ATTENDANCE, FeatureKey.BATCH_SCHEDULING, FeatureKey.FEES_DASHBOARD)));
+                Map.of(UUID.randomUUID(), Set.of(FeatureKey.ATTENDANCE, FeatureKey.BATCH_SCHEDULING, FeatureKey.FEES_DASHBOARD)), null, null);
 
         assertThatThrownBy(() -> trainerRegistrationService.registerTrainer(request))
                 .isInstanceOf(ForbiddenException.class)
@@ -94,7 +96,7 @@ class TrainerRegistrationServiceTest {
     @Test
     void trainerCanDelegateExactlyTheirOwnFeatureSet() {
         trainerRegistrationService = new TrainerRegistrationService(identityRegistrationService, courseMapRepository,
-                membershipRepository, userRepository, courseFeatureGrantRepository, courseRepository, membershipConfirmationService);
+                membershipRepository, userRepository, courseFeatureGrantRepository, courseRepository, membershipConfirmationService, trainerCourseBatchRepository);
         actingAsTrainerWithFeatures(Set.of(FeatureKey.ATTENDANCE, FeatureKey.BATCH_SCHEDULING, FeatureKey.RESCHEDULE));
 
         User createdUser = User.builder().id(UUID.randomUUID()).username("junior").build();
@@ -106,7 +108,7 @@ class TrainerRegistrationServiceTest {
 
         var request = new RegisterTrainerRequest("junior", "Junior Trainer", "9000000001", "junior@example.com",
                 java.time.LocalDate.of(1995, 1, 1), null, null, null, null,
-                Map.of(UUID.randomUUID(), Set.of(FeatureKey.ATTENDANCE, FeatureKey.BATCH_SCHEDULING, FeatureKey.RESCHEDULE)));
+                Map.of(UUID.randomUUID(), Set.of(FeatureKey.ATTENDANCE, FeatureKey.BATCH_SCHEDULING, FeatureKey.RESCHEDULE)), null, null);
 
         var response = trainerRegistrationService.registerTrainer(request);
 
@@ -117,12 +119,12 @@ class TrainerRegistrationServiceTest {
     @Test
     void academyAdminCannotDelegateNonDelegableFeatures() {
         trainerRegistrationService = new TrainerRegistrationService(identityRegistrationService, courseMapRepository,
-                membershipRepository, userRepository, courseFeatureGrantRepository, courseRepository, membershipConfirmationService);
+                membershipRepository, userRepository, courseFeatureGrantRepository, courseRepository, membershipConfirmationService, trainerCourseBatchRepository);
         actingAsAcademyAdmin();
 
         var request = new RegisterTrainerRequest("ravi", "Ravi", "9000000002", "ravi@example.com",
                 java.time.LocalDate.of(1990, 1, 1), null, null, null, null,
-                Map.of(UUID.randomUUID(), Set.of(FeatureKey.COURSE_MANAGEMENT)));
+                Map.of(UUID.randomUUID(), Set.of(FeatureKey.COURSE_MANAGEMENT)), null, null);
 
         assertThatThrownBy(() -> trainerRegistrationService.registerTrainer(request))
                 .isInstanceOf(ForbiddenException.class)
@@ -132,7 +134,7 @@ class TrainerRegistrationServiceTest {
     @Test
     void academyAdminCanGrantAnyDelegableFeatureDespiteHoldingNoFeatureGrantsThemselves() {
         trainerRegistrationService = new TrainerRegistrationService(identityRegistrationService, courseMapRepository,
-                membershipRepository, userRepository, courseFeatureGrantRepository, courseRepository, membershipConfirmationService);
+                membershipRepository, userRepository, courseFeatureGrantRepository, courseRepository, membershipConfirmationService, trainerCourseBatchRepository);
         actingAsAcademyAdmin();
 
         User createdUser = User.builder().id(UUID.randomUUID()).username("ravi").build();
@@ -144,7 +146,7 @@ class TrainerRegistrationServiceTest {
 
         var request = new RegisterTrainerRequest("ravi", "Ravi", "9000000002", "ravi@example.com",
                 java.time.LocalDate.of(1990, 1, 1), null, null, null, null,
-                Map.of(UUID.randomUUID(), Set.of(FeatureKey.FEES_ENTRY, FeatureKey.FEES_DASHBOARD)));
+                Map.of(UUID.randomUUID(), Set.of(FeatureKey.FEES_ENTRY, FeatureKey.FEES_DASHBOARD)), null, null);
 
         var response = trainerRegistrationService.registerTrainer(request);
 
@@ -155,7 +157,7 @@ class TrainerRegistrationServiceTest {
     @Test
     void anExistingNestUserIsLinkedToThisAcademyInsteadOfBeingRejectedAsADuplicate() {
         trainerRegistrationService = new TrainerRegistrationService(identityRegistrationService, courseMapRepository,
-                membershipRepository, userRepository, courseFeatureGrantRepository, courseRepository, membershipConfirmationService);
+                membershipRepository, userRepository, courseFeatureGrantRepository, courseRepository, membershipConfirmationService, trainerCourseBatchRepository);
         actingAsAcademyAdmin();
 
         // Someone already on NEST - e.g. a student at a different academy.
@@ -169,7 +171,7 @@ class TrainerRegistrationServiceTest {
 
         var request = new RegisterTrainerRequest("priya_new", "Priya", "9000000009", "priya@example.com",
                 java.time.LocalDate.of(1990, 1, 1), null, null, null, null,
-                Map.of(UUID.randomUUID(), Set.of(FeatureKey.ATTENDANCE)));
+                Map.of(UUID.randomUUID(), Set.of(FeatureKey.ATTENDANCE)), null, null);
 
         var response = trainerRegistrationService.registerTrainer(request);
 
@@ -184,7 +186,7 @@ class TrainerRegistrationServiceTest {
     @Test
     void someoneAlreadyInThisAcademyIsRejectedWithAClearReason() {
         trainerRegistrationService = new TrainerRegistrationService(identityRegistrationService, courseMapRepository,
-                membershipRepository, userRepository, courseFeatureGrantRepository, courseRepository, membershipConfirmationService);
+                membershipRepository, userRepository, courseFeatureGrantRepository, courseRepository, membershipConfirmationService, trainerCourseBatchRepository);
         actingAsAcademyAdmin();
 
         User existing = User.builder().id(UUID.randomUUID()).username("priya").fullName("Priya").build();
@@ -195,7 +197,7 @@ class TrainerRegistrationServiceTest {
 
         var request = new RegisterTrainerRequest("priya_new", "Priya", "9000000009", "priya@example.com",
                 java.time.LocalDate.of(1990, 1, 1), null, null, null, null,
-                Map.of(UUID.randomUUID(), Set.of(FeatureKey.ATTENDANCE)));
+                Map.of(UUID.randomUUID(), Set.of(FeatureKey.ATTENDANCE)), null, null);
 
         assertThatThrownBy(() -> trainerRegistrationService.registerTrainer(request))
                 .isInstanceOf(com.nest.common.exception.BadRequestException.class)

@@ -10,9 +10,16 @@ import java.util.List;
 import java.util.UUID;
 
 public interface CourseRepository extends JpaRepository<Course, UUID> {
-    List<Course> findByAcademyIdAndStatus(UUID academyId, CourseStatus status);
+    /**
+     * Ordered by name because these rows become a picker.
+     *
+     * <p>Without it Postgres is free to return them in any order, which makes the dropdown
+     * reshuffle between loads and - now that the pickers open on their first course rather than on
+     * nothing - makes which course you land on arbitrary.
+     */
+    List<Course> findByAcademyIdAndStatusOrderByNameAsc(UUID academyId, CourseStatus status);
 
-    List<Course> findByAcademyId(UUID academyId);
+    List<Course> findByAcademyIdOrderByNameAsc(UUID academyId);
 
     /** Scheduled fee-slip generation's entry point - runs with no TenantContext (background
      * thread, not an HTTP request), so it must find every academy's due courses in one query

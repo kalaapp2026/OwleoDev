@@ -17,6 +17,9 @@ public record StudentDetailResponse(
         String address,
         String city,
         String state,
-        Map<UUID, BigDecimal> courseFees
+        Map<UUID, BigDecimal> courseFees,
+
+        /** The V26/V27 profile fields, so an edit round-trips without losing them. */
+        PersonDetails details
 ) {
 }

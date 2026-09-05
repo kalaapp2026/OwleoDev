@@ -44,6 +44,8 @@ class AttendanceServiceTest {
     @Mock
     private BatchRepository batchRepository;
     @Mock
+    private com.nest.app.curriculum.repository.CourseRepository courseRepository;
+    @Mock
     private CourseFeatureGuard courseFeatureGuard;
 
     private AttendanceService attendanceService;
@@ -61,7 +63,7 @@ class AttendanceServiceTest {
     /** Builds the service and stubs the class -> batch -> course resolution submitSheet now does
      * (the CourseFeatureGuard itself is a no-op mock, so it never blocks these tests). */
     private void newService() {
-        attendanceService = new AttendanceService(attendanceRepository, classInstanceRepository, batchRepository, courseFeatureGuard);
+        attendanceService = new AttendanceService(attendanceRepository, classInstanceRepository, batchRepository, courseRepository, courseFeatureGuard);
         when(classInstanceRepository.findById(classInstanceId))
                 .thenReturn(Optional.of(ClassInstance.builder().id(classInstanceId).batchId(batchId).build()));
         when(batchRepository.findById(batchId))

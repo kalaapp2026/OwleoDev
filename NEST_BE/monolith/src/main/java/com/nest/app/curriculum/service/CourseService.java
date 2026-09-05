@@ -10,6 +10,7 @@ import com.nest.app.curriculum.repository.CourseRepository;
 import com.nest.app.identity.entity.AcademyMembership;
 import com.nest.app.identity.repository.AcademyMembershipRepository;
 import com.nest.app.identity.repository.CourseMapRepository;
+import com.nest.app.identity.service.CourseFeatureGuard;
 import com.nest.common.audit.Auditable;
 import com.nest.common.exception.BadRequestException;
 import com.nest.common.exception.ForbiddenException;
@@ -31,12 +32,14 @@ public class CourseService {
     private final CourseRepository courseRepository;
     private final AcademyMembershipRepository membershipRepository;
     private final CourseMapRepository courseMapRepository;
+    private final CourseFeatureGuard courseFeatureGuard;
 
     public CourseService(CourseRepository courseRepository, AcademyMembershipRepository membershipRepository,
-                          CourseMapRepository courseMapRepository) {
+                          CourseMapRepository courseMapRepository, CourseFeatureGuard courseFeatureGuard) {
         this.courseRepository = courseRepository;
         this.membershipRepository = membershipRepository;
         this.courseMapRepository = courseMapRepository;
+        this.courseFeatureGuard = courseFeatureGuard;
     }
 
     @Transactional
@@ -62,6 +65,9 @@ public class CourseService {
                 .feeCycle(request.feeCycle())
                 .thumbnailUrl(request.thumbnailUrl())
                 .billingDayOfMonth(request.billingDayOfMonth())
+                .dueDayOfMonth(request.dueDayOfMonth())
+                .paymentMethods(normalisePaymentMethods(request.paymentMethods()))
+                .iconKey(request.iconKey())
                 .status(CourseStatus.ACTIVE)
                 .build();
         return toResponse(courseRepository.save(course));
@@ -71,8 +77,26 @@ public class CourseService {
      * deactivated course silently stops being offered without anyone needing to filter for it. */
     @Transactional(readOnly = true)
     public List<CourseResponse> listActiveForActiveAcademy() {
-        return courseRepository.findByAcademyIdAndStatus(TenantContext.currentAcademyId(), CourseStatus.ACTIVE)
+        return courseRepository.findByAcademyIdAndStatusOrderByNameAsc(TenantContext.currentAcademyId(), CourseStatus.ACTIVE)
                 .stream().map(this::toResponse).collect(Collectors.toList());
+    }
+
+    /**
+     * The course pickers on the Batch, Schedule and Attendance screens: only the courses this
+     * caller can actually act on for {@code featureKey}.
+     *
+     * <p>Separate from {@link #listActiveForActiveAcademy}, which is the academy's public course
+     * list (used for enrolment forms and student-facing pickers, where seeing every course is the
+     * point). Offering a Trainer a course they hold no grant on just sets up a 403 they can't
+     * explain.
+     */
+    @Transactional(readOnly = true)
+    public List<CourseResponse> listActiveForFeature(String featureKey) {
+        var visible = courseFeatureGuard.visibleCourseIds(featureKey);
+        return courseRepository.findByAcademyIdAndStatusOrderByNameAsc(TenantContext.currentAcademyId(), CourseStatus.ACTIVE)
+                .stream()
+                .filter(c -> visible.isEmpty() || visible.get().contains(c.getId()))
+                .map(this::toResponse).collect(Collectors.toList());
     }
 
     /** Course-management admin view - every course regardless of status, so Admin can see and
@@ -80,7 +104,7 @@ public class CourseService {
      * controller, not filtered here. */
     @Transactional(readOnly = true)
     public List<CourseResponse> listAllForActiveAcademy() {
-        return courseRepository.findByAcademyId(TenantContext.currentAcademyId())
+        return courseRepository.findByAcademyIdOrderByNameAsc(TenantContext.currentAcademyId())
                 .stream().map(this::toResponse).collect(Collectors.toList());
     }
 
@@ -115,6 +139,7 @@ public class CourseService {
                 request.hybridThresholdAttendance(), request.hybridFeeBelowThresholdPercent());
 
         Course course = findOrThrow(id);
+        course.setCategory(request.category());
         course.setName(request.name());
         course.setDescription(request.description());
         course.setDurationLevel(request.durationLevel());
@@ -128,6 +153,9 @@ public class CourseService {
         course.setHybridMinFeeAmount(request.hybridMinFeeAmount());
         course.setThumbnailUrl(request.thumbnailUrl());
         course.setBillingDayOfMonth(request.billingDayOfMonth());
+        course.setDueDayOfMonth(request.dueDayOfMonth());
+        course.setPaymentMethods(normalisePaymentMethods(request.paymentMethods()));
+        course.setIconKey(request.iconKey());
         return toResponse(courseRepository.save(course));
     }
 
@@ -173,6 +201,41 @@ public class CourseService {
         }
     }
 
+    /** Payment methods the fee screens understand. Anything outside this set would silently make
+     * a course uncollectable, so it's rejected at the boundary rather than stored and puzzled
+     * over later. */
+    private static final Set<String> ALLOWED_PAYMENT_METHODS = Set.of("CASH", "UPI", "GATEWAY");
+
+    /**
+     * Flattens the request's set into the stored comma-separated column, upper-casing and
+     * de-duplicating on the way.
+     *
+     * <p>An absent or empty set becomes CASH rather than an error: every academy takes cash, so
+     * defaulting is both safe and what an admin who skipped the field meant. A method outside
+     * {@link #ALLOWED_PAYMENT_METHODS} is a different matter - that's a client bug, and accepting
+     * it would produce a course whose fees no screen can collect.
+     */
+    private String normalisePaymentMethods(Set<String> requested) {
+        if (requested == null || requested.isEmpty()) {
+            return "CASH";
+        }
+        // LinkedHashSet so the stored order matches what the admin picked, which is the order the
+        // fee screens then offer the methods in.
+        Set<String> cleaned = requested.stream()
+                .filter(java.util.Objects::nonNull)
+                .map(m -> m.trim().toUpperCase(java.util.Locale.ROOT))
+                .filter(m -> !m.isEmpty())
+                .collect(Collectors.toCollection(java.util.LinkedHashSet::new));
+
+        for (String method : cleaned) {
+            if (!ALLOWED_PAYMENT_METHODS.contains(method)) {
+                throw new BadRequestException("Unsupported payment method: " + method
+                        + ". Allowed: " + String.join(", ", ALLOWED_PAYMENT_METHODS));
+            }
+        }
+        return cleaned.isEmpty() ? "CASH" : String.join(",", cleaned);
+    }
+
     private Course findOrThrow(UUID id) {
         return courseRepository.findById(id).orElseThrow(() -> new ResourceNotFoundException("Course not found: " + id));
     }
@@ -182,6 +245,7 @@ public class CourseService {
                 c.getDurationLevel(), c.getFeeModel(), c.getDefaultFee(), c.getFeePerClass(),
                 c.getHybridExpectedClassesPerPeriod(), c.getHybridThresholdAttendance(),
                 c.getHybridFeeAboveThresholdPercent(), c.getHybridFeeBelowThresholdPercent(), c.getHybridMinFeeAmount(),
-                c.getFeeCycle(), c.getThumbnailUrl(), c.getStatus(), c.getBillingDayOfMonth());
+                c.getFeeCycle(), c.getThumbnailUrl(), c.getStatus(), c.getBillingDayOfMonth(),
+                c.getDueDayOfMonth(), c.getPaymentMethodSet(), c.getIconKey());
     }
 }

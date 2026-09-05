@@ -100,7 +100,7 @@ public class FeesDashboardService {
     private FeeSummaryResponse.CategorySummary regularSummary(
             UUID academyId, String period, UUID courseId, UUID batchId) {
 
-        List<Course> courses = courseRepository.findByAcademyId(academyId).stream()
+        List<Course> courses = courseRepository.findByAcademyIdOrderByNameAsc(academyId).stream()
                 .filter(c -> courseId == null || c.getId().equals(courseId))
                 .toList();
         if (courses.isEmpty()) {
@@ -312,7 +312,7 @@ public class FeesDashboardService {
         }
 
         // Which courses each match is enrolled in, so the row can say more than a bare name.
-        Map<UUID, String> courseNames = courseRepository.findByAcademyId(academyId).stream()
+        Map<UUID, String> courseNames = courseRepository.findByAcademyIdOrderByNameAsc(academyId).stream()
                 .collect(Collectors.toMap(Course::getId, Course::getName));
         Map<UUID, List<String>> coursesByMembership = new HashMap<>();
         for (AcademyMembership membership : matches) {

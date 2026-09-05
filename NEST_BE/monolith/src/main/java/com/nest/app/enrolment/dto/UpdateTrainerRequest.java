@@ -23,6 +23,12 @@ public record UpdateTrainerRequest(
         String city,
         String state,
         Integer yearsOfExperience,
-        @NotEmpty Map<UUID, Set<String>> courseFeatures
+        @NotEmpty Map<UUID, Set<String>> courseFeatures,
+
+        /** Per course, which batches the grants apply to. Empty for a course means every batch. */
+        Map<UUID, Set<UUID>> courseBatches,
+
+        /** The extended profile fields. Null leaves every one of them as it was. */
+        PersonDetails details
 ) {
 }

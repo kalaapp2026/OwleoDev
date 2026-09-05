@@ -1,16 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:nest_fe/core/providers/core_providers.dart';
+// trainersForCourseProvider lives with the API it calls - see the note in student_roster_picker.
 import 'package:nest_fe/features/enrolment/data/enrolment_api.dart';
-import 'package:nest_fe/features/enrolment/presentation/batches_screen.dart';
-
-/// Every active Trainer enrolled in a course, plus every active Academy Admin (who often teaches
-/// too, even without a course mapping) - the default-trainer picker source for batch creation, so
-/// students can see who's actually taking the class.
-final trainersForCourseProvider = FutureProvider.autoDispose.family<List<TrainerSummary>, String>((ref, courseId) {
-  ref.watch(activeMembershipIdProvider);
-  return ref.watch(enrolmentApiProvider).trainersForCourse(courseId);
-});
 
 /// Single-select dropdown of a course's mapped trainers, with a "No default trainer" option -
 /// unlike the student roster this is always optional (a batch can be created before a trainer is

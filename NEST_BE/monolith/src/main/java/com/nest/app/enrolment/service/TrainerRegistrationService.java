@@ -56,12 +56,14 @@ public class TrainerRegistrationService {
     private final CourseFeatureGrantRepository courseFeatureGrantRepository;
     private final CourseRepository courseRepository;
     private final MembershipConfirmationService membershipConfirmationService;
+    private final com.nest.app.identity.repository.TrainerCourseBatchRepository trainerCourseBatchRepository;
 
     public TrainerRegistrationService(IdentityRegistrationService identityRegistrationService, CourseMapRepository courseMapRepository,
                                        AcademyMembershipRepository membershipRepository, UserRepository userRepository,
                                        CourseFeatureGrantRepository courseFeatureGrantRepository,
                                        CourseRepository courseRepository,
-                                       MembershipConfirmationService membershipConfirmationService) {
+                                       MembershipConfirmationService membershipConfirmationService,
+                                       com.nest.app.identity.repository.TrainerCourseBatchRepository trainerCourseBatchRepository) {
         this.identityRegistrationService = identityRegistrationService;
         this.courseMapRepository = courseMapRepository;
         this.membershipRepository = membershipRepository;
@@ -69,6 +71,7 @@ public class TrainerRegistrationService {
         this.courseFeatureGrantRepository = courseFeatureGrantRepository;
         this.courseRepository = courseRepository;
         this.membershipConfirmationService = membershipConfirmationService;
+        this.trainerCourseBatchRepository = trainerCourseBatchRepository;
     }
 
     /** Pre-fills the trainer edit form: profile + the current per-course feature checklist. */
@@ -79,7 +82,9 @@ public class TrainerRegistrationService {
                 .orElseThrow(() -> new ResourceNotFoundException("No account for this membership"));
         return new TrainerDetailResponse(user.getId(), membership.getId(), user.getUsername(), user.getFullName(),
                 user.getPhone(), user.getEmail(), user.getDob(), user.getAddress(), user.getCity(), user.getState(),
-                user.getYearsOfExperience(), courseFeaturesOf(membershipId));
+                user.getYearsOfExperience(), courseFeaturesOf(membershipId),
+                identityRegistrationService.personDetailsOf(user, membership),
+                courseBatchesOf(membershipId));
     }
 
     @Transactional
@@ -95,8 +100,14 @@ public class TrainerRegistrationService {
         request.courseFeatures().keySet().forEach(id -> courseMap.put(id, null));
         identityRegistrationService.reconcileCourseMap(membershipId, courseMap);
         identityRegistrationService.replaceCourseFeatureGrants(membershipId, request.courseFeatures(), TenantContext.currentUserId());
+        saveBatchScoping(membershipId, request.courseBatches());
 
         User user = userRepository.findById(membership.getUserId()).orElseThrow();
+        identityRegistrationService.applyPersonDetails(user, request.details());
+        if (request.details() != null) {
+            identityRegistrationService.setJoiningDate(membership, request.details().joiningDate());
+            identityRegistrationService.setSalary(membership, request.details().salary());
+        }
         return new TrainerResponse(user.getId(), membership.getId(), user.getUsername(), null,
                 request.courseFeatures(), false);
     }
@@ -108,6 +119,16 @@ public class TrainerRegistrationService {
             throw new ForbiddenException("That trainer does not belong to the active academy");
         }
         return membership;
+    }
+
+    /** courseId -&gt; the batches this trainer is scoped to on it. A course with no rows is absent
+     * from the map, which reads as "every batch on that course". */
+    private Map<UUID, Set<UUID>> courseBatchesOf(UUID membershipId) {
+        return trainerCourseBatchRepository.findByMembershipId(membershipId).stream()
+                .collect(Collectors.groupingBy(
+                        com.nest.app.identity.entity.TrainerCourseBatch::getCourseId,
+                        Collectors.mapping(com.nest.app.identity.entity.TrainerCourseBatch::getBatchId,
+                                Collectors.toSet())));
     }
 
     private Map<UUID, Set<String>> courseFeaturesOf(UUID membershipId) {
@@ -170,11 +191,18 @@ public class TrainerRegistrationService {
                 request.username(), request.fullName(), request.phone(), request.email(), request.dob(),
                 request.address(), request.city(), request.state(), request.yearsOfExperience(), Role.TRAINER);
 
+        identityRegistrationService.applyPersonDetails(trainer.user(), request.details());
+
         var membership = identityRegistrationService.createMembership(
                 trainer.user().getId(), creator.academyId(), creator.academyName(), Role.TRAINER,
                 MembershipStatus.ACTIVE, TenantContext.currentUserId());
+        identityRegistrationService.setJoiningDate(membership,
+                request.details() == null ? null : request.details().joiningDate());
+        identityRegistrationService.setSalary(membership,
+                request.details() == null ? null : request.details().salary());
 
         saveCourseAssignment(membership.getId(), request.courseFeatures());
+        saveBatchScoping(membership.getId(), request.courseBatches());
 
         return new TrainerResponse(trainer.user().getId(), membership.getId(), trainer.user().getUsername(),
                 trainer.temporaryPassword(), request.courseFeatures(), false);
@@ -203,8 +231,13 @@ public class TrainerRegistrationService {
         var membership = identityRegistrationService.createMembership(
                 person.getId(), creator.academyId(), creator.academyName(), Role.TRAINER,
                 MembershipStatus.PENDING_CONFIRMATION, TenantContext.currentUserId());
+        identityRegistrationService.setJoiningDate(membership,
+                request.details() == null ? null : request.details().joiningDate());
+        identityRegistrationService.setSalary(membership,
+                request.details() == null ? null : request.details().salary());
 
         saveCourseAssignment(membership.getId(), request.courseFeatures());
+        saveBatchScoping(membership.getId(), request.courseBatches());
 
         String courseNames = courseRepository.findAllById(request.courseFeatures().keySet()).stream()
                 .map(Course::getName).collect(Collectors.joining(", "));
@@ -228,6 +261,31 @@ public class TrainerRegistrationService {
     }
 
     /** A trainer's course rows carry no fee - they're a mapping, not an enrolment. */
+    /**
+     * Records which batches a trainer's course grants apply to.
+     *
+     * <p>A course with no batches listed writes no rows, which reads as "every batch on that
+     * course" - the access a trainer had before batches could be named individually, and the
+     * right default for the common case where they teach all of them.
+     */
+    private void saveBatchScoping(UUID membershipId, Map<UUID, Set<UUID>> courseBatches) {
+        // Null means "not specified", which on an edit must leave the existing scoping alone.
+        // Deleting first and then returning would silently widen a batch-scoped trainer to the
+        // whole course, since an absent row set is read as "every batch".
+        if (courseBatches == null) {
+            return;
+        }
+        trainerCourseBatchRepository.deleteByMembershipId(membershipId);
+        courseBatches.forEach((courseId, batchIds) -> {
+            if (batchIds == null) {
+                return;
+            }
+            batchIds.forEach(batchId -> trainerCourseBatchRepository.save(
+                    com.nest.app.identity.entity.TrainerCourseBatch.builder()
+                            .membershipId(membershipId).courseId(courseId).batchId(batchId).build()));
+        });
+    }
+
     private void saveCourseAssignment(UUID membershipId, Map<UUID, Set<String>> courseFeatures) {
         Map<UUID, BigDecimal> courseMap = new HashMap<>();
         courseFeatures.keySet().forEach(id -> courseMap.put(id, null));

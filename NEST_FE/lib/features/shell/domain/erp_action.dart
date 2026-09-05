@@ -50,9 +50,6 @@ class ErpAction {
 const kErpActions = <ErpAction>[
   ErpAction(icon: Icons.add_business_outlined, label: 'Academy Onboarding', route: '/erp/academies/new', superAdminOnly: true),
   ErpAction(icon: Icons.celebration_outlined, label: 'Event Creation', route: '/erp/events/new', requiredFeature: FeatureKeys.eventManagement),
-  // No requiredFeature - every Student/Trainer/Admin can open this to read/download; the screen
-  // itself gates create/edit/delete on SYLLABUS_EDIT internally (see SyllabusScreen's canEdit).
-  ErpAction(icon: Icons.menu_book_outlined, label: 'Course Materials', route: '/erp/syllabus'),
   ErpAction(icon: Icons.badge_outlined, label: 'About Instructor', route: '/profile'),
   // No adminOnly - every Student/Trainer/Admin can open this to view; the screen itself gates
   // editing on ABOUT_US_EDIT internally (see AcademyInfoScreen's canEdit).
@@ -60,7 +57,16 @@ const kErpActions = <ErpAction>[
   ErpAction(icon: Icons.auto_stories_outlined, label: 'Course Creation', route: '/erp/courses', adminOnly: true),
   ErpAction(icon: Icons.groups_2_outlined, label: 'Batch Creation', erpTabIndex: 1, requiredFeature: FeatureKeys.batchCreation),
   ErpAction(icon: Icons.event_note_outlined, label: 'Class Schedule', route: '/erp/scheduling', requiredFeature: FeatureKeys.batchScheduling),
-  ErpAction(icon: Icons.update_outlined, label: 'Class Reschedule', route: '/erp/scheduling/reschedule', requiredFeature: FeatureKeys.reschedule),
+  // Rescheduling no longer has a screen of its own - it is an action on the class it applies to,
+  // reached from the schedule feed. This entry stays because someone whose job is rescheduling
+  // looks for that word, and it lands them on the feed where the action lives.
+  ErpAction(icon: Icons.update_outlined, label: 'Class Reschedule', route: '/erp/scheduling', requiredFeature: FeatureKeys.reschedule),
+  // The single materials feature. It absorbed the old course-wide 'Course Materials' syllabus in
+  // V29 - the two were the same idea, and a file lives on a batch.
+  //
+  // No requiredFeature: every Student, Trainer and Admin opens this to read and download. The
+  // screen gates upload, edit and delete on SYLLABUS_EDIT internally.
+  ErpAction(icon: Icons.folder_shared_outlined, label: 'Study Material', route: '/erp/study-materials'),
   ErpAction(icon: Icons.person_add_alt_outlined, label: 'User Creation', route: '/erp/students/new',
       anyOfFeatures: [FeatureKeys.studentRegistration, FeatureKeys.trainerRegistration]),
   ErpAction(icon: Icons.grid_view_outlined, label: 'Dashboard', erpTabIndex: 0),

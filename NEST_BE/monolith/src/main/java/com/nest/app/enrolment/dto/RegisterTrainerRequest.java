@@ -28,6 +28,10 @@ public record RegisterTrainerRequest(
         String city,
         String state,
         Integer yearsOfExperience,
-        @NotEmpty Map<UUID, Set<String>> courseFeatures
+        @NotEmpty Map<UUID, Set<String>> courseFeatures,
+        /** Per course, which batches the grants above apply to. An absent or empty set means
+         * every batch on that course - the access a trainer had before batches could be named. */
+        Map<UUID, Set<UUID>> courseBatches,
+        PersonDetails details
 ) {
 }

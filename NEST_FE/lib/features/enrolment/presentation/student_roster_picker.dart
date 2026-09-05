@@ -1,16 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:nest_fe/core/providers/core_providers.dart';
 import 'package:nest_fe/core/widgets/async_value_view.dart';
+// studentsForCourseProvider lives with the API it calls - it was declared here until the batch
+// form needed it too, and two declarations of the same provider are two different caches.
 import 'package:nest_fe/features/enrolment/data/enrolment_api.dart';
-import 'package:nest_fe/features/enrolment/presentation/batches_screen.dart';
-
-/// Every active Student enrolled in a course - the roster picker source shared by batch creation
-/// (pre-selecting members) and batch editing (mapping/unmapping members).
-final studentsForCourseProvider = FutureProvider.autoDispose.family<List<StudentSummary>, String>((ref, courseId) {
-  ref.watch(activeMembershipIdProvider);
-  return ref.watch(enrolmentApiProvider).studentsForCourse(courseId);
-});
 
 /// Checkbox list of a course's enrolled students - the caller owns selection state (and thus
 /// decides what "checking" a row actually does: stage it for a new batch, or immediately

@@ -7,7 +7,7 @@ import 'package:nest_fe/core/design/calendar_modal.dart';
 import 'package:nest_fe/core/design/pressable.dart';
 import 'package:nest_fe/features/curriculum/data/curriculum_api.dart';
 import 'package:nest_fe/features/enrolment/data/batch.dart';
-import 'package:nest_fe/features/enrolment/presentation/batches_screen.dart';
+import 'package:nest_fe/features/enrolment/data/enrolment_api.dart';
 import 'package:nest_fe/features/fees/data/fee_summary.dart';
 import 'package:nest_fe/features/fees/presentation/all_transactions_screen.dart';
 import 'package:nest_fe/features/fees/presentation/fee_format.dart';

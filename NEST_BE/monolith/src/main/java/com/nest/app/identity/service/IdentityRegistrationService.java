@@ -197,6 +197,82 @@ public class IdentityRegistrationService {
         return membershipRepository.save(membership);
     }
 
+    /**
+     * Applies the enrolment form's extra profile fields to a freshly created (or existing) user.
+     *
+     * <p>Separate from the create methods rather than another dozen parameters on them: those are
+     * called from several flows that have no form behind them at all (self-signup, artist
+     * application), and widening their signatures would force every caller to pass nulls.
+     *
+     * <p>Null-safe field by field. An edit that sends only the fields it changed must not blank
+     * the rest, and a registration taken over a counter is routinely half-filled.
+     */
+    @Transactional
+    public User applyPersonDetails(User user, com.nest.app.enrolment.dto.PersonDetails details) {
+        if (details == null) {
+            return user;
+        }
+        if (details.firstName() != null) user.setFirstName(details.firstName());
+        if (details.lastName() != null) user.setLastName(details.lastName());
+        if (details.gender() != null) user.setGender(details.gender());
+        if (details.bloodGroup() != null) user.setBloodGroup(details.bloodGroup());
+        if (details.altPhone() != null) user.setAltPhone(details.altPhone());
+        if (details.photoUrl() != null) user.setPhotoUrl(details.photoUrl());
+
+        // addressLine1 maps onto the pre-existing single-line column, which stays the first line.
+        if (details.addressLine1() != null) user.setAddress(details.addressLine1());
+        if (details.addressLine2() != null) user.setAddressLine2(details.addressLine2());
+        if (details.landmark() != null) user.setLandmark(details.landmark());
+        if (details.city() != null) user.setCity(details.city());
+        if (details.district() != null) user.setDistrict(details.district());
+        if (details.state() != null) user.setState(details.state());
+        if (details.country() != null) user.setCountry(details.country());
+        if (details.pinCode() != null) user.setPinCode(details.pinCode());
+
+        if (details.guardianName() != null) user.setGuardianName(details.guardianName());
+        if (details.emergencyContact() != null) user.setEmergencyContact(details.emergencyContact());
+        if (details.qualification() != null) user.setQualification(details.qualification());
+
+        return userRepository.save(user);
+    }
+
+    /**
+     * The inverse of {@link #applyPersonDetails}: reads the extended profile back out for the edit
+     * form to pre-fill. Membership-scoped fields come from the membership, so a trainer teaching at
+     * two academies gets this academy's joining date and salary, not the other one's.
+     */
+    public com.nest.app.enrolment.dto.PersonDetails personDetailsOf(User user, AcademyMembership membership) {
+        return new com.nest.app.enrolment.dto.PersonDetails(
+                user.getFirstName(), user.getLastName(), user.getGender(), user.getBloodGroup(),
+                user.getAltPhone(), user.getPhotoUrl(),
+                user.getAddress(), user.getAddressLine2(), user.getLandmark(), user.getCity(),
+                user.getDistrict(), user.getState(), user.getCountry(), user.getPinCode(),
+                user.getGuardianName(), user.getEmergencyContact(), user.getQualification(),
+                membership == null ? null : membership.getSalary(),
+                membership == null ? null : membership.getJoiningDate());
+    }
+
+    /** Stamps the membership with when this person joined THIS academy, defaulting to today. */
+    @Transactional
+    public void setJoiningDate(AcademyMembership membership, java.time.LocalDate joiningDate) {
+        membership.setJoiningDate(joiningDate != null ? joiningDate : java.time.LocalDate.now());
+        membershipRepository.save(membership);
+    }
+
+    /**
+     * Records what this academy pays this trainer. A null salary is left untouched rather than
+     * cleared - the field is optional on the form, and a form submitted without it should not
+     * erase a figure someone entered earlier.
+     */
+    @Transactional
+    public void setSalary(AcademyMembership membership, java.math.BigDecimal salary) {
+        if (salary == null) {
+            return;
+        }
+        membership.setSalary(salary);
+        membershipRepository.save(membership);
+    }
+
     /** Cascading delegation (PRD 3.5) is enforced by the CALLER, which must pass a subset of its
      * own held features - this method just persists whatever set it's given. */
     @Transactional

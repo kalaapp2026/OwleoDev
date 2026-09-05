@@ -56,4 +56,36 @@ public class CourseFeatureGuard {
         return courseFeatureGrantRepository
                 .existsByMembershipIdAndCourseIdAndFeatureKey(membership.membershipId(), courseId, featureKey);
     }
+
+    /**
+     * Which courses the caller may see for {@code featureKey}, or empty for "no restriction".
+     *
+     * <p>The list-endpoint counterpart to {@link #hasCourseFeature}. That method answers "may I
+     * touch this one course?", which protects writes; this answers "which courses belong on my
+     * screen at all?", which is what stops a Trainer granted Attendance on Guitar from seeing
+     * every other course's classes listed in front of them.
+     *
+     * <p>Returns {@link Optional#empty()} rather than the full academy list for Admins and Super
+     * Admins deliberately: the caller then skips filtering entirely instead of building and
+     * intersecting a set that was never going to exclude anything.
+     */
+    public java.util.Optional<java.util.Set<UUID>> visibleCourseIds(String featureKey) {
+        NestPrincipal principal = TenantContext.require();
+        if (principal.isSuperAdmin()) {
+            return java.util.Optional.empty();
+        }
+        MembershipClaim membership = principal.activeMembership()
+                .orElseThrow(() -> new ForbiddenException("Request has no active academy membership"));
+        if (membership.roleType() == Role.ACADEMY_ADMIN) {
+            return java.util.Optional.empty();
+        }
+
+        // A Trainer with no grant for this feature gets an empty set, not "everything" - the
+        // difference between an empty screen and a full one they shouldn't be looking at.
+        return java.util.Optional.of(
+                courseFeatureGrantRepository.findByMembershipId(membership.membershipId()).stream()
+                        .filter(g -> g.getFeatureKey().equals(featureKey))
+                        .map(g -> g.getCourseId())
+                        .collect(java.util.stream.Collectors.toSet()));
+    }
 }

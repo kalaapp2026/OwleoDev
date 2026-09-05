@@ -17,6 +17,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.lenient;
@@ -76,5 +77,56 @@ class CourseFeatureGuardTest {
         lenient().when(repo.existsByMembershipIdAndCourseIdAndFeatureKey(membershipId, dance, FeatureKey.ATTENDANCE)).thenReturn(false);
 
         assertThatCode(() -> guard.assertCourseFeature(dance, FeatureKey.ATTENDANCE)).doesNotThrowAnyException();
+    }
+
+    // ------------------------------------------------------------------
+    // visibleCourseIds - what belongs on a caller's SCREEN, as opposed to
+    // assertCourseFeature, which is what they may WRITE to.
+    // ------------------------------------------------------------------
+
+    private com.nest.app.identity.entity.CourseFeatureGrant grant(UUID membershipId, UUID courseId, String feature) {
+        return com.nest.app.identity.entity.CourseFeatureGrant.builder()
+                .id(UUID.randomUUID()).membershipId(membershipId).courseId(courseId).featureKey(feature).build();
+    }
+
+    @Test
+    void aTrainerSeesOnlyTheCoursesTheyHoldTheFeatureOn() {
+        guard = new CourseFeatureGuard(repo);
+        UUID membershipId = actingAsTrainer();
+        when(repo.findByMembershipId(membershipId)).thenReturn(List.of(
+                grant(membershipId, guitar, FeatureKey.ATTENDANCE),
+                // A grant on a different feature must not widen what they see for this one.
+                grant(membershipId, dance, FeatureKey.FEES_ENTRY)));
+
+        var visible = guard.visibleCourseIds(FeatureKey.ATTENDANCE);
+
+        assertThat(visible).isPresent();
+        assertThat(visible.get()).containsExactly(guitar);
+    }
+
+    @Test
+    void aTrainerWithNoGrantForTheFeatureSeesNothing() {
+        // The dangerous failure mode: an empty grant list must mean an empty screen, never an
+        // unrestricted one.
+        guard = new CourseFeatureGuard(repo);
+        UUID membershipId = actingAsTrainer();
+        when(repo.findByMembershipId(membershipId)).thenReturn(List.of());
+
+        var visible = guard.visibleCourseIds(FeatureKey.ATTENDANCE);
+
+        assertThat(visible).isPresent();
+        assertThat(visible.get()).isEmpty();
+    }
+
+    @Test
+    void anAdminIsUnrestrictedRatherThanGivenAnExplicitList() {
+        // Empty Optional means "no filter" - distinct from an empty Set, which means "nothing".
+        // Conflating the two is precisely how this leaks or blanks.
+        guard = new CourseFeatureGuard(repo);
+        UUID membershipId = UUID.randomUUID();
+        MembershipClaim claim = new MembershipClaim(membershipId, UUID.randomUUID(), "Natyalaya", Role.ACADEMY_ADMIN, Set.of(), Set.of());
+        TenantContext.set(new NestPrincipal(UUID.randomUUID(), "meera", Role.ACADEMY_ADMIN, List.of(claim), membershipId));
+
+        assertThat(guard.visibleCourseIds(FeatureKey.ATTENDANCE)).isEmpty();
     }
 }

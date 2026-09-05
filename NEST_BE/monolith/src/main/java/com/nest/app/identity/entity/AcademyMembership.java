@@ -67,6 +67,26 @@ public class AcademyMembership {
     @Builder.Default
     private MembershipStatus status = MembershipStatus.ACTIVE;
 
+    /**
+     * The date this person joined THIS academy.
+     *
+     * <p>A property of the membership rather than the user: the same person can join a second
+     * academy years later, and {@code users.createdAt} answers a different question - when the
+     * account first existed anywhere.
+     */
+    @Column(name = "joining_date")
+    private java.time.LocalDate joiningDate;
+
+    /**
+     * What this academy pays this trainer, per month. Null means "not recorded", which is
+     * different from zero - the registration form leaves it optional.
+     *
+     * <p>Lives here rather than on the user because the same trainer can teach at two academies
+     * for two different amounts, and neither should be able to read the other's figure.
+     */
+    @Column(name = "salary")
+    private java.math.BigDecimal salary;
+
     @Column(name = "created_by")
     private UUID createdBy;
 

@@ -1,8 +1,48 @@
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:nest_fe/core/network/dio_client.dart';
+import 'package:nest_fe/core/providers/core_providers.dart';
 import 'package:nest_fe/features/enrolment/data/batch.dart';
+import 'package:nest_fe/features/enrolment/data/person_details.dart';
+
+final enrolmentApiProvider = Provider((ref) => EnrolmentApi(ref.watch(dioClientProvider)));
+
+/// Every batch in the active academy - the batch list screen. Re-fetches when the caller
+/// switches which academy membership is active, not just on app start.
+final allBatchesProvider = FutureProvider.autoDispose((ref) {
+  ref.watch(activeMembershipIdProvider);
+  return ref.watch(enrolmentApiProvider).allBatches();
+});
+
+/// One course's batches - the batch dropdown on Attendance, Fees and Scheduling, all of which
+/// scope to a course first.
+final batchesForCourseProvider =
+    FutureProvider.autoDispose.family<List<Batch>, String>((ref, courseId) {
+  ref.watch(activeMembershipIdProvider);
+  return ref.watch(enrolmentApiProvider).batchesForCourse(courseId);
+});
+
+/// The roster picker's source. Keyed by course because a batch can only contain students already
+/// enrolled in the course it belongs to.
+final studentsForCourseProvider =
+    FutureProvider.autoDispose.family<List<StudentSummary>, String>((ref, courseId) {
+  ref.watch(activeMembershipIdProvider);
+  return ref.watch(enrolmentApiProvider).studentsForCourse(courseId);
+});
+
+final trainersForCourseProvider =
+    FutureProvider.autoDispose.family<List<TrainerSummary>, String>((ref, courseId) {
+  ref.watch(activeMembershipIdProvider);
+  return ref.watch(enrolmentApiProvider).trainersForCourse(courseId);
+});
+
+/// Which students are currently in a batch, for pre-selecting the roster picker on edit.
+final batchMembersProvider =
+    FutureProvider.autoDispose.family<List<String>, String>((ref, batchId) {
+  return ref.watch(enrolmentApiProvider).members(batchId);
+});
 
 class StudentRegistrationResult {
   final String userId;
@@ -133,6 +173,14 @@ class TrainerDetail {
   final int? yearsOfExperience;
   final Map<String, Set<String>> courseFeatures;
 
+  /// The extended profile fields (V26/V27), so opening the edit form does not silently drop
+  /// everything the registration form collected.
+  final PersonDetails? details;
+
+  /// Per course, the batches this trainer is scoped to. A course absent from the map means
+  /// every batch on it.
+  final Map<String, Set<String>> courseBatches;
+
   TrainerDetail({
     required this.userId,
     required this.membershipId,
@@ -146,6 +194,8 @@ class TrainerDetail {
     required this.state,
     required this.yearsOfExperience,
     required this.courseFeatures,
+    required this.details,
+    required this.courseBatches,
   });
 
   factory TrainerDetail.fromJson(Map<String, dynamic> json) => TrainerDetail(
@@ -161,6 +211,12 @@ class TrainerDetail {
         state: json['state'] as String?,
         yearsOfExperience: json['yearsOfExperience'] as int?,
         courseFeatures: ((json['courseFeatures'] as Map?) ?? {}).map(
+          (k, v) => MapEntry(k as String, Set<String>.from(v as List)),
+        ),
+        details: json['details'] == null
+            ? null
+            : PersonDetails.fromJson(json['details'] as Map<String, dynamic>),
+        courseBatches: ((json['courseBatches'] as Map?) ?? {}).map(
           (k, v) => MapEntry(k as String, Set<String>.from(v as List)),
         ),
       );
@@ -180,6 +236,10 @@ class StudentDetail {
   final String? state;
   final Map<String, num?> courseFees;
 
+  /// The extended profile fields (V26/V27), so opening the edit form does not silently drop
+  /// everything the registration form collected.
+  final PersonDetails? details;
+
   StudentDetail({
     required this.userId,
     required this.membershipId,
@@ -192,6 +252,7 @@ class StudentDetail {
     required this.city,
     required this.state,
     required this.courseFees,
+    required this.details,
   });
 
   factory StudentDetail.fromJson(Map<String, dynamic> json) => StudentDetail(
@@ -208,6 +269,9 @@ class StudentDetail {
         courseFees: ((json['courseFees'] as Map?) ?? {}).map(
           (k, v) => MapEntry(k as String, v as num?),
         ),
+        details: json['details'] == null
+            ? null
+            : PersonDetails.fromJson(json['details'] as Map<String, dynamic>),
       );
 }
 
@@ -233,6 +297,10 @@ class EnrolmentApi {
     String? state,
     int? yearsOfExperience,
     required Map<String, Set<String>> courseFeatures,
+    /// Per course, which batches those grants apply to. An absent or empty set means every
+    /// batch on that course.
+    Map<String, Set<String>> courseBatches = const {},
+    PersonDetails? details,
   }) {
     return _client.callVoid(
       (dio) => dio.put('/trainers/$membershipId', data: {
@@ -245,6 +313,8 @@ class EnrolmentApi {
         'state': state,
         'yearsOfExperience': yearsOfExperience,
         'courseFeatures': courseFeatures.map((courseId, features) => MapEntry(courseId, features.toList())),
+        'courseBatches': courseBatches.map((courseId, batchIds) => MapEntry(courseId, batchIds.toList())),
+        'details': details?.toJson(),
       }),
     );
   }
@@ -266,6 +336,7 @@ class EnrolmentApi {
     String? city,
     String? state,
     required List<Map<String, dynamic>> courses,
+    PersonDetails? details,
   }) {
     return _client.callVoid(
       (dio) => dio.put('/students/$membershipId', data: {
@@ -277,6 +348,7 @@ class EnrolmentApi {
         'city': city,
         'state': state,
         'courses': courses,
+        'details': details?.toJson(),
       }),
     );
   }
@@ -291,6 +363,7 @@ class EnrolmentApi {
     String? city,
     String? state,
     required List<Map<String, dynamic>> courses, // [{courseId, fee}]
+    PersonDetails? details,
   }) {
     return _client.call(
       (dio) => dio.post('/students', data: {
@@ -303,6 +376,7 @@ class EnrolmentApi {
         'city': city,
         'state': state,
         'courses': courses,
+        'details': details?.toJson(),
       }),
       (data) => StudentRegistrationResult.fromJson(data as Map<String, dynamic>),
     );
@@ -343,6 +417,11 @@ class EnrolmentApi {
     String? state,
     int? yearsOfExperience,
     required Map<String, Set<String>> courseFeatures,
+
+    /// Per course, which batches those grants apply to. An absent or empty set for a course means
+    /// every batch on it - which is what a trainer assigned to the whole course gets.
+    Map<String, Set<String>> courseBatches = const {},
+    PersonDetails? details,
   }) {
     return _client.call(
       (dio) => dio.post('/trainers', data: {
@@ -356,6 +435,8 @@ class EnrolmentApi {
         'state': state,
         'yearsOfExperience': yearsOfExperience,
         'courseFeatures': courseFeatures.map((courseId, features) => MapEntry(courseId, features.toList())),
+        'courseBatches': courseBatches.map((courseId, batchIds) => MapEntry(courseId, batchIds.toList())),
+        'details': details?.toJson(),
       }),
       (data) => TrainerRegistrationResult.fromJson(data as Map<String, dynamic>),
     );
@@ -377,24 +458,86 @@ class EnrolmentApi {
     );
   }
 
+  /// Every batch in the active academy, across all its courses - the batch list screen's source.
+  /// Distinct from [batchesForMembership], which answers "which batches is this person in".
+  Future<List<Batch>> allBatches() {
+    return _client.call(
+      (dio) => dio.get('/batches/all'),
+      (data) => (data as List).map((e) => Batch.fromJson(e as Map<String, dynamic>)).toList(),
+    );
+  }
+
+  Future<Batch> getBatch(String batchId) {
+    return _client.call(
+      (dio) => dio.get('/batches/$batchId'),
+      (data) => Batch.fromJson(data as Map<String, dynamic>),
+    );
+  }
+
+  /// Creates the batch and enrols its roster in one call, so a dropped request can't leave a
+  /// batch that exists but has none of the students the admin just picked.
   Future<Batch> createBatch({
     required String courseId,
     required String name,
     String? description,
-    required String batchType,
-    String? trainerMembershipId,
+    required BatchType batchType,
+    required List<String> trainerMembershipIds,
+    DateTime? startDate,
+    DateTime? endDate,
+    List<String> studentMembershipIds = const [],
   }) {
     return _client.call(
       (dio) => dio.post('/batches', data: {
         'courseId': courseId,
         'name': name,
         'description': description,
-        'batchType': batchType,
-        'trainerMembershipId': trainerMembershipId,
+        'batchType': batchType.wire,
+        'trainerMembershipIds': trainerMembershipIds,
+        'startDate': _isoDate(startDate),
+        'endDate': _isoDate(endDate),
+        'studentMembershipIds': studentMembershipIds,
       }),
       (data) => Batch.fromJson(data as Map<String, dynamic>),
     );
   }
+
+  /// [studentMembershipIds] is the complete roster - anyone absent is unmapped server-side.
+  Future<Batch> updateBatch(
+    String batchId, {
+    required String name,
+    String? description,
+    required List<String> trainerMembershipIds,
+    DateTime? startDate,
+    DateTime? endDate,
+    required List<String> studentMembershipIds,
+  }) {
+    return _client.call(
+      (dio) => dio.put('/batches/$batchId', data: {
+        'name': name,
+        'description': description,
+        'trainerMembershipIds': trainerMembershipIds,
+        'startDate': _isoDate(startDate),
+        'endDate': _isoDate(endDate),
+        'studentMembershipIds': studentMembershipIds,
+      }),
+      (data) => Batch.fromJson(data as Map<String, dynamic>),
+    );
+  }
+
+  Future<Batch> setBatchStatus(String batchId, String status) {
+    return _client.call(
+      (dio) => dio.patch('/batches/$batchId/status', queryParameters: {'status': status}),
+      (data) => Batch.fromJson(data as Map<String, dynamic>),
+    );
+  }
+
+  /// `yyyy-MM-dd`, which is what LocalDate deserialises from. Sending a full ISO instant here
+  /// would be rejected, and sending the local date-time would shift the day across timezones.
+  static String? _isoDate(DateTime? date) => date == null
+      ? null
+      : '${date.year.toString().padLeft(4, '0')}-'
+          '${date.month.toString().padLeft(2, '0')}-'
+          '${date.day.toString().padLeft(2, '0')}';
 
   /// Trainers for this course. [includeInactive] false (batch picker) drops course-deactivated
   /// trainers; true (Users management screen) keeps them so they can be reactivated.

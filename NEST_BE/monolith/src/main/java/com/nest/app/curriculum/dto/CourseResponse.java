@@ -6,6 +6,7 @@ import com.nest.app.curriculum.entity.FeeCycle;
 import com.nest.app.curriculum.entity.FeeModel;
 
 import java.math.BigDecimal;
+import java.util.Set;
 import java.util.UUID;
 
 public record CourseResponse(
@@ -26,6 +27,10 @@ public record CourseResponse(
         FeeCycle feeCycle,
         String thumbnailUrl,
         CourseStatus status,
-        Integer billingDayOfMonth
+        Integer billingDayOfMonth,
+        Integer dueDayOfMonth,
+        /** Expanded from the stored comma-separated column so clients get a real array. */
+        Set<String> paymentMethods,
+        String iconKey
 ) {
 }

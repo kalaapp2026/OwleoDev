@@ -52,6 +52,7 @@ class AttachedSelect<T> extends StatefulWidget {
     this.optionBuilder,
     this.emptyLabel = 'No options',
     this.trailingAction,
+    this.triggerBuilder,
   });
 
   final String label;
@@ -91,6 +92,15 @@ class AttachedSelect<T> extends StatefulWidget {
 
   /// A row pinned under the list - the "+ Create fee type" affordance.
   final Widget? trailingAction;
+
+  /// Replaces the default labelled tile with arbitrary trigger art, given the current open state
+  /// and a toggle callback.
+  ///
+  /// The panel's anchoring, measurement and controlled-open behaviour are unchanged - only the
+  /// thing you tap is swapped. Needed because the same dropdown appears as a filter chip, a bare
+  /// icon button and a bordered tile with a floating label depending on the screen, and those
+  /// differ by far more than [label] and [placeholder] can express.
+  final Widget Function(BuildContext context, bool isOpen, VoidCallback toggle)? triggerBuilder;
 
   @override
   State<AttachedSelect<T>> createState() => _AttachedSelectState<T>();
@@ -192,15 +202,26 @@ class _AttachedSelectState<T> extends State<AttachedSelect<T>> {
           _isOpen ? _buildOverlay(overlayContext) : const SizedBox.shrink(),
       child: CompositedTransformTarget(
         link: _link,
-        child: _Trigger(
-          label: widget.label,
-          text: widget.value == null ? widget.placeholder : widget.labelOf(widget.value as T),
-          hasValue: widget.value != null,
-          locked: widget.locked,
-          enabled: widget.enabled,
-          open: _isOpen,
-          onTap: () => _setOpen(!_isOpen),
-        ),
+        child: widget.triggerBuilder != null
+            // A locked or disabled selector must not open however it's drawn, so the guard lives
+            // here rather than being each custom trigger's job to remember.
+            ? widget.triggerBuilder!(
+                context,
+                _isOpen,
+                () {
+                  if (widget.locked || !widget.enabled) return;
+                  _setOpen(!_isOpen);
+                },
+              )
+            : _Trigger(
+                label: widget.label,
+                text: widget.value == null ? widget.placeholder : widget.labelOf(widget.value as T),
+                hasValue: widget.value != null,
+                locked: widget.locked,
+                enabled: widget.enabled,
+                open: _isOpen,
+                onTap: () => _setOpen(!_isOpen),
+              ),
       ),
     );
   }

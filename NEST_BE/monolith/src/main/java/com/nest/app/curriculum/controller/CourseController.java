@@ -41,9 +41,16 @@ public class CourseController {
      * mapped to (e.g. the Fees screen's "look up a student" course picker) - without it, every
      * active course in the academy is returned, same as before. */
     @GetMapping("/courses")
-    public List<CourseResponse> listActive(@RequestParam(required = false) UUID membershipId) {
+    public List<CourseResponse> listActive(@RequestParam(required = false) UUID membershipId,
+                                            @RequestParam(required = false) String featureKey) {
         if (membershipId != null) {
             return courseService.listForMembership(membershipId);
+        }
+        // featureKey narrows to the courses this caller can act on for that feature - what the
+        // Batch, Schedule and Attendance pickers ask for, so a Trainer is never offered a course
+        // they'd only get a 403 on. Absent, the behaviour is unchanged: every active course.
+        if (featureKey != null && !featureKey.isBlank()) {
+            return courseService.listActiveForFeature(featureKey);
         }
         return courseService.listActiveForActiveAcademy();
     }

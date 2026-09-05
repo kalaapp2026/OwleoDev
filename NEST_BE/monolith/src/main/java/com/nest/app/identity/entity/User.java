@@ -73,6 +73,60 @@ public class User {
     private String city;
     private String state;
 
+    /**
+     * The form's separate First/Last fields, kept alongside {@link #fullName} rather than
+     * replacing it.
+     *
+     * <p>fullName stays the authoritative display value everywhere - notifications, audit rows,
+     * every existing screen. These exist so editing a person re-fills the two fields exactly as
+     * they were typed, instead of guessing where to split a name that may have any number of
+     * parts.
+     */
+    @Column(name = "first_name")
+    private String firstName;
+
+    @Column(name = "last_name")
+    private String lastName;
+
+    private String gender;
+
+    @Column(name = "blood_group", length = 5)
+    private String bloodGroup;
+
+    /** Encrypted for the same reason as {@link #phone} - an alternate number identifies a person
+     * exactly as well as the main one. Not hashed: nothing logs in with it. */
+    @Convert(converter = EncryptedStringConverter.class)
+    @Column(name = "alt_phone", length = 512)
+    private String altPhone;
+
+    @Column(name = "photo_url")
+    private String photoUrl;
+
+    // --- Structured address. The single-line `address` above remains the first line. ---
+
+    @Convert(converter = EncryptedStringConverter.class)
+    @Column(name = "address_line2")
+    private String addressLine2;
+
+    private String landmark;
+    private String district;
+    private String country;
+
+    @Column(name = "pin_code", length = 12)
+    private String pinCode;
+
+    /** Student-only. */
+    @Column(name = "guardian_name")
+    private String guardianName;
+
+    @Convert(converter = EncryptedStringConverter.class)
+    @Column(name = "emergency_contact", length = 512)
+    private String emergencyContact;
+
+    /** Trainer-only. Free text: the range runs from "Trinity Grade 8" to "Bharatanatyam
+     * Visharad", and no fixed vocabulary covers both. */
+    private String qualification;
+
     /** Trainer-specific; null for every other role - lives on the shared table anyway (same
      * pattern as dob/address/city/state, which are Student-specific and equally optional here). */
     @Column(name = "years_of_experience")

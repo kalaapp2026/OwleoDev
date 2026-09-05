@@ -13,6 +13,8 @@ class AppPrimaryButton extends StatelessWidget {
     this.onPressed,
     this.icon,
     this.busy = false,
+    this.background,
+    this.foreground,
   });
 
   final String label;
@@ -23,10 +25,17 @@ class AppPrimaryButton extends StatelessWidget {
   /// it doesn't shift for the duration of a request.
   final bool busy;
 
+  /// Overrides the teal for a button whose action isn't the ordinary happy path - the red
+  /// "Cancel class" confirm being the case this exists for. Only applies while enabled: the
+  /// disabled treatment stays uniform so "unavailable" always looks the same.
+  final Color? background;
+  final Color? foreground;
+
   @override
   Widget build(BuildContext context) {
     final palette = context.palette;
     final enabled = onPressed != null && !busy;
+    final onColor = foreground ?? palette.onPrimary;
 
     return Pressable(
       onTap: enabled ? onPressed : null,
@@ -34,7 +43,7 @@ class AppPrimaryButton extends StatelessWidget {
         width: double.infinity,
         padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xxl, vertical: AppSpacing.xl),
         decoration: BoxDecoration(
-          color: enabled ? palette.primary : palette.surfaceHigh,
+          color: enabled ? (background ?? palette.primary) : palette.surfaceHigh,
           borderRadius: AppRadii.all(AppRadii.xl),
         ),
         child: Row(
@@ -45,12 +54,12 @@ class AppPrimaryButton extends StatelessWidget {
                   SizedBox(
                     height: 18,
                     width: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: palette.onPrimary),
+                    child: CircularProgressIndicator(strokeWidth: 2, color: onColor),
                   ),
                 ]
               : [
                   if (icon != null) ...[
-                    Icon(icon, size: 16, color: enabled ? palette.onPrimary : palette.textFaint),
+                    Icon(icon, size: 16, color: enabled ? onColor : palette.textFaint),
                     const SizedBox(width: AppSpacing.sm),
                   ],
                   Flexible(
@@ -61,7 +70,7 @@ class AppPrimaryButton extends StatelessWidget {
                       style: TextStyle(
                         fontSize: AppType.xxl,
                         fontWeight: AppType.bold,
-                        color: enabled ? palette.onPrimary : palette.textFaint,
+                        color: enabled ? onColor : palette.textFaint,
                       ),
                     ),
                   ),

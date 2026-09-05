@@ -149,8 +149,14 @@ public class StudentRegistrationService {
                     request.username(), request.fullName(), request.phone(), request.email(),
                     request.dob(), request.address(), request.city(), request.state(), Role.STUDENT);
             User student = created.user();
+            // Called for its effect on the entity rather than its return value: it mutates and
+            // saves the same instance, so reassigning from it would add nothing except a
+            // dependency on the return being non-null.
+            identityRegistrationService.applyPersonDetails(student, request.details());
             AcademyMembership membership = identityRegistrationService.createMembership(
                     student.getId(), academyId, academyName, Role.STUDENT, MembershipStatus.ACTIVE, registeredBy);
+            identityRegistrationService.setJoiningDate(membership,
+                    request.details() == null ? null : request.details().joiningDate());
             identityRegistrationService.addCourseMap(membership.getId(), courseFees);
             return new StudentResponse(student.getId(), membership.getId(), student.getUsername(), student.getFullName(),
                     courseFees, false, created.temporaryPassword());
@@ -227,7 +233,8 @@ public class StudentRegistrationService {
         courseMapRepository.findByMembershipId(membershipId).forEach(cm -> courseFees.put(cm.getCourseId(), cm.getAgreedFee()));
         return new StudentDetailResponse(student.getId(), membership.getId(), student.getUsername(), student.getFullName(),
                 student.getPhone(), student.getEmail(), student.getDob(), student.getAddress(), student.getCity(),
-                student.getState(), courseFees);
+                student.getState(), courseFees,
+                identityRegistrationService.personDetailsOf(student, membership));
     }
 
     @Transactional
@@ -241,6 +248,12 @@ public class StudentRegistrationService {
         identityRegistrationService.reconcileCourseMap(membershipId, courseFees);
 
         User student = userRepository.findById(membership.getUserId()).orElseThrow();
+        // After the re-read, not before: updateStudentProfile saved its own copy of the entity, and
+        // applying the details to a stale one would write the old name back over the new one.
+        identityRegistrationService.applyPersonDetails(student, request.details());
+        if (request.details() != null) {
+            identityRegistrationService.setJoiningDate(membership, request.details().joiningDate());
+        }
         return new StudentResponse(student.getId(), membership.getId(), student.getUsername(), student.getFullName(),
                 courseFees, false, null);
     }

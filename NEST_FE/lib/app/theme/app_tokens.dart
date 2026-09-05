@@ -48,6 +48,12 @@ class AppPalette extends ThemeExtension<AppPalette> {
     required this.partialSoft,
     required this.due,
     required this.dueSoft,
+    required this.violet,
+    required this.violetSoft,
+    required this.coral,
+    required this.coralSoft,
+    required this.magenta,
+    required this.magentaSoft,
   });
 
   /// Page background - sits behind [surface].
@@ -109,6 +115,17 @@ class AppPalette extends ThemeExtension<AppPalette> {
   final Color due;
   final Color dueSoft;
 
+  // --- Course-category accents. Decorative, not semantic: these identify which discipline a
+  // course belongs to (Fine Arts / Literature / Theatre) and must never be read as a status.
+  // Dance borrows [gold], Music borrows [primary] and Fashion borrows [gateway], so only these
+  // three needed adding - see AppCategoryMeta.
+  final Color violet;
+  final Color violetSoft;
+  final Color coral;
+  final Color coralSoft;
+  final Color magenta;
+  final Color magentaSoft;
+
   /// Exact values from the prototype. Do not "tidy" these - they were chosen together and the
   /// soft variants are tuned to sit on [surfaceRaised] specifically.
   static const dark = AppPalette(
@@ -142,6 +159,12 @@ class AppPalette extends ThemeExtension<AppPalette> {
     partialSoft: Color(0x24E8A93A),
     due: Color(0xFFFF6B4A),
     dueSoft: Color(0x29FF6B4A), // 16%
+    violet: Color(0xFFA78BFA),
+    violetSoft: Color(0x24A78BFA),
+    coral: Color(0xFFFF8A5B),
+    coralSoft: Color(0x24FF8A5B),
+    magenta: Color(0xFFF0629B),
+    magentaSoft: Color(0x24F0629B),
   );
 
   /// DERIVED, not from the prototype - the prototype is dark-only, but the app already ships a
@@ -183,6 +206,12 @@ class AppPalette extends ThemeExtension<AppPalette> {
     partialSoft: Color(0x1FB07A16),
     due: Color(0xFFD24520),
     dueSoft: Color(0x1FD24520),
+    violet: Color(0xFF6D4AC4),
+    violetSoft: Color(0x1F6D4AC4),
+    coral: Color(0xFFC8552A),
+    coralSoft: Color(0x1FC8552A),
+    magenta: Color(0xFFC2306B),
+    magentaSoft: Color(0x1FC2306B),
   );
 
   @override
@@ -217,6 +246,12 @@ class AppPalette extends ThemeExtension<AppPalette> {
     Color? partialSoft,
     Color? due,
     Color? dueSoft,
+    Color? violet,
+    Color? violetSoft,
+    Color? coral,
+    Color? coralSoft,
+    Color? magenta,
+    Color? magentaSoft,
   }) {
     return AppPalette(
       bg: bg ?? this.bg,
@@ -249,6 +284,12 @@ class AppPalette extends ThemeExtension<AppPalette> {
       partialSoft: partialSoft ?? this.partialSoft,
       due: due ?? this.due,
       dueSoft: dueSoft ?? this.dueSoft,
+      violet: violet ?? this.violet,
+      violetSoft: violetSoft ?? this.violetSoft,
+      coral: coral ?? this.coral,
+      coralSoft: coralSoft ?? this.coralSoft,
+      magenta: magenta ?? this.magenta,
+      magentaSoft: magentaSoft ?? this.magentaSoft,
     );
   }
 
@@ -287,6 +328,12 @@ class AppPalette extends ThemeExtension<AppPalette> {
       partialSoft: c(partialSoft, other.partialSoft),
       due: c(due, other.due),
       dueSoft: c(dueSoft, other.dueSoft),
+      violet: c(violet, other.violet),
+      violetSoft: c(violetSoft, other.violetSoft),
+      coral: c(coral, other.coral),
+      coralSoft: c(coralSoft, other.coralSoft),
+      magenta: c(magenta, other.magenta),
+      magentaSoft: c(magentaSoft, other.magentaSoft),
     );
   }
 }

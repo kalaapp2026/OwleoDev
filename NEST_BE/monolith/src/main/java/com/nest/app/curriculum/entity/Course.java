@@ -102,6 +102,26 @@ public class Course {
     @Column(name = "billing_day_of_month")
     private Integer billingDayOfMonth;
 
+    /** Day of month (1-31) an unpaid slip becomes overdue, which is what flips a student's status
+     * to "Due" and triggers the payment reminder. Distinct from billingDayOfMonth (when the slip
+     * is raised) - a course typically bills on the 5th and falls due on the 10th. */
+    @Column(name = "due_day_of_month")
+    private Integer dueDayOfMonth;
+
+    /** Accepted payment methods as a comma-separated set of CASH / UPI / GATEWAY. Persisted
+     * inline rather than as a child table - the set is fixed and tiny, and is only ever read
+     * alongside the course itself. Use {@link #getPaymentMethodSet()} rather than splitting the
+     * raw string at call sites. */
+    @Column(name = "payment_methods", nullable = false)
+    @Builder.Default
+    private String paymentMethods = "CASH";
+
+    /** Which of the app's icons this course renders with. Keys come from the frontend's icon set
+     * (e.g. {@code guitar}, {@code bharatanatyam}); the backend stores but never interprets them,
+     * so adding art needs no migration here. */
+    @Column(name = "icon_key")
+    private String iconKey;
+
     @Column(name = "thumbnail_url")
     private String thumbnailUrl;
 
@@ -117,4 +137,18 @@ public class Course {
     @UpdateTimestamp
     @Column(name = "updated_at")
     private Instant updatedAt;
+
+    /**
+     * The accepted payment methods as a set. Blank entries are dropped so a stray trailing comma
+     * can't produce an empty method name that no payment would ever match.
+     */
+    public java.util.Set<String> getPaymentMethodSet() {
+        if (paymentMethods == null || paymentMethods.isBlank()) {
+            return java.util.Set.of();
+        }
+        return java.util.Arrays.stream(paymentMethods.split(","))
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .collect(java.util.stream.Collectors.toCollection(java.util.LinkedHashSet::new));
+    }
 }

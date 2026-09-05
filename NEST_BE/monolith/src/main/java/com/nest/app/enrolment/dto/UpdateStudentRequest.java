@@ -20,6 +20,9 @@ public record UpdateStudentRequest(
         String address,
         String city,
         String state,
-        @NotEmpty List<CourseFeeSelection> courses
+        @NotEmpty List<CourseFeeSelection> courses,
+
+        /** The extended profile fields. Null leaves every one of them as it was. */
+        PersonDetails details
 ) {
 }

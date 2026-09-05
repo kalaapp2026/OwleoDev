@@ -7,7 +7,7 @@ import 'package:nest_fe/core/error/api_exception.dart';
 import 'package:nest_fe/core/providers/core_providers.dart';
 import 'package:nest_fe/core/widgets/app_notice.dart';
 import 'package:nest_fe/features/curriculum/data/curriculum_api.dart';
-import 'package:nest_fe/features/enrolment/presentation/student_roster_picker.dart';
+import 'package:nest_fe/features/enrolment/data/enrolment_api.dart';
 import 'package:nest_fe/features/fees/data/fee_transaction.dart';
 import 'package:nest_fe/features/fees/data/fees_api.dart';
 import 'package:share_plus/share_plus.dart';

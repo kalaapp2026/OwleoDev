@@ -64,4 +64,19 @@ public class ClassInstance {
 
     @Column(name = "original_instance_id")
     private UUID originalInstanceId;
+
+    /**
+     * Who is covering this one session. The batch's usual trainers are untouched - reading this
+     * instance tells you both who is actually teaching and, via the batch, who normally would.
+     */
+    @Column(name = "substitute_trainer_membership_id")
+    private UUID substituteTrainerMembershipId;
+
+    @Column(name = "substitution_reason")
+    private String substitutionReason;
+
+    /** Deliberately separate from {@link #rescheduleReason} - a session can be moved and then
+     * the moved session cancelled, and one shared column would lose the first explanation. */
+    @Column(name = "cancellation_reason")
+    private String cancellationReason;
 }

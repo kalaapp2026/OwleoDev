@@ -19,6 +19,9 @@ public record RegisterStudentRequest(
         String address,
         String city,
         String state,
-        @NotEmpty List<CourseFeeSelection> courses
+        @NotEmpty List<CourseFeeSelection> courses,
+        /** The rest of the enrolment form. Optional as a whole - an older client omits it and
+         * registration still works exactly as before. */
+        PersonDetails details
 ) {
 }
