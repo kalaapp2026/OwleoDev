@@ -82,7 +82,8 @@ class FeesApi {
   /// One student's fee position for a period across every course they're enrolled in.
   Future<StudentFeeProfile> feeProfile({required String membershipId, required String period}) {
     return _client.call(
-      (dio) => dio.get('/students//fee-profile', queryParameters: {'period': period}),
+      (dio) => dio.get('/students/$membershipId/fee-profile',
+          queryParameters: {'period': period}),
       (data) => StudentFeeProfile.fromJson(data as Map<String, dynamic>),
     );
   }
@@ -108,7 +109,7 @@ class FeesApi {
   /// the totals come back filtered to it.
   Future<StudentStatement> statement({required String membershipId, FeeCategory? category}) {
     return _client.call(
-      (dio) => dio.get('/students//statement',
+      (dio) => dio.get('/students/$membershipId/statement',
           queryParameters: {'category': ?category?.wire}),
       (data) => StudentStatement.fromJson(data as Map<String, dynamic>),
     );
@@ -119,7 +120,7 @@ class FeesApi {
   Future<List<int>> downloadStatement({required String membershipId, FeeCategory? category}) {
     return _client.call(
       (dio) => dio.get(
-        '/students//statement/report',
+        '/students/$membershipId/statement/report',
         queryParameters: {'category': ?category?.wire},
         options: Options(responseType: ResponseType.bytes),
       ),
@@ -170,7 +171,7 @@ class FeesApi {
   /// Every Other fee that applies to one student - shared types plus their own one-offs.
   Future<StudentOtherFees> studentOtherFees(String membershipId) {
     return _client.call(
-      (dio) => dio.get('/students//other-fees'),
+      (dio) => dio.get('/students/$membershipId/other-fees'),
       (data) => StudentOtherFees.fromJson(data as Map<String, dynamic>),
     );
   }
