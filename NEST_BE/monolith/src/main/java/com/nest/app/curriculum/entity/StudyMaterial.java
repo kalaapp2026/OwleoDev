@@ -73,6 +73,18 @@ public class StudyMaterial {
     @Builder.Default
     private StudyMaterialPermission permission = StudyMaterialPermission.DOWNLOADABLE;
 
+    /**
+     * Whether the whole batch sees this, or only the students named in
+     * {@code study_material_students}.
+     *
+     * <p>Defaults to ALL so every material uploaded before this column existed keeps meaning
+     * exactly what it meant.
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    @Builder.Default
+    private StudyMaterialVisibility visibility = StudyMaterialVisibility.ALL;
+
     /** The user who uploaded it, shown to students as "shared by". */
     @Column(name = "uploaded_by", nullable = false)
     private UUID uploadedBy;

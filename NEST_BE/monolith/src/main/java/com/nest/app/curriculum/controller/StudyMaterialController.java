@@ -32,9 +32,16 @@ public class StudyMaterialController {
         this.studyMaterialService = studyMaterialService;
     }
 
-    /** The home screen - every batch this caller can manage material for, with its file count. */
+    /**
+     * The home screen - every batch whose material this caller can see, with its file count.
+     *
+     * <p>Deliberately not gated by {@code @RequiresFeature}. It was, until Course Materials merged
+     * in and made this the one materials feature: the tile is now open to students, and a student
+     * holds no course grants at all, so the annotation would 403 exactly the people the screen
+     * exists for. The service scopes the list instead - editors by grant, readers by the batches
+     * they belong to or teach.
+     */
     @GetMapping("/study-materials/batches")
-    @RequiresFeature(FeatureKey.SYLLABUS_EDIT)
     public List<BatchMaterialSummary> batchSummaries() {
         return studyMaterialService.batchSummaries();
     }
