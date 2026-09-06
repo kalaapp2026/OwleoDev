@@ -9,7 +9,10 @@ import 'package:nest_fe/core/design/buttons.dart';
 import 'package:nest_fe/core/design/pressable.dart';
 import 'package:nest_fe/core/design/segmented_control.dart';
 import 'package:nest_fe/features/curriculum/data/study_material.dart';
+import 'package:nest_fe/core/design/people_picker_sheet.dart';
 import 'package:nest_fe/features/curriculum/data/study_material_api.dart';
+import 'package:nest_fe/features/enrolment/data/enrolment_api.dart';
+import 'package:nest_fe/features/enrolment/presentation/widgets/form_fields.dart';
 
 /// Cap borrowed from the prototype. A material's note is an orientation line on a list row, not
 /// a lesson plan.
@@ -42,6 +45,12 @@ class _UploadMaterialScreenState extends ConsumerState<UploadMaterialScreen> {
   /// Whether the admin has touched the permission control. Until they do, picking an audio file
   /// moves it to view-only on their behalf; after that their choice stands.
   late bool _permissionTouched = widget.existing != null;
+
+  late StudyMaterialVisibility _visibility =
+      widget.existing?.visibility ?? StudyMaterialVisibility.all;
+
+  /// Membership ids of the students a SELECTED material goes to.
+  late final Set<String> _studentIds = {...?widget.existing?.studentIds};
 
   /// Same idea for the title - derived from the filename until typed into.
   late bool _titleTouched = widget.existing != null;
@@ -109,11 +118,15 @@ class _UploadMaterialScreenState extends ConsumerState<UploadMaterialScreen> {
 
   bool get _valid =>
       _titleController.text.trim().isNotEmpty &&
-      (_isEditing || _bytes != null);
+      (_isEditing || _bytes != null) &&
+      // A restricted material with nobody picked would be shared with no one at all, which is
+      // never what was meant - and is invisible afterwards, since it shows up on no one's screen.
+      (_visibility == StudyMaterialVisibility.all || _studentIds.isNotEmpty);
 
   String _missing() {
     if (!_isEditing && _bytes == null) return 'Choose a file to upload.';
-    return 'Give this material a title.';
+    if (_titleController.text.trim().isEmpty) return 'Give this material a title.';
+    return 'Pick who this file is for.';
   }
 
   Future<void> _save() async {
@@ -129,6 +142,8 @@ class _UploadMaterialScreenState extends ConsumerState<UploadMaterialScreen> {
           title: _titleController.text.trim(),
           description: description.isEmpty ? null : description,
           permission: _permission,
+          visibility: _visibility,
+          studentIds: _studentIds,
         );
       } else {
         await api.upload(
@@ -138,6 +153,8 @@ class _UploadMaterialScreenState extends ConsumerState<UploadMaterialScreen> {
           title: _titleController.text.trim(),
           description: description.isEmpty ? null : description,
           permission: _permission,
+          visibility: _visibility,
+          studentIds: _studentIds,
         );
       }
       if (mounted) Navigator.of(context).pop(true);
@@ -220,6 +237,32 @@ class _UploadMaterialScreenState extends ConsumerState<UploadMaterialScreen> {
                         : palette.textFaint,
                   ),
                 ),
+              ],
+            ),
+          ),
+          _Field(
+            label: 'Who sees this',
+            hint: _visibility == StudyMaterialVisibility.all
+                ? 'Everyone in this batch will see it.'
+                : 'Only the students you pick will see it. The rest of the batch will not know '
+                    'it exists.',
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                AppSegmentedControl<StudyMaterialVisibility>(
+                  options: StudyMaterialVisibility.values,
+                  labelOf: (v) => v.label,
+                  isSelected: (v) => v == _visibility,
+                  activeColorOf: (context, v) => v == StudyMaterialVisibility.all
+                      ? context.palette.primary
+                      : context.palette.violet,
+                  activeTextColorOf: (context, _) => context.palette.onPrimary,
+                  onTap: (v) => setState(() => _visibility = v),
+                ),
+                if (_visibility == StudyMaterialVisibility.selected) ...[
+                  const SizedBox(height: AppSpacing.md),
+                  _studentPicker(palette),
+                ],
               ],
             ),
           ),
@@ -368,6 +411,87 @@ class _UploadMaterialScreenState extends ConsumerState<UploadMaterialScreen> {
 
   /// Explains the audio default rather than leaving it to look like a bug when the control moves
   /// on its own.
+  /// Chooses which students a restricted material goes to.
+  ///
+  /// Sourced from the batch roster rather than the course: a material belongs to one batch, and
+  /// naming someone outside it grants nothing - the server drops them.
+  Widget _studentPicker(AppPalette palette) {
+    final rosterAsync = ref.watch(batchMembersProvider(widget.summary.batchId));
+    final studentsAsync = widget.summary.courseId == null
+        ? const AsyncValue<List<StudentSummary>>.data([])
+        : ref.watch(studentsForCourseProvider(widget.summary.courseId!));
+
+    return rosterAsync.when(
+      loading: () => LinearProgressIndicator(
+          minHeight: 2,
+          backgroundColor: palette.surfaceHigh,
+          color: palette.violet),
+      error: (e, _) => Text("Couldn't load this batch's students.",
+          style: TextStyle(fontSize: AppType.sm, color: palette.notPaid)),
+      data: (memberIds) {
+        final members = memberIds.toSet();
+        final roster = (studentsAsync.valueOrNull ?? const <StudentSummary>[])
+            .where((s) => members.contains(s.membershipId))
+            .toList();
+
+        if (roster.isEmpty) {
+          return Text(
+            'Nobody is in this batch yet, so there is no one to pick. Add students to the '
+            'batch first.',
+            style: TextStyle(
+                fontSize: AppType.sm, color: palette.textFaint, height: 1.4),
+          );
+        }
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            PickerTile(
+              icon: Icons.people_outline,
+              value: _studentIds.isEmpty
+                  ? null
+                  : roster
+                      .where((s) => _studentIds.contains(s.membershipId))
+                      .map((s) => s.fullName)
+                      .join(', '),
+              placeholder: 'Pick the students',
+              accent: palette.violet,
+              trailing: _studentIds.isEmpty ? 'Select' : 'Edit',
+              onTap: () async {
+                final picked = await showPeoplePickerSheet(
+                  context: context,
+                  title: 'Who gets this file',
+                  people: roster
+                      .map((s) => PickablePerson(
+                            id: s.membershipId,
+                            name: s.fullName,
+                            subtitle: '@${s.username}',
+                          ))
+                      .toList(),
+                  initiallySelected: _studentIds,
+                  accentColor: palette.violet,
+                );
+                if (picked == null) return;
+                setState(() {
+                  _studentIds
+                    ..clear()
+                    ..addAll(picked);
+                });
+              },
+            ),
+            if (_studentIds.isEmpty) ...[
+              const SizedBox(height: AppSpacing.xs),
+              Text(
+                'Pick at least one student, or switch back to the whole batch.',
+                style: TextStyle(fontSize: AppType.sm, color: palette.notPaid),
+              ),
+            ],
+          ],
+        );
+      },
+    );
+  }
+
   Widget _audioNotice(AppPalette palette) {
     return Container(
       padding: const EdgeInsets.symmetric(

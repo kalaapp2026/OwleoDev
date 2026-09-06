@@ -10,6 +10,7 @@ import 'package:nest_fe/core/format/money.dart';
 import 'package:nest_fe/features/curriculum/data/study_material.dart';
 import 'package:nest_fe/features/curriculum/data/study_material_api.dart';
 import 'package:nest_fe/features/curriculum/presentation/batch_material_screen.dart';
+import 'package:nest_fe/features/curriculum/presentation/material_library_screen.dart';
 
 enum MaterialBatchSort {
   recent('Recently updated'),
@@ -108,9 +109,19 @@ class _StudyMaterialHomeScreenState extends ConsumerState<StudyMaterialHomeScree
                     children: [
                       _searchAndSort(palette),
                       const SizedBox(height: AppSpacing.lg),
-                      Align(
-                        alignment: Alignment.centerLeft,
-                        child: _categoryChip(palette),
+                      Row(
+                        children: [
+                          _categoryChip(palette),
+                          const Spacer(),
+                          // The libraries cut across batches. They sit here rather than as their
+                          // own tiles because the question they answer - "where is that track" -
+                          // only comes up once you are already looking for material.
+                          for (final type in StudyMaterialType.values) ...[
+                            _LibraryButton(type: type),
+                            if (type != StudyMaterialType.values.last)
+                              const SizedBox(width: AppSpacing.xs),
+                          ],
+                        ],
                       ),
                     ],
                   ),
@@ -440,6 +451,41 @@ class _BatchRow extends StatelessWidget {
               Icon(Icons.chevron_right, size: 16, color: palette.textFaint),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A shortcut into one of the cross-batch libraries.
+///
+/// Icon-only: three of them sit in a row beside the category filter, and labelled buttons would
+/// crowd out the filter itself on a phone.
+class _LibraryButton extends StatelessWidget {
+  const _LibraryButton({required this.type});
+
+  final StudyMaterialType type;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.palette;
+    final accent = type.color(palette);
+    return Tooltip(
+      message: '${type.label} library',
+      child: Pressable(
+        onTap: () => Navigator.of(context).push(MaterialPageRoute(
+          builder: (_) => MaterialLibraryScreen(fileType: type),
+        )),
+        child: Container(
+          height: 34,
+          width: 34,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: type.softColor(palette),
+            borderRadius: AppRadii.all(AppRadii.md),
+            border: Border.all(color: accent.withValues(alpha: 0.35)),
+          ),
+          child: Icon(type.icon, size: 15, color: accent),
         ),
       ),
     );

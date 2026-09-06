@@ -28,6 +28,11 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.time.Instant;
 import java.util.ArrayList;
+import com.nest.app.curriculum.entity.StudyMaterialStudent;
+import com.nest.app.curriculum.entity.StudyMaterialVisibility;
+import com.nest.app.curriculum.repository.MaterialPlaylistEntryRepository;
+import com.nest.app.curriculum.repository.StudyMaterialStudentRepository;
+
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -74,6 +79,8 @@ public class StudyMaterialService {
     private final UserRepository userRepository;
     private final FileStorageService fileStorageService;
     private final CourseFeatureGuard courseFeatureGuard;
+    private final StudyMaterialStudentRepository studyMaterialStudentRepository;
+    private final MaterialPlaylistEntryRepository playlistEntryRepository;
 
     public StudyMaterialService(StudyMaterialRepository studyMaterialRepository,
                                  BatchRepository batchRepository,
@@ -81,7 +88,9 @@ public class StudyMaterialService {
                                  CourseRepository courseRepository,
                                  UserRepository userRepository,
                                  FileStorageService fileStorageService,
-                                 CourseFeatureGuard courseFeatureGuard) {
+                                 CourseFeatureGuard courseFeatureGuard,
+                                 StudyMaterialStudentRepository studyMaterialStudentRepository,
+                                 MaterialPlaylistEntryRepository playlistEntryRepository) {
         this.studyMaterialRepository = studyMaterialRepository;
         this.batchRepository = batchRepository;
         this.batchMemberRepository = batchMemberRepository;
@@ -89,6 +98,8 @@ public class StudyMaterialService {
         this.userRepository = userRepository;
         this.fileStorageService = fileStorageService;
         this.courseFeatureGuard = courseFeatureGuard;
+        this.studyMaterialStudentRepository = studyMaterialStudentRepository;
+        this.playlistEntryRepository = playlistEntryRepository;
     }
 
     /**
@@ -176,13 +187,83 @@ public class StudyMaterialService {
     public List<StudyMaterialResponse> listForBatch(UUID batchId) {
         assertCanView(batchId);
         List<StudyMaterial> materials = studyMaterialRepository.findByBatchIdOrderByUploadedAtDesc(batchId);
-        return toResponses(materials);
+        return toResponses(visibleTo(materials, batchId));
+    }
+
+    /**
+     * Drops SELECTED material this caller was not named on.
+     *
+     * <p>Editors see everything - they are the ones who chose the audience, and hiding their own
+     * upload from them would read as the upload having failed. For everyone else a material they
+     * were not shared with must not appear at all, not appear-and-403.
+     */
+    private List<StudyMaterial> visibleTo(List<StudyMaterial> materials, UUID batchId) {
+        if (materials.isEmpty()) {
+            return materials;
+        }
+        Batch batch = batchRepository.findById(batchId).orElse(null);
+        if (batch != null && courseFeatureGuard.hasCourseFeature(batch.getCourseId(), FeatureKey.SYLLABUS_EDIT)) {
+            return materials;
+        }
+        UUID membershipId = TenantContext.require().activeMembership()
+                .map(m -> m.membershipId()).orElse(null);
+        if (membershipId == null) {
+            return List.of();
+        }
+
+        List<UUID> restricted = materials.stream()
+                .filter(m -> m.getVisibility() == StudyMaterialVisibility.SELECTED)
+                .map(StudyMaterial::getId)
+                .toList();
+        if (restricted.isEmpty()) {
+            return materials;
+        }
+        // One query for every restricted material rather than one per material.
+        Set<UUID> sharedWithMe = studyMaterialStudentRepository.findByMaterialIdIn(restricted).stream()
+                .filter(r -> r.getMembershipId().equals(membershipId))
+                .map(StudyMaterialStudent::getMaterialId)
+                .collect(Collectors.toSet());
+
+        return materials.stream()
+                .filter(m -> m.getVisibility() != StudyMaterialVisibility.SELECTED
+                        || sharedWithMe.contains(m.getId()))
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Every material of one type across every batch this caller can see - the Song, Document and
+     * Image libraries.
+     *
+     * <p>Built on the same batch scoping as the home screen rather than a query of its own, so a
+     * library can never surface a file from a batch whose own screen would not show it.
+     */
+    @Transactional(readOnly = true)
+    public List<StudyMaterialResponse> library(StudyMaterialType fileType) {
+        List<UUID> batchIds = batchSummaries().stream()
+                .map(BatchMaterialSummary::batchId)
+                .toList();
+        if (batchIds.isEmpty()) {
+            return List.of();
+        }
+        List<StudyMaterial> all = studyMaterialRepository.findByBatchIdIn(batchIds).stream()
+                .filter(m -> fileType == null || m.getFileType() == fileType)
+                .collect(Collectors.toList());
+
+        List<StudyMaterial> visible = new ArrayList<>();
+        // Grouped by batch because visibility is judged per batch - the caller may edit one and
+        // merely attend another.
+        all.stream().collect(Collectors.groupingBy(StudyMaterial::getBatchId))
+                .forEach((batchId, group) -> visible.addAll(visibleTo(group, batchId)));
+
+        visible.sort((a, b) -> b.getUploadedAt().compareTo(a.getUploadedAt()));
+        return toResponses(visible);
     }
 
     @Transactional
     @Auditable(action = "STUDY_MATERIAL_UPLOADED", entityType = "study_material")
     public StudyMaterialResponse upload(UUID batchId, MultipartFile file, String title,
-                                         String description, StudyMaterialPermission permission) {
+                                         String description, StudyMaterialPermission permission,
+                                         StudyMaterialVisibility visibility, Set<UUID> studentIds) {
         assertCanManage(batchId);
 
         String originalName = file.getOriginalFilename() == null
@@ -205,9 +286,11 @@ public class StudyMaterialService {
                         : fileType == StudyMaterialType.AUDIO
                                 ? StudyMaterialPermission.VIEW_ONLY
                                 : StudyMaterialPermission.DOWNLOADABLE)
+                .visibility(visibility != null ? visibility : StudyMaterialVisibility.ALL)
                 .uploadedBy(TenantContext.currentUserId())
                 .build());
 
+        replaceAudience(material, studentIds);
         return toResponses(List.of(material)).get(0);
     }
 
@@ -222,7 +305,12 @@ public class StudyMaterialService {
                 request.description() == null || request.description().isBlank()
                         ? null : request.description().trim());
         material.setPermission(request.permission());
-        return toResponses(List.of(studyMaterialRepository.save(material))).get(0);
+        material.setVisibility(
+                request.visibility() != null ? request.visibility() : StudyMaterialVisibility.ALL);
+
+        StudyMaterial saved = studyMaterialRepository.save(material);
+        replaceAudience(saved, request.studentIds());
+        return toResponses(List.of(saved)).get(0);
     }
 
     @Transactional
@@ -230,10 +318,74 @@ public class StudyMaterialService {
     public void delete(UUID materialId) {
         StudyMaterial material = findOrThrow(materialId);
         assertCanManage(material.getBatchId());
+        // Both cascades are manual: there are no FK constraints between these tables, so nothing
+        // cleans them up on our behalf. Left behind, the audience rows would silently re-apply to
+        // a future material that reused the id, and the playlist entries would render as blanks.
+        studyMaterialStudentRepository.deleteByMaterialId(materialId);
+        playlistEntryRepository.deleteByMaterialId(materialId);
+
         // The stored file is deliberately left on disk. Another material row could reference the
         // same upload, and an orphaned blob is a cheaper problem than a broken link on a file
         // someone else is still sharing.
         studyMaterialRepository.delete(material);
+    }
+
+    /**
+     * Rewrites which students a SELECTED material is shared with.
+     *
+     * <p>An ALL material has its rows cleared rather than kept, so switching a material back to
+     * SELECTED later starts from an empty audience instead of silently restoring one chosen weeks
+     * ago that nobody can now see.
+     */
+    private void replaceAudience(StudyMaterial material, Set<UUID> studentIds) {
+        studyMaterialStudentRepository.deleteByMaterialId(material.getId());
+        if (material.getVisibility() != StudyMaterialVisibility.SELECTED || studentIds == null) {
+            return;
+        }
+        studentIds.stream()
+                // A student outside the batch cannot be given access by naming them: the material
+                // belongs to the batch, and visibility only ever narrows within it.
+                .filter(id -> batchMemberRepository.existsByBatchIdAndMembershipId(material.getBatchId(), id))
+                .forEach(id -> studyMaterialStudentRepository.save(StudyMaterialStudent.builder()
+                        .materialId(material.getId())
+                        .membershipId(id)
+                        .build()));
+    }
+
+    /**
+     * Resolves materials by id for the playlist screens, dropping any the caller cannot see.
+     *
+     * <p>Filtering rather than throwing: a playlist can outlive a change in who its owner
+     * teaches, and one now-invisible track should not make the whole playlist unopenable.
+     */
+    @Transactional(readOnly = true)
+    public List<StudyMaterialResponse> byIds(List<UUID> materialIds) {
+        if (materialIds == null || materialIds.isEmpty()) {
+            return List.of();
+        }
+        List<StudyMaterial> found = studyMaterialRepository.findAllById(materialIds);
+
+        List<StudyMaterial> visible = new ArrayList<>();
+        found.stream().collect(Collectors.groupingBy(StudyMaterial::getBatchId))
+                .forEach((batchId, group) -> {
+                    try {
+                        assertCanView(batchId);
+                    } catch (ForbiddenException | ResourceNotFoundException e) {
+                        return;
+                    }
+                    visible.addAll(visibleTo(group, batchId));
+                });
+        return toResponses(visible);
+    }
+
+    /** Throws unless the caller may see this material - the guard for adding it to a playlist. */
+    @Transactional(readOnly = true)
+    public void assertReadable(UUID materialId) {
+        StudyMaterial material = findOrThrow(materialId);
+        assertCanView(material.getBatchId());
+        if (visibleTo(List.of(material), material.getBatchId()).isEmpty()) {
+            throw new ForbiddenException("That material was not shared with you");
+        }
     }
 
     /** Managing needs SYLLABUS_EDIT on the batch's course. */
@@ -314,11 +466,20 @@ public class StudyMaterialService {
                         .collect(Collectors.toSet()))
                 .stream().collect(Collectors.toMap(User::getId, User::getFullName));
 
+        // One query for the whole page rather than one per material.
+        Map<UUID, Set<UUID>> audience = studyMaterialStudentRepository
+                .findByMaterialIdIn(materials.stream().map(StudyMaterial::getId).toList())
+                .stream()
+                .collect(Collectors.groupingBy(StudyMaterialStudent::getMaterialId,
+                        Collectors.mapping(StudyMaterialStudent::getMembershipId, Collectors.toSet())));
+
         return materials.stream()
                 .map(m -> new StudyMaterialResponse(
                         m.getId(), m.getBatchId(), m.getTitle(), m.getDescription(),
                         m.getUrl(), m.getFileName(), m.getContentType(), m.getFileType(),
-                        m.getSizeBytes(), m.getPermission(), m.getUploadedBy(),
+                        m.getSizeBytes(), m.getPermission(),
+                        m.getVisibility(), audience.getOrDefault(m.getId(), Set.of()),
+                        m.getUploadedBy(),
                         namesByUser.get(m.getUploadedBy()), m.getUploadedAt()))
                 .collect(Collectors.toList());
     }

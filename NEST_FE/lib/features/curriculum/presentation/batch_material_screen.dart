@@ -12,6 +12,7 @@ import 'package:nest_fe/core/design/toast.dart';
 import 'package:nest_fe/core/format/money.dart';
 import 'package:nest_fe/features/curriculum/data/study_material.dart';
 import 'package:nest_fe/features/curriculum/data/study_material_api.dart';
+import 'package:nest_fe/features/curriculum/presentation/file_viewer_screen.dart';
 import 'package:nest_fe/features/curriculum/presentation/upload_material_screen.dart';
 
 enum MaterialSort {
@@ -30,11 +31,7 @@ enum MaterialSort {
 /// the list. Borrowed from Google Forms' preview: the only reliable way to know what you've
 /// actually shared is to look at it as the person receiving it.
 class BatchMaterialScreen extends ConsumerStatefulWidget {
-  const BatchMaterialScreen({
-    super.key,
-    required this.summary,
-    this.studentPreview = false,
-  });
+  const BatchMaterialScreen({super.key, required this.summary, this.studentPreview = false});
 
   final BatchMaterialSummary summary;
 
@@ -79,16 +76,26 @@ class _BatchMaterialScreenState extends ConsumerState<BatchMaterialScreen> {
 
   void _showError(Object error) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(error.toString().replaceFirst('Exception: ', ''))),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(error.toString().replaceFirst('Exception: ', ''))));
+  }
+
+  /// Opens a file: the player for audio, a preview for documents and images.
+  void _open(StudyMaterial material) {
+    setState(() => _kebabFor = null);
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => FileViewerScreen(material: material)));
   }
 
   Future<void> _openUpload({StudyMaterial? existing}) async {
     setState(() => _kebabFor = null);
-    final saved = await Navigator.of(context).push<bool>(MaterialPageRoute(
-      builder: (_) => UploadMaterialScreen(summary: summary, existing: existing),
-    ));
+    final saved = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => UploadMaterialScreen(summary: summary, existing: existing),
+      ),
+    );
     if (saved == true) {
       _refresh();
       if (mounted) {
@@ -103,7 +110,9 @@ class _BatchMaterialScreenState extends ConsumerState<BatchMaterialScreen> {
         ? StudyMaterialPermission.viewOnly
         : StudyMaterialPermission.downloadable;
     try {
-      await ref.read(studyMaterialApiProvider).update(
+      await ref
+          .read(studyMaterialApiProvider)
+          .update(
             material.id,
             title: material.title,
             description: material.description,
@@ -121,7 +130,8 @@ class _BatchMaterialScreenState extends ConsumerState<BatchMaterialScreen> {
     final confirmed = await showAppConfirmDialog(
       context: context,
       title: 'Delete this file?',
-      message: '"${material.title}" will be permanently removed for students in this '
+      message:
+          '"${material.title}" will be permanently removed for students in this '
           "batch. This can't be undone.",
       confirmLabel: 'Delete',
     );
@@ -143,12 +153,14 @@ class _BatchMaterialScreenState extends ConsumerState<BatchMaterialScreen> {
       return '${m.title} ${m.fileName}'.toLowerCase().contains(q);
     }).toList();
 
-    filtered.sort((a, b) => switch (_sort) {
-          MaterialSort.az => a.title.toLowerCase().compareTo(b.title.toLowerCase()),
-          MaterialSort.za => b.title.toLowerCase().compareTo(a.title.toLowerCase()),
-          MaterialSort.oldest => a.uploadedAt.compareTo(b.uploadedAt),
-          MaterialSort.newest => b.uploadedAt.compareTo(a.uploadedAt),
-        });
+    filtered.sort(
+      (a, b) => switch (_sort) {
+        MaterialSort.az => a.title.toLowerCase().compareTo(b.title.toLowerCase()),
+        MaterialSort.za => b.title.toLowerCase().compareTo(a.title.toLowerCase()),
+        MaterialSort.oldest => a.uploadedAt.compareTo(b.uploadedAt),
+        MaterialSort.newest => b.uploadedAt.compareTo(a.uploadedAt),
+      },
+    );
     return filtered;
   }
 
@@ -166,15 +178,18 @@ class _BatchMaterialScreenState extends ConsumerState<BatchMaterialScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(summary.batchName,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                    fontSize: 17, fontWeight: AppType.bold, color: palette.text)),
-            Text(summary.courseName ?? 'Unlinked course',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(fontSize: AppType.smd, color: palette.textMuted)),
+            Text(
+              summary.batchName,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(fontSize: 17, fontWeight: AppType.bold, color: palette.text),
+            ),
+            Text(
+              summary.courseName ?? 'Unlinked course',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(fontSize: AppType.smd, color: palette.textMuted),
+            ),
           ],
         ),
         actions: [
@@ -187,10 +202,12 @@ class _BatchMaterialScreenState extends ConsumerState<BatchMaterialScreen> {
                   tooltip: 'Preview as student',
                   size: 38,
                   iconSize: 16,
-                  onTap: () => Navigator.of(context).push(MaterialPageRoute(
-                    builder: (_) => BatchMaterialScreen(
-                        summary: summary, studentPreview: true),
-                  )),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) =>
+                          BatchMaterialScreen(summary: summary, studentPreview: true),
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -202,7 +219,9 @@ class _BatchMaterialScreenState extends ConsumerState<BatchMaterialScreen> {
               onTap: () => _openUpload(),
               child: Container(
                 padding: const EdgeInsets.symmetric(
-                    horizontal: AppSpacing.x4l, vertical: AppSpacing.xl),
+                  horizontal: AppSpacing.x4l,
+                  vertical: AppSpacing.xl,
+                ),
                 decoration: BoxDecoration(
                   color: palette.primary,
                   borderRadius: AppRadii.all(AppRadii.pill),
@@ -211,14 +230,16 @@ class _BatchMaterialScreenState extends ConsumerState<BatchMaterialScreen> {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.cloud_upload_outlined,
-                        size: 17, color: palette.onPrimary),
+                    Icon(Icons.cloud_upload_outlined, size: 17, color: palette.onPrimary),
                     const SizedBox(width: AppSpacing.sm),
-                    Text('Upload Material',
-                        style: TextStyle(
-                            fontSize: AppType.xxl,
-                            fontWeight: AppType.bold,
-                            color: palette.onPrimary)),
+                    Text(
+                      'Upload Material',
+                      style: TextStyle(
+                        fontSize: AppType.xxl,
+                        fontWeight: AppType.bold,
+                        color: palette.onPrimary,
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -233,10 +254,11 @@ class _BatchMaterialScreenState extends ConsumerState<BatchMaterialScreen> {
               error: (e, _) => Center(
                 child: Padding(
                   padding: const EdgeInsets.all(AppSpacing.x4l),
-                  child: Text(e.toString().replaceFirst('Exception: ', ''),
-                      textAlign: TextAlign.center,
-                      style:
-                          TextStyle(fontSize: AppType.lg, color: palette.textMuted)),
+                  child: Text(
+                    e.toString().replaceFirst('Exception: ', ''),
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: AppType.lg, color: palette.textMuted),
+                  ),
                 ),
               ),
               data: (materials) {
@@ -245,8 +267,12 @@ class _BatchMaterialScreenState extends ConsumerState<BatchMaterialScreen> {
                   behavior: HitTestBehavior.deferToChild,
                   onTap: () => setState(() => _kebabFor = null),
                   child: ListView(
-                    padding: const EdgeInsets.fromLTRB(AppSpacing.page,
-                        AppSpacing.xl, AppSpacing.page, AppSpacing.listBottom + 40),
+                    padding: const EdgeInsets.fromLTRB(
+                      AppSpacing.page,
+                      AppSpacing.xl,
+                      AppSpacing.page,
+                      AppSpacing.listBottom + 40,
+                    ),
                     children: [
                       if (!_readOnly) ...[
                         _permissionStats(palette, materials),
@@ -258,20 +284,20 @@ class _BatchMaterialScreenState extends ConsumerState<BatchMaterialScreen> {
                       const SizedBox(height: AppSpacing.lg),
                       if (visible.isEmpty)
                         Padding(
-                          padding:
-                              const EdgeInsets.symmetric(vertical: AppSpacing.x5l),
+                          padding: const EdgeInsets.symmetric(vertical: AppSpacing.x5l),
                           child: Text(
                             materials.isEmpty
                                 ? _readOnly
-                                    ? 'No study material has been shared with this batch yet.'
-                                    : 'No study material yet. Upload notes, audio or images for '
-                                        'this batch below.'
+                                      ? 'No study material has been shared with this batch yet.'
+                                      : 'No study material yet. Upload notes, audio or images for '
+                                            'this batch below.'
                                 : 'No files match this search.',
                             textAlign: TextAlign.center,
                             style: TextStyle(
-                                fontSize: AppType.lg,
-                                color: palette.textFaint,
-                                height: 1.6),
+                              fontSize: AppType.lg,
+                              color: palette.textFaint,
+                              height: 1.6,
+                            ),
                           ),
                         )
                       else
@@ -282,9 +308,11 @@ class _BatchMaterialScreenState extends ConsumerState<BatchMaterialScreen> {
                               material: material,
                               accent: meta.color,
                               studentPreview: _readOnly,
+                              onOpen: () => _open(material),
                               kebabOpen: _kebabFor == material.id,
-                              onToggleKebab: () => setState(() => _kebabFor =
-                                  _kebabFor == material.id ? null : material.id),
+                              onToggleKebab: () => setState(
+                                () => _kebabFor = _kebabFor == material.id ? null : material.id,
+                              ),
                               onEdit: () => _openUpload(existing: material),
                               onTogglePermission: () => _togglePermission(material),
                               onDelete: () => _requestDelete(material),
@@ -303,8 +331,7 @@ class _BatchMaterialScreenState extends ConsumerState<BatchMaterialScreen> {
 
   Widget _previewBanner(AppPalette palette) {
     return Container(
-      padding: const EdgeInsets.symmetric(
-          horizontal: AppSpacing.xxl, vertical: 9),
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xxl, vertical: 9),
       decoration: BoxDecoration(
         color: palette.primarySoft,
         border: Border(bottom: BorderSide(color: palette.primary.withValues(alpha: 0.33))),
@@ -314,27 +341,31 @@ class _BatchMaterialScreenState extends ConsumerState<BatchMaterialScreen> {
           Icon(Icons.visibility_outlined, size: 13, color: palette.primary),
           const SizedBox(width: AppSpacing.sm),
           Expanded(
-            child: Text('Previewing as Student',
-                style: TextStyle(
-                    fontSize: AppType.sm,
-                    fontWeight: AppType.bold,
-                    color: palette.primary)),
+            child: Text(
+              'Previewing as Student',
+              style: TextStyle(
+                fontSize: AppType.sm,
+                fontWeight: AppType.bold,
+                color: palette.primary,
+              ),
+            ),
           ),
           Pressable(
             onTap: () => Navigator.of(context).maybePop(),
             child: Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: 4),
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: 4),
               decoration: BoxDecoration(
                 borderRadius: AppRadii.all(AppRadii.sm),
-                border:
-                    Border.all(color: palette.primary.withValues(alpha: 0.4)),
+                border: Border.all(color: palette.primary.withValues(alpha: 0.4)),
               ),
-              child: Text('Exit preview',
-                  style: TextStyle(
-                      fontSize: AppType.xs,
-                      fontWeight: AppType.bold,
-                      color: palette.primary)),
+              child: Text(
+                'Exit preview',
+                style: TextStyle(
+                  fontSize: AppType.xs,
+                  fontWeight: AppType.bold,
+                  color: palette.primary,
+                ),
+              ),
             ),
           ),
         ],
@@ -347,42 +378,45 @@ class _BatchMaterialScreenState extends ConsumerState<BatchMaterialScreen> {
     final viewOnly = materials.length - downloadable;
 
     Widget pill(StudyMaterialPermission permission, int count) => Expanded(
-          child: Container(
-            padding: const EdgeInsets.symmetric(
-                horizontal: AppSpacing.lg, vertical: AppSpacing.lg),
-            decoration: BoxDecoration(
-              color: permission.softColor(palette),
-              borderRadius: AppRadii.all(AppRadii.lg),
-              border: Border.all(
-                  color: permission.color(palette).withValues(alpha: 0.27)),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: AppSpacing.lg),
+        decoration: BoxDecoration(
+          color: permission.softColor(palette),
+          borderRadius: AppRadii.all(AppRadii.lg),
+          border: Border.all(color: permission.color(palette).withValues(alpha: 0.27)),
+        ),
+        child: Row(
+          children: [
+            Icon(permission.icon, size: 15, color: permission.color(palette)),
+            const SizedBox(width: AppSpacing.sm),
+            Text(
+              '$count',
+              style: TextStyle(
+                fontSize: AppType.x3l,
+                fontWeight: AppType.heavy,
+                height: 1,
+                color: permission.color(palette),
+              ),
             ),
-            child: Row(
-              children: [
-                Icon(permission.icon, size: 15, color: permission.color(palette)),
-                const SizedBox(width: AppSpacing.sm),
-                Text('$count',
-                    style: TextStyle(
-                        fontSize: AppType.x3l,
-                        fontWeight: AppType.heavy,
-                        height: 1,
-                        color: permission.color(palette))),
-                const SizedBox(width: AppSpacing.xs),
-                Flexible(
-                  child: Text(permission.label.toUpperCase(),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: AppType.sm,
-                        fontWeight: AppType.bold,
-                        letterSpacing: 0.3,
-                        height: 1,
-                        color: permission.color(palette),
-                      )),
+            const SizedBox(width: AppSpacing.xs),
+            Flexible(
+              child: Text(
+                permission.label.toUpperCase(),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: AppType.sm,
+                  fontWeight: AppType.bold,
+                  letterSpacing: 0.3,
+                  height: 1,
+                  color: permission.color(palette),
                 ),
-              ],
+              ),
             ),
-          ),
-        );
+          ],
+        ),
+      ),
+    );
 
     return Row(
       children: [
@@ -399,7 +433,9 @@ class _BatchMaterialScreenState extends ConsumerState<BatchMaterialScreen> {
         Expanded(
           child: Container(
             padding: const EdgeInsets.symmetric(
-                horizontal: AppSpacing.lg, vertical: AppSpacing.md),
+              horizontal: AppSpacing.lg,
+              vertical: AppSpacing.md,
+            ),
             decoration: BoxDecoration(
               color: palette.surfaceRaised,
               borderRadius: AppRadii.all(AppRadii.lg),
@@ -414,16 +450,16 @@ class _BatchMaterialScreenState extends ConsumerState<BatchMaterialScreen> {
                     controller: _searchController,
                     onChanged: (v) => setState(() => _query = v),
                     style: TextStyle(
-                        fontSize: AppType.lg,
-                        fontWeight: AppType.regular,
-                        color: palette.text),
+                      fontSize: AppType.lg,
+                      fontWeight: AppType.regular,
+                      color: palette.text,
+                    ),
                     decoration: InputDecoration(
                       isDense: true,
                       border: InputBorder.none,
                       contentPadding: EdgeInsets.zero,
                       hintText: 'Search files',
-                      hintStyle:
-                          TextStyle(fontSize: AppType.lg, color: palette.textFaint),
+                      hintStyle: TextStyle(fontSize: AppType.lg, color: palette.textFaint),
                     ),
                   ),
                 ),
@@ -433,8 +469,7 @@ class _BatchMaterialScreenState extends ConsumerState<BatchMaterialScreen> {
                       _searchController.clear();
                       setState(() => _query = '');
                     },
-                    child:
-                        Icon(Icons.close_rounded, size: 13, color: palette.textFaint),
+                    child: Icon(Icons.close_rounded, size: 13, color: palette.textFaint),
                   ),
               ],
             ),
@@ -452,14 +487,15 @@ class _BatchMaterialScreenState extends ConsumerState<BatchMaterialScreen> {
           optionBuilder: (context, option, _) => Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(option.label,
-                  style: TextStyle(
-                    fontSize: AppType.xl,
-                    fontWeight: _sort == option ? AppType.bold : AppType.regular,
-                    color: _sort == option ? palette.primary : palette.text,
-                  )),
-              if (_sort == option)
-                Icon(Icons.check, size: 15, color: palette.primary),
+              Text(
+                option.label,
+                style: TextStyle(
+                  fontSize: AppType.xl,
+                  fontWeight: _sort == option ? AppType.bold : AppType.regular,
+                  color: _sort == option ? palette.primary : palette.text,
+                ),
+              ),
+              if (_sort == option) Icon(Icons.check, size: 15, color: palette.primary),
             ],
           ),
           triggerBuilder: (context, isOpen, toggle) => AppIconButton(
@@ -484,8 +520,7 @@ class _BatchMaterialScreenState extends ConsumerState<BatchMaterialScreen> {
           onTap: () => setState(() => _typeFilter = active ? null : type),
           child: AnimatedContainer(
             duration: AppMotion.fade,
-            padding: const EdgeInsets.symmetric(
-                horizontal: AppSpacing.xs, vertical: 7),
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xs, vertical: 7),
             decoration: BoxDecoration(
               color: active ? soft : palette.surfaceRaised,
               borderRadius: AppRadii.all(AppRadii.pill),
@@ -495,19 +530,20 @@ class _BatchMaterialScreenState extends ConsumerState<BatchMaterialScreen> {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 if (type != null) ...[
-                  Icon(type.icon,
-                      size: 11, color: active ? color : palette.textMuted),
+                  Icon(type.icon, size: 11, color: active ? color : palette.textMuted),
                   const SizedBox(width: AppSpacing.xxs),
                 ],
                 Flexible(
-                  child: Text(type?.label ?? 'All',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: AppType.sm,
-                        fontWeight: AppType.bold,
-                        color: active ? color : palette.textMuted,
-                      )),
+                  child: Text(
+                    type?.label ?? 'All',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: AppType.sm,
+                      fontWeight: AppType.bold,
+                      color: active ? color : palette.textMuted,
+                    ),
+                  ),
                 ),
               ],
             ),
@@ -535,6 +571,7 @@ class _MaterialRow extends StatelessWidget {
     required this.material,
     required this.accent,
     required this.studentPreview,
+    required this.onOpen,
     required this.kebabOpen,
     required this.onToggleKebab,
     required this.onEdit,
@@ -545,6 +582,7 @@ class _MaterialRow extends StatelessWidget {
   final StudyMaterial material;
   final Color accent;
   final bool studentPreview;
+  final VoidCallback onOpen;
   final bool kebabOpen;
   final VoidCallback onToggleKebab;
   final VoidCallback onEdit;
@@ -556,73 +594,82 @@ class _MaterialRow extends StatelessWidget {
     final palette = context.palette;
     final type = material.fileType;
 
-    return Container(
-      padding: const EdgeInsets.all(AppSpacing.lg),
-      decoration: BoxDecoration(
-        color: palette.surfaceRaised,
-        borderRadius: AppRadii.all(AppRadii.xxl),
-        border: Border.all(color: palette.borderSoft),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 40,
-            height: 40,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: type.softColor(palette),
-              borderRadius: AppRadii.all(AppRadii.lg),
+    return Pressable(
+      onTap: onOpen,
+      child: Container(
+        padding: const EdgeInsets.all(AppSpacing.lg),
+        decoration: BoxDecoration(
+          color: palette.surfaceRaised,
+          borderRadius: AppRadii.all(AppRadii.xxl),
+          border: Border.all(color: palette.borderSoft),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: type.softColor(palette),
+                borderRadius: AppRadii.all(AppRadii.lg),
+              ),
+              child: Icon(type.icon, size: 18, color: type.color(palette)),
             ),
-            child: Icon(type.icon, size: 18, color: type.color(palette)),
-          ),
-          const SizedBox(width: AppSpacing.lg),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(material.title,
+            const SizedBox(width: AppSpacing.lg),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    material.title,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                        fontSize: AppType.xl,
-                        fontWeight: AppType.semi,
-                        color: palette.text)),
-                if (material.description != null) ...[
-                  const SizedBox(height: 2),
-                  Text(material.description!,
+                      fontSize: AppType.xl,
+                      fontWeight: AppType.semi,
+                      color: palette.text,
+                    ),
+                  ),
+                  if (material.description != null) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      material.description!,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                          fontSize: AppType.sm,
-                          color: palette.textMuted,
-                          height: 1.4)),
+                        fontSize: AppType.sm,
+                        color: palette.textMuted,
+                        height: 1.4,
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 3),
+                  Text(
+                    [
+                      material.sizeLabel,
+                      formatFeeDate(material.uploadedAt),
+                      if (!studentPreview && material.uploadedByName != null)
+                        material.uploadedByName!,
+                    ].join(' · '),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontSize: AppType.sm, color: palette.textFaint),
+                  ),
+                  const SizedBox(height: 7),
+                  _permissionBadge(palette),
                 ],
-                const SizedBox(height: 3),
-                Text(
-                  [
-                    material.sizeLabel,
-                    formatFeeDate(material.uploadedAt),
-                    if (!studentPreview && material.uploadedByName != null)
-                      material.uploadedByName!,
-                  ].join(' · '),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(fontSize: AppType.sm, color: palette.textFaint),
-                ),
-                const SizedBox(height: 7),
-                _permissionBadge(palette),
-              ],
+              ),
             ),
-          ),
-          const SizedBox(width: AppSpacing.sm),
-          if (studentPreview)
-            // A student sees only what they can do with it, not who set it that way.
-            Icon(material.permission.icon, size: 16, color: palette.textMuted)
-          else
-            _kebab(palette),
-        ],
+            const SizedBox(width: AppSpacing.sm),
+            if (studentPreview)
+              // A student sees only what they can do with it, not who set it that way.
+              Icon(material.permission.icon, size: 16, color: palette.textMuted)
+            else
+              _kebab(palette),
+          ],
+        ),
       ),
     );
   }
@@ -634,20 +681,21 @@ class _MaterialRow extends StatelessWidget {
       decoration: BoxDecoration(
         color: permission.softColor(palette),
         borderRadius: AppRadii.all(AppRadii.pill),
-        border:
-            Border.all(color: permission.color(palette).withValues(alpha: 0.33)),
+        border: Border.all(color: permission.color(palette).withValues(alpha: 0.33)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(permission.icon, size: 10.5, color: permission.color(palette)),
           const SizedBox(width: AppSpacing.xxs),
-          Text(permission.label,
-              style: TextStyle(
-                fontSize: AppType.tiny,
-                fontWeight: AppType.heavy,
-                color: permission.color(palette),
-              )),
+          Text(
+            permission.label,
+            style: TextStyle(
+              fontSize: AppType.tiny,
+              fontWeight: AppType.heavy,
+              color: permission.color(palette),
+            ),
+          ),
         ],
       ),
     );
@@ -659,7 +707,7 @@ class _MaterialRow extends StatelessWidget {
       (
         material.isDownloadable ? 'Mark as view only' : 'Mark as downloadable',
         false,
-        onTogglePermission
+        onTogglePermission,
       ),
       ('Delete file', true, onDelete),
     ];

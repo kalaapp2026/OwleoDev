@@ -68,6 +68,25 @@ enum StudyMaterialPermission {
       : 'Students can only view this inside the app - no download option is shown to them.';
 }
 
+/// Who inside the batch a material is for.
+enum StudyMaterialVisibility {
+  all('ALL', 'Everyone in the batch'),
+  selected('SELECTED', 'Only selected students');
+
+  const StudyMaterialVisibility(this.wire, this.label);
+
+  final String wire;
+  final String label;
+
+  /// Anything unrecognised reads as [all]. That is the safe direction, and it is what every
+  /// material uploaded before this column existed means.
+  static StudyMaterialVisibility fromWire(String? value) =>
+      value == 'SELECTED' ? StudyMaterialVisibility.selected : StudyMaterialVisibility.all;
+
+  IconData get icon =>
+      this == StudyMaterialVisibility.all ? Icons.groups_outlined : Icons.person_outline;
+}
+
 /// One shared file.
 class StudyMaterial {
   const StudyMaterial({
@@ -81,6 +100,8 @@ class StudyMaterial {
     required this.fileType,
     required this.sizeBytes,
     required this.permission,
+    required this.visibility,
+    required this.studentIds,
     required this.uploadedByName,
     required this.uploadedAt,
   });
@@ -95,6 +116,13 @@ class StudyMaterial {
   final StudyMaterialType fileType;
   final int sizeBytes;
   final StudyMaterialPermission permission;
+
+  /// Whether the whole batch sees this, or only [studentIds].
+  final StudyMaterialVisibility visibility;
+
+  /// Membership ids. Meaningful only when [visibility] is selected.
+  final Set<String> studentIds;
+
   final String? uploadedByName;
   final DateTime uploadedAt;
 
@@ -118,6 +146,8 @@ class StudyMaterial {
         fileType: StudyMaterialType.fromWire(json['fileType'] as String?),
         sizeBytes: (json['sizeBytes'] as num?)?.toInt() ?? 0,
         permission: StudyMaterialPermission.fromWire(json['permission'] as String?),
+        visibility: StudyMaterialVisibility.fromWire(json['visibility'] as String?),
+        studentIds: ((json['studentIds'] as List?) ?? const []).map((e) => e as String).toSet(),
         uploadedByName: json['uploadedByName'] as String?,
         uploadedAt: DateTime.parse(json['uploadedAt'] as String),
       );
