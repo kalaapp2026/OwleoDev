@@ -2,7 +2,7 @@
 
 Read this first. It is the handoff between sessions: what this is, how to run it, the conventions
 that are already settled, and the traps that have cost real time. Everything here was verified
-against the running system on **2026-09-05**, not recalled.
+against the running system on **2026-09-06**, not recalled.
 
 Point-in-time claims (module state, migration numbers, outstanding work) drift. Check `git log`
 and the source before asserting any of it as still-true.
@@ -162,7 +162,7 @@ call fails.
 
 ---
 
-## Module state — 2026-09-05
+## Module state — 2026-09-06
 
 Six ERP modules were rebuilt against React prototypes (the `.jsx` files live in the user's
 Downloads, not the repo): **Course Creation, Batch Creation, Schedule & Reschedule, Attendance,
@@ -189,18 +189,20 @@ The old tables — `syllabus_units`, `syllabus_unit_batches`, `syllabus_unit_mat
 are **deliberately still there**. `study_materials` is keyed by batch, so material on a course
 with no batches has nowhere to land; dropping them would destroy it silently. Nothing reads them.
 
-Suites: **180 backend tests**, **134 Flutter tests**. Both green at `e4c1fb6`.
+Study Material is complete as of `ac8db0c`: per-student visibility, cross-batch Song/Document/
+Image libraries, playlists (drag-reorder, repeat a song, per-entry actions), a file viewer, and a
+practice player with tempo/volume arcs, loop and multi-segment trims saved per person per track.
+
+Suites: **188 backend tests**, **150 Flutter tests**.
 
 ---
 
 ## Outstanding
 
-- **The new Study Material prototype is unbuilt on the front end.** V28's tables
-  (`material_playlists`, `material_playlist_entries`, `material_playback_settings`) are live and
-  mapped but **nothing writes to them**. Still to build: cross-batch Song/Document/Image
-  libraries, playlists with drag-reorder and repeat-a-song, a fullscreen document/image viewer,
-  and the custom audio player (vinyl disk, radial speed/volume levers, multi-segment trims with
-  per-segment tempo, loop, saved settings).
+- **Documents have no in-app renderer.** The viewer shows a cover card and offers a download;
+  Flutter ships no PDF or Office renderer, and adding one is a large dependency for something the
+  device handles. A view-only document therefore cannot be read inside the app at all - worth
+  revisiting if that turns out to matter.
 - **i18n.** Every string in the rebuilt screens is hardcoded English — several hundred on top of
   the ~306 already outstanding.
 - **No Spring/Testcontainers integration tests**, so the DB constraints in V21–V29 are verified
