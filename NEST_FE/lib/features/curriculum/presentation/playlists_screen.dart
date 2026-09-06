@@ -10,7 +10,7 @@ import 'package:nest_fe/features/curriculum/data/material_playlist.dart';
 import 'package:nest_fe/features/curriculum/data/study_material.dart';
 import 'package:nest_fe/features/curriculum/data/study_material_api.dart';
 import 'package:nest_fe/features/curriculum/presentation/file_viewer_screen.dart';
-import 'package:nest_fe/features/curriculum/presentation/material_library_screen.dart';
+import 'package:nest_fe/features/curriculum/presentation/widgets/material_row.dart';
 
 /// The caller's own running orders.
 ///
