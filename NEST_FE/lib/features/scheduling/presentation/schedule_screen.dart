@@ -270,6 +270,8 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
           BoxDecoration(border: Border(bottom: BorderSide(color: palette.borderSoft))),
       child: Row(
         children: [
+          AppIconButton(icon: Icons.arrow_back, onTap: () => Navigator.of(context).maybePop()),
+          const SizedBox(width: AppSpacing.lg),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,

@@ -21,7 +21,12 @@ import 'package:nest_fe/features/scheduling/data/scheduling_api.dart';
 /// sources for "what is on today" is how the two screens drift apart. The feed carries whether
 /// each session has been marked, which is the one thing this screen adds on top.
 class AttendanceHomeScreen extends ConsumerStatefulWidget {
-  const AttendanceHomeScreen({super.key});
+  const AttendanceHomeScreen({super.key, this.embedded = false});
+
+  /// True when shown as the AppShell bottom-tab body, where the shell's own chrome and the tab
+  /// bar itself already provide navigation - false when pushed standalone (e.g. from the
+  /// dashboard's Attendance stat), where this screen is otherwise a dead end with no way back.
+  final bool embedded;
 
   @override
   ConsumerState<AttendanceHomeScreen> createState() => _AttendanceHomeScreenState();
@@ -107,19 +112,29 @@ class _AttendanceHomeScreenState extends ConsumerState<AttendanceHomeScreen> {
           AppSpacing.page, AppSpacing.x4l, AppSpacing.page, AppSpacing.xxl),
       decoration:
           BoxDecoration(border: Border(bottom: BorderSide(color: palette.borderSoft))),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
+      child: Row(
         children: [
-          Text('Attendance',
-              style: TextStyle(
-                  fontSize: 17,
-                  fontWeight: AppType.bold,
-                  letterSpacing: -0.2,
-                  color: palette.text)),
-          const SizedBox(height: 2),
-          Text(_longDate(_date),
-              style: TextStyle(fontSize: AppType.smd, color: palette.textMuted)),
+          if (!widget.embedded) ...[
+            AppIconButton(icon: Icons.arrow_back, onTap: () => Navigator.of(context).maybePop()),
+            const SizedBox(width: AppSpacing.lg),
+          ],
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('Attendance',
+                    style: TextStyle(
+                        fontSize: 17,
+                        fontWeight: AppType.bold,
+                        letterSpacing: -0.2,
+                        color: palette.text)),
+                const SizedBox(height: 2),
+                Text(_longDate(_date),
+                    style: TextStyle(fontSize: AppType.smd, color: palette.textMuted)),
+              ],
+            ),
+          ),
         ],
       ),
     );

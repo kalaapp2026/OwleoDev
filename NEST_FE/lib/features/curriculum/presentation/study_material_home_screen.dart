@@ -174,21 +174,29 @@ class _StudyMaterialHomeScreenState extends ConsumerState<StudyMaterialHomeScree
           AppSpacing.page, AppSpacing.x4l, AppSpacing.page, AppSpacing.xxl),
       decoration:
           BoxDecoration(border: Border(bottom: BorderSide(color: palette.borderSoft))),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
+      child: Row(
         children: [
-          Text('Study Material',
-              style: TextStyle(
-                  fontSize: 17,
-                  fontWeight: AppType.bold,
-                  letterSpacing: -0.2,
-                  color: palette.text)),
-          const SizedBox(height: 2),
-          Text(
-            '$totalFiles file${totalFiles == 1 ? '' : 's'} across '
-            '$batchCount batch${batchCount == 1 ? '' : 'es'}',
-            style: TextStyle(fontSize: AppType.smd, color: palette.textMuted),
+          AppIconButton(icon: Icons.arrow_back, onTap: () => Navigator.of(context).maybePop()),
+          const SizedBox(width: AppSpacing.lg),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('Study Material',
+                    style: TextStyle(
+                        fontSize: 17,
+                        fontWeight: AppType.bold,
+                        letterSpacing: -0.2,
+                        color: palette.text)),
+                const SizedBox(height: 2),
+                Text(
+                  '$totalFiles file${totalFiles == 1 ? '' : 's'} across '
+                  '$batchCount batch${batchCount == 1 ? '' : 'es'}',
+                  style: TextStyle(fontSize: AppType.smd, color: palette.textMuted),
+                ),
+              ],
+            ),
           ),
         ],
       ),
