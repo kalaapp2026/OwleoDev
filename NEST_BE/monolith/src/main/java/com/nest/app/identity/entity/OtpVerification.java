@@ -19,13 +19,18 @@ import java.time.Instant;
 import java.util.UUID;
 
 /**
- * One-time codes for phone login and (from Phase 5) multi-academy membership confirmation.
- * {@code phoneHash} is looked up the same deterministic way as {@link User#getPhoneHash()} so we
- * never need to decrypt PII just to find the right row. The raw code itself is stored hashed
- * (never in plaintext) so a DB read alone can't be used to impersonate someone.
+ * One-time codes for phone login, (from Phase 5) multi-academy membership confirmation, and
+ * (email-delivered) password reset. Exactly one of {@code phoneHash}/{@code emailHash} is set per
+ * row, depending on the purpose's delivery channel - both are looked up the same deterministic way
+ * as {@link User#getPhoneHash()} so we never need to decrypt PII just to find the right row. The
+ * raw code itself is stored hashed (never in plaintext) so a DB read alone can't be used to
+ * impersonate someone.
  */
 @Entity
-@Table(name = "otp_verifications", indexes = @Index(name = "idx_otp_phone_hash", columnList = "phone_hash"))
+@Table(name = "otp_verifications", indexes = {
+        @Index(name = "idx_otp_phone_hash", columnList = "phone_hash"),
+        @Index(name = "idx_otp_email_hash", columnList = "email_hash"),
+})
 @Getter
 @Setter
 @NoArgsConstructor
@@ -37,8 +42,13 @@ public class OtpVerification {
     @GeneratedValue
     private UUID id;
 
-    @Column(name = "phone_hash", nullable = false, length = 64)
+    /** Null for email-delivered purposes (PASSWORD_RESET). */
+    @Column(name = "phone_hash", length = 64)
     private String phoneHash;
+
+    /** Null for phone-delivered purposes (LOGIN, REGISTRATION, MEMBERSHIP_CONFIRMATION). */
+    @Column(name = "email_hash", length = 64)
+    private String emailHash;
 
     @Column(name = "code_hash", nullable = false)
     private String codeHash;

@@ -13,4 +13,9 @@ public interface OtpVerificationRepository extends JpaRepository<OtpVerification
             String phoneHash, OtpPurpose purpose);
 
     long countByPhoneHashAndPurposeAndCreatedAtAfter(String phoneHash, OtpPurpose purpose, Instant after);
+
+    Optional<OtpVerification> findTopByEmailHashAndPurposeAndConsumedFalseOrderByCreatedAtDesc(
+            String emailHash, OtpPurpose purpose);
+
+    long countByEmailHashAndPurposeAndCreatedAtAfter(String emailHash, OtpPurpose purpose, Instant after);
 }

@@ -17,6 +17,61 @@ class LoginResult {
 
 enum AuthMethod { password, otp }
 
+/// Mirrors the backend's shared `PersonDetails` record (used identically by staff-side student/
+/// trainer registration) - every field optional, null-safe merge server-side, so a signup that
+/// only fills in a few of these still works. Not sent as part of the required 5-field signup
+/// contract; it's an additive extra the server layers on afterward.
+class SignupPersonDetails {
+  const SignupPersonDetails({
+    this.firstName,
+    this.lastName,
+    this.gender,
+    this.bloodGroup,
+    this.altPhone,
+    this.addressLine1,
+    this.addressLine2,
+    this.landmark,
+    this.city,
+    this.district,
+    this.state,
+    this.country,
+    this.pinCode,
+    this.guardianName,
+  });
+
+  final String? firstName;
+  final String? lastName;
+  final String? gender;
+  final String? bloodGroup;
+  final String? altPhone;
+  final String? addressLine1;
+  final String? addressLine2;
+  final String? landmark;
+  final String? city;
+  final String? district;
+  final String? state;
+  final String? country;
+  final String? pinCode;
+  final String? guardianName;
+
+  Map<String, dynamic> toJson() => {
+        'firstName': firstName,
+        'lastName': lastName,
+        'gender': gender,
+        'bloodGroup': bloodGroup,
+        'altPhone': altPhone,
+        'addressLine1': addressLine1,
+        'addressLine2': addressLine2,
+        'landmark': landmark,
+        'city': city,
+        'district': district,
+        'state': state,
+        'country': country,
+        'pinCode': pinCode,
+        'guardianName': guardianName,
+      };
+}
+
 class IdentifyResult {
   final AuthMethod authMethod;
   final String username;
@@ -56,13 +111,16 @@ class AuthApi {
   }
 
   /// Public self-signup - username and password chosen together, same screen. Always creates a
-  /// GUEST account and logs them straight in, same response shape as login.
+  /// GUEST account and logs them straight in, same response shape as login. [dob]/[details] are
+  /// optional - the account is created from just the first five fields either way.
   Future<LoginResult> signup({
     required String username,
     required String password,
     required String fullName,
     required String phone,
     required String email,
+    DateTime? dob,
+    SignupPersonDetails? details,
   }) {
     return _client.call(
       (dio) => dio.post('/auth/signup', data: {
@@ -71,10 +129,32 @@ class AuthApi {
         'fullName': fullName,
         'phone': phone,
         'email': email,
+        if (dob != null) 'dob': _isoDate(dob),
+        if (details != null) 'details': details.toJson(),
       }),
       (data) => LoginResult.fromJson(data as Map<String, dynamic>),
     );
   }
+
+  /// Forgot-password step 1: emails a reset code to whatever address is on file for the account -
+  /// not necessarily what the caller typed, so someone who only remembers their username still
+  /// gets the code at the right inbox. Also serves as "resend."
+  Future<void> forgotPassword(String identifier) {
+    return _client.callVoid((dio) => dio.post('/auth/password/forgot', data: {'identifier': identifier}));
+  }
+
+  /// Forgot-password step 2: verifying the emailed code and setting the new password together,
+  /// while logged out - distinct from [changePassword], which requires being logged in already.
+  Future<void> resetPassword(String identifier, String code, String newPassword) {
+    return _client.callVoid((dio) => dio.post('/auth/password/reset', data: {
+          'identifier': identifier,
+          'code': code,
+          'newPassword': newPassword,
+        }));
+  }
+
+  String _isoDate(DateTime d) =>
+      '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 
   Future<void> resendOtp(String identifier) {
     return _client.callVoid((dio) => dio.post('/auth/otp/request', data: {'identifier': identifier, 'purpose': 'LOGIN'}));

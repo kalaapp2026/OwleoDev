@@ -59,13 +59,16 @@ class SessionController extends Notifier<SessionState> {
   }
 
   /// Public self-signup - username and password chosen together, same screen. Always creates a
-  /// GUEST account and logs them straight in, same as a normal login.
+  /// GUEST account and logs them straight in, same as a normal login. [dob]/[details] are
+  /// optional - the account is created from just the first five fields either way.
   Future<void> signup({
     required String username,
     required String password,
     required String fullName,
     required String phone,
     required String email,
+    DateTime? dob,
+    SignupPersonDetails? details,
   }) async {
     final result = await _authApi.signup(
       username: username,
@@ -73,9 +76,21 @@ class SessionController extends Notifier<SessionState> {
       fullName: fullName,
       phone: phone,
       email: email,
+      dob: dob,
+      details: details,
     );
     await _onLoginSuccess(result);
   }
+
+  /// Forgot-password step 1 - see [AuthApi.forgotPassword]. Doesn't touch session state: the
+  /// caller is still logged out either way until they actually reset the password and sign in.
+  Future<void> forgotPassword(String identifier) => _authApi.forgotPassword(identifier);
+
+  /// Forgot-password step 2 - see [AuthApi.resetPassword]. Deliberately does NOT log the user in;
+  /// the reset invalidates every session server-side, so the natural next step is a normal login
+  /// with the new password, not an implicit one here.
+  Future<void> resetPassword(String identifier, String code, String newPassword) =>
+      _authApi.resetPassword(identifier, code, newPassword);
 
   Future<void> resendOtp(String identifier) => _authApi.resendOtp(identifier);
 

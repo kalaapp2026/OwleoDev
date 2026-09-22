@@ -10,8 +10,8 @@ import com.nest.app.identity.entity.RefreshToken;
 import com.nest.app.identity.entity.User;
 import com.nest.app.identity.repository.RefreshTokenRepository;
 import com.nest.app.identity.repository.UserRepository;
+import com.nest.app.enrolment.dto.PersonDetails;
 import com.nest.common.audit.Auditable;
-import com.nest.common.crypto.PiiHasher;
 import com.nest.common.exception.BadRequestException;
 import com.nest.common.exception.ResourceNotFoundException;
 import com.nest.common.exception.UnauthorizedException;
@@ -23,7 +23,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
-import java.util.List;
+import java.time.LocalDate;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -43,20 +43,18 @@ public class AuthService {
 
     private final UserRepository userRepository;
     private final RefreshTokenRepository refreshTokenRepository;
-    private final PiiHasher hasher;
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenProvider tokenProvider;
     private final PrincipalAssembler principalAssembler;
     private final OtpService otpService;
     private final IdentityRegistrationService identityRegistrationService;
 
-    public AuthService(UserRepository userRepository, RefreshTokenRepository refreshTokenRepository, PiiHasher hasher,
+    public AuthService(UserRepository userRepository, RefreshTokenRepository refreshTokenRepository,
                         PasswordEncoder passwordEncoder, JwtTokenProvider tokenProvider,
                         PrincipalAssembler principalAssembler, OtpService otpService,
                         IdentityRegistrationService identityRegistrationService) {
         this.userRepository = userRepository;
         this.refreshTokenRepository = refreshTokenRepository;
-        this.hasher = hasher;
         this.passwordEncoder = passwordEncoder;
         this.tokenProvider = tokenProvider;
         this.principalAssembler = principalAssembler;
@@ -67,16 +65,27 @@ public class AuthService {
     /** Public self-signup (PRD 7.4 addendum) - always creates a GUEST account with the password
      * the person chose themselves, then logs them straight in (same shape as loginWithPassword)
      * so signup doesn't need a second round-trip. Becoming an Artist is a separate step afterward
-     * (POST /artist-applications), reviewed by Super Admin. */
+     * (POST /artist-applications), reviewed by Super Admin. {@code dob}/{@code details} are
+     * optional extras layered on afterward with the same merge {@link IdentityRegistrationService}
+     * already uses for staff-entered profiles - a signup that omits them still creates the account
+     * from just the required five fields. */
     @Transactional
     @Auditable(action = "GUEST_SIGNED_UP", entityType = "user")
-    public AuthResponse signup(String username, String rawPassword, String fullName, String phone, String email) {
+    public AuthResponse signup(String username, String rawPassword, String fullName, String phone, String email,
+                                LocalDate dob, PersonDetails details) {
         User user = identityRegistrationService.createGuestWithPassword(username, rawPassword, fullName, phone, email);
+        if (dob != null) {
+            user.setDob(dob);
+            user = userRepository.save(user);
+        }
+        if (details != null) {
+            user = identityRegistrationService.applyPersonDetails(user, details);
+        }
         return issueTokens(user);
     }
 
     /**
-     * Single unified entry point: the caller types one identifier (username OR phone) and the
+     * Single unified entry point: the caller types one identifier (username OR email) and the
      * backend decides whether this account needs a password or an OTP - no manual "Admin/Trainer
      * vs Student/Guest" tab for the user to pick themselves. If the account is OTP-based, this
      * also sends the code as a side effect, so the client's very next call is straight to
@@ -94,26 +103,16 @@ public class AuthService {
         return new IdentifyResponse(AuthMethod.OTP, user.getUsername(), maskPhone(user.getPhone()));
     }
 
-    /** Username-or-phone resolution, shared by every step of the unified login flow (identify,
-     * OTP verify, OTP resend) so the client can always send back whatever the user originally
-     * typed - it never needs to remember/re-derive which lookup type that was. Phone is no longer
-     * unique (a family may share one number across accounts), so a phone match that resolves to
-     * more than one account is ambiguous - the caller must fall back to their username instead. */
+    /** Username-or-email resolution, shared by every step of the unified login flow (identify, OTP
+     * verify, OTP resend, forgot/reset password) so the client can always send back whatever the
+     * user originally typed - it never needs to remember/re-derive which lookup type that was.
+     * Phone is deliberately not a login identifier: it isn't unique (a family may share one number
+     * across accounts, PRD 7.4 addendum), so a phone match could be ambiguous in a way username and
+     * email - the platform's actual dedup key, see {@link User#getEmail()} - never are. */
     private User resolveByIdentifier(String identifier) {
-        Optional<User> byUsername = userRepository.findByUsername(identifier);
-        if (byUsername.isPresent()) {
-            return byUsername.get();
-        }
-
-        List<User> byPhone = userRepository.findAllByPhoneHash(hasher.hash(identifier));
-        if (byPhone.isEmpty()) {
-            throw new ResourceNotFoundException("No NEST account found for '" + identifier + "'");
-        }
-        if (byPhone.size() > 1) {
-            throw new BadRequestException(
-                    "More than one NEST account uses this phone number - please log in with your username instead");
-        }
-        return byPhone.get(0);
+        return userRepository.findByUsername(identifier)
+                .or(() -> userRepository.findByEmailIgnoreCase(identifier))
+                .orElseThrow(() -> new ResourceNotFoundException("No NEST account found for '" + identifier + "'"));
     }
 
     @Transactional
@@ -175,6 +174,39 @@ public class AuthService {
         refreshTokenRepository.findById(jti).ifPresent(this::revoke);
         // Unknown/already-revoked token: logout is idempotent, not an error - the end state
         // ("this session is not usable") is already true either way.
+    }
+
+    /** Forgot-password step 1: emails a reset code to whatever address is on file for the resolved
+     * account - not necessarily the identifier the caller typed, so someone who only remembers
+     * their username still gets the code at the right inbox. Same endpoint doubles as "resend" the
+     * way /auth/otp/request does; {@link OtpService}'s own rate limit covers spamming it. */
+    @Transactional
+    public void requestPasswordReset(String identifier) {
+        User user = resolveByIdentifier(identifier);
+        String email = user.getEmail();
+        if (email == null || email.isBlank()) {
+            throw new BadRequestException("This account has no email on file - contact your academy admin to reset your password");
+        }
+        otpService.requestOtpForEmail(email, OtpPurpose.PASSWORD_RESET, null);
+    }
+
+    /** Forgot-password step 2: verifying the code and setting the new password happen together so
+     * a code can't be "spent" without a password change actually taking effect. Revokes every
+     * refresh token for the account, same as {@link #changePassword} - a password reset is exactly
+     * the moment every other logged-in session should be forced to sign in again. */
+    @Transactional
+    public void resetPassword(String identifier, String code, String newPassword) {
+        User user = resolveByIdentifier(identifier);
+        String email = user.getEmail();
+        if (email == null || email.isBlank()) {
+            throw new BadRequestException("This account has no email on file - contact your academy admin to reset your password");
+        }
+        otpService.verifyOtpForEmail(email, code, OtpPurpose.PASSWORD_RESET);
+
+        user.setPasswordHash(passwordEncoder.encode(newPassword));
+        user.setTemporaryPassword(false);
+        userRepository.save(user);
+        refreshTokenRepository.revokeAllForUser(user.getId());
     }
 
     @Transactional

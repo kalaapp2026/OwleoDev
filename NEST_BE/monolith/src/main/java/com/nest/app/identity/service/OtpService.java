@@ -34,11 +34,13 @@ public class OtpService {
     private final OtpVerificationRepository otpRepository;
     private final PiiHasher hasher;
     private final OtpSender sender;
+    private final EmailSender emailSender;
 
-    public OtpService(OtpVerificationRepository otpRepository, PiiHasher hasher, OtpSender sender) {
+    public OtpService(OtpVerificationRepository otpRepository, PiiHasher hasher, OtpSender sender, EmailSender emailSender) {
         this.otpRepository = otpRepository;
         this.hasher = hasher;
         this.sender = sender;
+        this.emailSender = emailSender;
     }
 
     /** @return the raw code, so callers that also need to show it somewhere other than the SMS/
@@ -90,6 +92,59 @@ public class OtpService {
             otp.setAttempts(otp.getAttempts() + 1);
             otpRepository.save(otp);
             throw new BadRequestException("Incorrect OTP code");
+        }
+
+        otp.setConsumed(true);
+        otpRepository.save(otp);
+        return otp.getContextId();
+    }
+
+    /** Email-delivered counterpart to {@link #requestOtp} - same TTL/rate-limit rules, keyed by
+     * {@code email_hash} instead of {@code phone_hash} on the same table. Used by PASSWORD_RESET. */
+    @Transactional
+    public String requestOtpForEmail(String rawEmail, OtpPurpose purpose, UUID contextId) {
+        String emailHash = hasher.hash(rawEmail);
+
+        long recentRequests = otpRepository.countByEmailHashAndPurposeAndCreatedAtAfter(
+                emailHash, purpose, Instant.now().minus(RATE_LIMIT_WINDOW));
+        if (recentRequests >= MAX_REQUESTS_PER_WINDOW) {
+            throw new TooManyRequestsException("Too many code requests for this email - try again later");
+        }
+
+        String code = generateCode();
+        OtpVerification otp = OtpVerification.builder()
+                .emailHash(emailHash)
+                .codeHash(hasher.hash(code))
+                .purpose(purpose)
+                .contextId(contextId)
+                .expiresAt(Instant.now().plus(CODE_TTL))
+                .build();
+        otpRepository.save(otp);
+
+        emailSender.sendOtp(rawEmail, code, purpose);
+        return code;
+    }
+
+    /** Email-delivered counterpart to {@link #verifyOtp}. */
+    @Transactional
+    public UUID verifyOtpForEmail(String rawEmail, String code, OtpPurpose purpose) {
+        String emailHash = hasher.hash(rawEmail);
+        Optional<OtpVerification> maybeOtp =
+                otpRepository.findTopByEmailHashAndPurposeAndConsumedFalseOrderByCreatedAtDesc(emailHash, purpose);
+
+        OtpVerification otp = maybeOtp.orElseThrow(() -> new BadRequestException("No pending code for this email"));
+
+        if (otp.isConsumed() || otp.getExpiresAt().isBefore(Instant.now())) {
+            throw new BadRequestException("Code has expired - request a new one");
+        }
+        if (otp.getAttempts() >= MAX_VERIFY_ATTEMPTS) {
+            throw new BadRequestException("Too many incorrect attempts - request a new code");
+        }
+
+        if (!otp.getCodeHash().equals(hasher.hash(code))) {
+            otp.setAttempts(otp.getAttempts() + 1);
+            otpRepository.save(otp);
+            throw new BadRequestException("Incorrect code");
         }
 
         otp.setConsumed(true);

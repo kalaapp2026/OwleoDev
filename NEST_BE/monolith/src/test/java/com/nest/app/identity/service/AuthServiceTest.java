@@ -6,7 +6,7 @@ import com.nest.app.identity.entity.RefreshToken;
 import com.nest.app.identity.entity.User;
 import com.nest.app.identity.repository.RefreshTokenRepository;
 import com.nest.app.identity.repository.UserRepository;
-import com.nest.common.crypto.PiiHasher;
+import com.nest.common.exception.BadRequestException;
 import com.nest.common.exception.ResourceNotFoundException;
 import com.nest.common.exception.UnauthorizedException;
 import com.nest.common.security.JwtProperties;
@@ -49,8 +49,6 @@ class AuthServiceTest {
     @Mock
     private RefreshTokenRepository refreshTokenRepository;
     @Mock
-    private PiiHasher hasher;
-    @Mock
     private PasswordEncoder passwordEncoder;
     @Mock
     private PrincipalAssembler principalAssembler;
@@ -67,7 +65,7 @@ class AuthServiceTest {
     @BeforeEach
     void setUp() {
         tokenProvider = new JwtTokenProvider(new JwtProperties());
-        authService = new AuthService(userRepository, refreshTokenRepository, hasher, passwordEncoder,
+        authService = new AuthService(userRepository, refreshTokenRepository, passwordEncoder,
                 tokenProvider, principalAssembler, otpService, identityRegistrationService);
     }
 
@@ -77,7 +75,7 @@ class AuthServiceTest {
 
     private User studentUser() {
         return User.builder().id(UUID.randomUUID()).username("priya_r").passwordHash(null)
-                .phone("9876543210").role(Role.STUDENT).fullName("Priya").build();
+                .phone("9876543210").email("priya@example.com").role(Role.STUDENT).fullName("Priya").build();
     }
 
     private void stubAssembly() {
@@ -219,13 +217,12 @@ class AuthServiceTest {
     }
 
     @Test
-    void identifyByPhoneFallsBackToPhoneLookupWhenNotAUsername() {
+    void identifyByEmailFallsBackToEmailLookupWhenNotAUsername() {
         User student = studentUser();
-        when(userRepository.findByUsername("9876543210")).thenReturn(Optional.empty());
-        when(hasher.hash("9876543210")).thenReturn("hashed-phone");
-        when(userRepository.findAllByPhoneHash("hashed-phone")).thenReturn(List.of(student));
+        when(userRepository.findByUsername("priya@example.com")).thenReturn(Optional.empty());
+        when(userRepository.findByEmailIgnoreCase("priya@example.com")).thenReturn(Optional.of(student));
 
-        var result = authService.identify("9876543210");
+        var result = authService.identify("priya@example.com");
 
         assertThat(result.authMethod()).isEqualTo(AuthMethod.OTP);
     }
@@ -233,24 +230,10 @@ class AuthServiceTest {
     @Test
     void identifyWithUnknownIdentifierIsRejected() {
         when(userRepository.findByUsername("ghost")).thenReturn(Optional.empty());
-        when(hasher.hash("ghost")).thenReturn("hashed-ghost");
-        when(userRepository.findAllByPhoneHash("hashed-ghost")).thenReturn(List.of());
+        when(userRepository.findByEmailIgnoreCase("ghost")).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> authService.identify("ghost"))
                 .isInstanceOf(ResourceNotFoundException.class);
-    }
-
-    @Test
-    void identifyByPhoneSharedAcrossTwoAccountsAsksForUsernameInstead() {
-        User child1 = studentUser();
-        User child2 = User.builder().id(UUID.randomUUID()).username("priya_k").phone("9876543210").role(Role.STUDENT).fullName("Priya K").build();
-        when(userRepository.findByUsername("9876543210")).thenReturn(Optional.empty());
-        when(hasher.hash("9876543210")).thenReturn("hashed-phone");
-        when(userRepository.findAllByPhoneHash("hashed-phone")).thenReturn(List.of(child1, child2));
-
-        assertThatThrownBy(() -> authService.identify("9876543210"))
-                .isInstanceOf(com.nest.common.exception.BadRequestException.class)
-                .hasMessageContaining("username");
     }
 
     @Test
@@ -261,9 +244,43 @@ class AuthServiceTest {
                 .thenReturn(guest);
         stubAssembly();
 
-        var response = authService.signup("newartist", "secret1", "New Artist", "9111111111", "new@example.com");
+        var response = authService.signup("newartist", "secret1", "New Artist", "9111111111", "new@example.com", null, null);
 
         assertThat(response.accessToken()).isNotBlank();
         verify(refreshTokenRepository).save(any(RefreshToken.class));
+    }
+
+    @Test
+    void requestPasswordResetSendsAnEmailOtpToTheAccountsOwnEmail() {
+        when(userRepository.findByUsername("priya_r")).thenReturn(Optional.of(studentUser()));
+
+        authService.requestPasswordReset("priya_r");
+
+        verify(otpService).requestOtpForEmail(eq("priya@example.com"), eq(OtpPurpose.PASSWORD_RESET), eq(null));
+    }
+
+    @Test
+    void requestPasswordResetWithNoEmailOnFileIsRejected() {
+        User noEmail = User.builder().id(UUID.randomUUID()).username("noemail").role(Role.STUDENT).fullName("No Email").build();
+        when(userRepository.findByUsername("noemail")).thenReturn(Optional.of(noEmail));
+
+        assertThatThrownBy(() -> authService.requestPasswordReset("noemail"))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("no email on file");
+        verify(otpService, never()).requestOtpForEmail(any(), any(), any());
+    }
+
+    @Test
+    void resetPasswordVerifiesTheCodeThenChangesPasswordAndRevokesOtherSessions() {
+        User student = studentUser();
+        when(userRepository.findByUsername("priya_r")).thenReturn(Optional.of(student));
+        when(passwordEncoder.encode("newpassword")).thenReturn("newhash");
+
+        authService.resetPassword("priya_r", "123456", "newpassword");
+
+        verify(otpService).verifyOtpForEmail("priya@example.com", "123456", OtpPurpose.PASSWORD_RESET);
+        assertThat(student.getPasswordHash()).isEqualTo("newhash");
+        assertThat(student.isTemporaryPassword()).isFalse();
+        verify(refreshTokenRepository).revokeAllForUser(student.getId());
     }
 }

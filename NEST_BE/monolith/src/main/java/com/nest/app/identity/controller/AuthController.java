@@ -2,12 +2,14 @@ package com.nest.app.identity.controller;
 
 import com.nest.app.identity.dto.AuthResponse;
 import com.nest.app.identity.dto.ChangePasswordRequest;
+import com.nest.app.identity.dto.ForgotPasswordRequest;
 import com.nest.app.identity.dto.IdentifyRequest;
 import com.nest.app.identity.dto.IdentifyResponse;
 import com.nest.app.identity.dto.LoginRequest;
 import com.nest.app.identity.dto.OtpRequestDto;
 import com.nest.app.identity.dto.OtpVerifyRequest;
 import com.nest.app.identity.dto.RefreshRequest;
+import com.nest.app.identity.dto.ResetPasswordRequest;
 import com.nest.app.identity.dto.SignupRequest;
 import com.nest.common.security.TenantContext;
 import com.nest.app.identity.entity.OtpPurpose;
@@ -29,7 +31,7 @@ public class AuthController {
         this.authService = authService;
     }
 
-    /** Single unified login entry point: one identifier (username or phone), no manual
+    /** Single unified login entry point: one identifier (username or email), no manual
      * "Admin/Trainer vs Student/Guest" choice. Tells the client whether to show a password or
      * OTP field next - and for OTP accounts, has already sent the code as a side effect. */
     @PostMapping("/auth/identify")
@@ -47,7 +49,25 @@ public class AuthController {
      * Artist is a separate step afterward (POST /artist-applications). */
     @PostMapping("/auth/signup")
     public AuthResponse signup(@Valid @RequestBody SignupRequest request) {
-        return authService.signup(request.username(), request.password(), request.fullName(), request.phone(), request.email());
+        return authService.signup(request.username(), request.password(), request.fullName(), request.phone(),
+                request.email(), request.dob(), request.details());
+    }
+
+    /** Step 1 of forgot-password: emails a reset code to the account's email on file. Also serves
+     * as "resend" if called again - same convention as /auth/otp/request. */
+    @PostMapping("/auth/password/forgot")
+    public ResponseEntity<Void> forgotPassword(@Valid @RequestBody ForgotPasswordRequest request) {
+        authService.requestPasswordReset(request.identifier());
+        return ResponseEntity.accepted().build();
+    }
+
+    /** Step 2 of forgot-password: verifying the emailed code and setting the new password in one
+     * call, while logged out. Distinct from /auth/password/change, which requires being logged in
+     * and knowing the current password. */
+    @PostMapping("/auth/password/reset")
+    public ResponseEntity<Void> resetPassword(@Valid @RequestBody ResetPasswordRequest request) {
+        authService.resetPassword(request.identifier(), request.code(), request.newPassword());
+        return ResponseEntity.noContent().build();
     }
 
     @PostMapping("/auth/otp/request")
