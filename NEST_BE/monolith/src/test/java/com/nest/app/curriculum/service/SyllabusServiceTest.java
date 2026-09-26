@@ -33,6 +33,7 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.when;
 
 /** Covers the material-visibility scoping this feature is built around: course-wide material
@@ -175,6 +176,15 @@ class SyllabusServiceTest {
         var result = syllabusService.listForCourse(courseId, null);
 
         assertThat(result).hasSize(2);
+    }
+
+    @Test
+    void unscopedListingIsRejectedWhenCallerLacksSyllabusEditOnThisCourse() {
+        doThrow(new ForbiddenException("nope")).when(courseFeatureGuard)
+                .assertCourseFeature(courseId, com.nest.common.security.FeatureKey.SYLLABUS_EDIT);
+
+        assertThatThrownBy(() -> syllabusService.listForCourse(courseId, null))
+                .isInstanceOf(ForbiddenException.class);
     }
 
     @Test

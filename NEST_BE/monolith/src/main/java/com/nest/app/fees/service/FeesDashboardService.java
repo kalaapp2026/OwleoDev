@@ -25,6 +25,8 @@ import com.nest.app.identity.entity.User;
 import com.nest.app.identity.repository.AcademyMembershipRepository;
 import com.nest.app.identity.repository.CourseMapRepository;
 import com.nest.app.identity.repository.UserRepository;
+import com.nest.app.identity.service.CourseFeatureGuard;
+import com.nest.common.security.FeatureKey;
 import com.nest.common.security.Role;
 import com.nest.common.security.TenantContext;
 import org.springframework.stereotype.Service;
@@ -37,6 +39,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -59,6 +62,7 @@ public class FeesDashboardService {
     private final BatchMemberRepository batchMemberRepository;
     private final AcademyMembershipRepository membershipRepository;
     private final UserRepository userRepository;
+    private final CourseFeatureGuard courseFeatureGuard;
 
     public FeesDashboardService(CourseRepository courseRepository,
                                 CourseMapRepository courseMapRepository,
@@ -69,7 +73,8 @@ public class FeesDashboardService {
                                 BatchRepository batchRepository,
                                 BatchMemberRepository batchMemberRepository,
                                 AcademyMembershipRepository membershipRepository,
-                                UserRepository userRepository) {
+                                UserRepository userRepository,
+                                CourseFeatureGuard courseFeatureGuard) {
         this.courseRepository = courseRepository;
         this.courseMapRepository = courseMapRepository;
         this.feeSlipRepository = feeSlipRepository;
@@ -80,6 +85,7 @@ public class FeesDashboardService {
         this.batchMemberRepository = batchMemberRepository;
         this.membershipRepository = membershipRepository;
         this.userRepository = userRepository;
+        this.courseFeatureGuard = courseFeatureGuard;
     }
 
     /**
@@ -99,9 +105,17 @@ public class FeesDashboardService {
 
     private FeeSummaryResponse.CategorySummary regularSummary(
             UUID academyId, String period, UUID courseId, UUID batchId) {
+        // A named course must be one the caller actually holds FEES_ENTRY on; an unnamed course
+        // (the whole-academy card) is instead narrowed to whichever courses that is, so a Trainer
+        // never sees collection totals for a course they don't work on.
+        if (courseId != null) {
+            courseFeatureGuard.assertCourseFeature(courseId, FeatureKey.FEES_ENTRY);
+        }
+        Optional<Set<UUID>> visibleCourseIds = courseFeatureGuard.visibleCourseIds(FeatureKey.FEES_ENTRY);
 
         List<Course> courses = courseRepository.findByAcademyIdOrderByNameAsc(academyId).stream()
                 .filter(c -> courseId == null || c.getId().equals(courseId))
+                .filter(c -> visibleCourseIds.isEmpty() || visibleCourseIds.get().contains(c.getId()))
                 .toList();
         if (courses.isEmpty()) {
             return FeeSummaryResponse.CategorySummary.empty();
@@ -176,6 +190,10 @@ public class FeesDashboardService {
         if (types.isEmpty()) {
             return FeeSummaryResponse.CategorySummary.empty();
         }
+        if (courseId != null) {
+            courseFeatureGuard.assertCourseFeature(courseId, FeatureKey.FEES_ENTRY);
+        }
+        Optional<Set<UUID>> visibleCourseIds = courseFeatureGuard.visibleCourseIds(FeatureKey.FEES_ENTRY);
 
         Map<UUID, List<FeeTypeBatch>> bindingsByType = feeTypeBatchRepository
                 .findByFeeTypeIdIn(types.stream().map(FeeType::getId).toList()).stream()
@@ -210,6 +228,9 @@ public class FeesDashboardService {
                     continue;
                 }
                 if (courseId != null && !batch.getCourseId().equals(courseId)) {
+                    continue;
+                }
+                if (visibleCourseIds.isPresent() && !visibleCourseIds.get().contains(batch.getCourseId())) {
                     continue;
                 }
                 if (batchId != null && !batch.getId().equals(batchId)) {
@@ -305,8 +326,24 @@ public class FeesDashboardService {
                     return user != null && user.getFullName() != null
                             && user.getFullName().toLowerCase().contains(needle);
                 })
-                .limit(limit)
                 .toList();
+        if (matches.isEmpty()) {
+            return List.of();
+        }
+
+        // A Trainer only ever searches among students enrolled in a course they hold FEES_ENTRY
+        // on - otherwise this search is a way to discover every student in the academy regardless
+        // of which courses were actually delegated to them.
+        Optional<Set<UUID>> visibleCourseIds = courseFeatureGuard.visibleCourseIds(FeatureKey.FEES_ENTRY);
+        if (visibleCourseIds.isPresent()) {
+            Set<UUID> visibleSet = visibleCourseIds.get();
+            matches = matches.stream()
+                    .filter(m -> courseMapRepository.findByMembershipId(m.getId()).stream()
+                            .filter(CourseMap::isActive)
+                            .anyMatch(cm -> visibleSet.contains(cm.getCourseId())))
+                    .toList();
+        }
+        matches = matches.stream().limit(limit).toList();
         if (matches.isEmpty()) {
             return List.of();
         }

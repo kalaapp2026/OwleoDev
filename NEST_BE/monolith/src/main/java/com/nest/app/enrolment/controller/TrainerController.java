@@ -2,6 +2,7 @@ package com.nest.app.enrolment.controller;
 
 import com.nest.app.enrolment.dto.ConfirmMembershipRequest;
 import com.nest.app.enrolment.dto.RegisterTrainerRequest;
+import com.nest.app.enrolment.dto.TrainerCardResponse;
 import com.nest.app.enrolment.dto.TrainerDetailResponse;
 import com.nest.app.enrolment.dto.TrainerResponse;
 import com.nest.app.enrolment.dto.TrainerSummaryResponse;
@@ -58,6 +59,14 @@ public class TrainerController {
     @RequiresFeature(FeatureKey.TRAINER_REGISTRATION)
     public TrainerResponse update(@PathVariable UUID membershipId, @Valid @RequestBody UpdateTrainerRequest request) {
         return trainerRegistrationService.updateTrainer(membershipId, request);
+    }
+
+    /** The Academy Profile page's featured-trainer drill-down - open to any member of the active
+     * academy, not gated by TRAINER_REGISTRATION like the edit-form endpoints above, since this
+     * is a public-safe read (see TrainerCardResponse) and scoping is enforced inside the service. */
+    @GetMapping("/trainers/{membershipId}/card")
+    public TrainerCardResponse card(@PathVariable UUID membershipId) {
+        return trainerRegistrationService.getTrainerCard(membershipId);
     }
 
     /** Batch default-trainer picker + Users management screen. includeInactive=false (default,

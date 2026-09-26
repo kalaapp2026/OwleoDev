@@ -56,9 +56,36 @@ class _CalendarDialog extends StatefulWidget {
   State<_CalendarDialog> createState() => _CalendarDialogState();
 }
 
+/// Which grid the dialog is showing. Landing straight on a day grid is fine when the target date
+/// is nearby, but stepping a birth year back one month at a time is dozens of taps - the year grid
+/// gives a direct jump instead.
+enum _CalendarView { day, year }
+
 class _CalendarDialogState extends State<_CalendarDialog> {
   late DateTime _month = DateTime(widget.initialMonth.year, widget.initialMonth.month);
   late int? _day = widget.selectedDay;
+  _CalendarView _view = _CalendarView.day;
+  final ScrollController _yearScrollController = ScrollController();
+
+  int get _earliestYear => (widget.earliestMonth?.year ?? _month.year - 100);
+  int get _latestYear => (widget.latestMonth?.year ?? _month.year + 5);
+  int _yearIndexOf(int year) => (year - _earliestYear).clamp(0, _latestYear - _earliestYear);
+
+  // Centres roughly on the current month's year rather than leaving the grid at its earliest year
+  // - opening the year picker for a decades-old birth date shouldn't itself need scrolling.
+  void _scrollYearGridToCurrent() {
+    if (!_yearScrollController.hasClients) return;
+    const rowHeight = 56.0;
+    final row = _yearIndexOf(_month.year) ~/ 4;
+    final target = (row * rowHeight - 100).clamp(0.0, _yearScrollController.position.maxScrollExtent);
+    _yearScrollController.jumpTo(target);
+  }
+
+  @override
+  void dispose() {
+    _yearScrollController.dispose();
+    super.dispose();
+  }
 
   bool get _canGoBack {
     final earliest = widget.earliestMonth;
@@ -106,70 +133,153 @@ class _CalendarDialogState extends State<_CalendarDialog> {
               children: [
                 AppIconButton(
                   icon: Icons.chevron_left_rounded,
-                  onTap: _canGoBack ? () => _step(-1) : null,
+                  onTap: _view == _CalendarView.day && _canGoBack ? () => _step(-1) : null,
                 ),
                 Expanded(
                   child: Center(
-                    child: Text(
-                      monthLabel(_month),
-                      style: TextStyle(
-                        fontSize: AppType.xxl,
-                        fontWeight: AppType.heavy,
-                        color: palette.text,
+                    // Tapping the month/year title jumps to a scrollable year grid rather than
+                    // making a decades-old date wait out one chevron tap per month.
+                    child: Pressable(
+                      onTap: () => setState(() {
+                        _view = _view == _CalendarView.day ? _CalendarView.year : _CalendarView.day;
+                        if (_view == _CalendarView.year) {
+                          WidgetsBinding.instance
+                              .addPostFrameCallback((_) => _scrollYearGridToCurrent());
+                        }
+                      }),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            _view == _CalendarView.day ? monthLabel(_month) : '${_month.year}',
+                            style: TextStyle(
+                              fontSize: AppType.xxl,
+                              fontWeight: AppType.heavy,
+                              color: palette.text,
+                            ),
+                          ),
+                          const SizedBox(width: 2),
+                          Icon(
+                            _view == _CalendarView.day
+                                ? Icons.keyboard_arrow_down_rounded
+                                : Icons.keyboard_arrow_up_rounded,
+                            size: 18,
+                            color: palette.textFaint,
+                          ),
+                        ],
                       ),
                     ),
                   ),
                 ),
                 AppIconButton(
                   icon: Icons.chevron_right_rounded,
-                  onTap: _canGoForward ? () => _step(1) : null,
+                  onTap: _view == _CalendarView.day && _canGoForward ? () => _step(1) : null,
                 ),
               ],
             ),
             const SizedBox(height: AppSpacing.lg),
-            Row(
-              children: [
-                for (final label in _weekdayLabels)
-                  Expanded(
-                    child: Center(
-                      child: Text(
-                        label,
-                        style: TextStyle(
-                          fontSize: AppType.tiny,
-                          fontWeight: AppType.bold,
-                          color: palette.textFaint,
+            if (_view == _CalendarView.year) ...[
+              SizedBox(
+                height: 260,
+                child: GridView.builder(
+                  controller: _yearScrollController,
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 4,
+                    mainAxisSpacing: 8,
+                    crossAxisSpacing: 8,
+                    mainAxisExtent: 48,
+                  ),
+                  itemCount: _latestYear - _earliestYear + 1,
+                  itemBuilder: (context, index) {
+                    final year = _earliestYear + index;
+                    final selected = year == _month.year;
+                    return _YearCell(
+                      year: year,
+                      selected: selected,
+                      onTap: () => setState(() {
+                        _month = DateTime(year, _month.month);
+                        _view = _CalendarView.day;
+                      }),
+                    );
+                  },
+                ),
+              ),
+            ] else ...[
+              Row(
+                children: [
+                  for (final label in _weekdayLabels)
+                    Expanded(
+                      child: Center(
+                        child: Text(
+                          label,
+                          style: TextStyle(
+                            fontSize: AppType.tiny,
+                            fontWeight: AppType.bold,
+                            color: palette.textFaint,
+                          ),
                         ),
                       ),
                     ),
-                  ),
-              ],
-            ),
-            const SizedBox(height: AppSpacing.xs),
-            GridView.count(
-              crossAxisCount: 7,
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              mainAxisSpacing: 4,
-              crossAxisSpacing: 4,
-              children: [
-                for (var i = 0; i < firstWeekday; i++) const SizedBox.shrink(),
-                for (var d = 1; d <= daysInMonth; d++)
-                  _DayCell(
-                    day: d,
-                    selected: d == _day,
-                    onTap: () => setState(() => _day = d),
-                  ),
-              ],
-            ),
-            const SizedBox(height: AppSpacing.lg),
-            AppPrimaryButton(
-              label: 'Done',
-              icon: Icons.check,
-              onPressed: () => Navigator.of(context).pop(
-                DateTime(_month.year, _month.month, _day ?? 1),
+                ],
               ),
-            ),
+              const SizedBox(height: AppSpacing.xs),
+              GridView.count(
+                crossAxisCount: 7,
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                mainAxisSpacing: 4,
+                crossAxisSpacing: 4,
+                children: [
+                  for (var i = 0; i < firstWeekday; i++) const SizedBox.shrink(),
+                  for (var d = 1; d <= daysInMonth; d++)
+                    _DayCell(
+                      day: d,
+                      selected: d == _day,
+                      onTap: () => setState(() => _day = d),
+                    ),
+                ],
+              ),
+              const SizedBox(height: AppSpacing.lg),
+              AppPrimaryButton(
+                label: 'Done',
+                icon: Icons.check,
+                onPressed: () => Navigator.of(context).pop(
+                  DateTime(_month.year, _month.month, _day ?? 1),
+                ),
+              ),
+            ],
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _YearCell extends StatelessWidget {
+  const _YearCell({required this.year, required this.selected, required this.onTap});
+
+  final int year;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.palette;
+    return Pressable(
+      onTap: onTap,
+      child: Container(
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: selected ? palette.primary : Colors.transparent,
+          borderRadius: AppRadii.all(AppRadii.md),
+        ),
+        child: Text(
+          '$year',
+          style: TextStyle(
+            fontSize: AppType.md,
+            fontWeight: selected ? AppType.heavy : AppType.regular,
+            color: selected ? palette.onPrimary : palette.text,
+          ),
         ),
       ),
     );

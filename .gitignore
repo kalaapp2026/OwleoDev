@@ -35,6 +35,9 @@ application-local.yml
 *.pem
 *.key
 
+# Raw pg_dump snapshots - real user PII and password hashes, never belongs in git.
+db_backups/
+
 # Claude Code - personal/local tool permissions, not shared project config
 .claude/settings.local.json
 

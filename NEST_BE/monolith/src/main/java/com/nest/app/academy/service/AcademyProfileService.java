@@ -10,6 +10,7 @@ import com.nest.app.academy.dto.HighlightResponse;
 import com.nest.app.academy.dto.HighlightTrainerResponse;
 import com.nest.app.academy.dto.TrainerCandidateResponse;
 import com.nest.app.academy.dto.UpdateAcademyProfileRequest;
+import com.nest.app.academy.dto.UpdateFeaturedTrainerRequest;
 import com.nest.app.academy.dto.UpdateHighlightRequest;
 import com.nest.app.academy.entity.Academy;
 import com.nest.app.academy.entity.AcademyBranch;
@@ -115,6 +116,9 @@ public class AcademyProfileService {
         academy.setXUrl(blankToNull(request.xUrl()));
         academy.setFacebookUrl(blankToNull(request.facebookUrl()));
         academy.setYoutubeUrl(blankToNull(request.youtubeUrl()));
+        academy.setWhatsapp(blankToNull(request.whatsapp()));
+        academy.setWebsiteUrl(blankToNull(request.websiteUrl()));
+        academy.setMapsUrl(blankToNull(request.mapsUrl()));
         academyRepository.save(academy);
         return getProfile(academyId);
     }
@@ -125,6 +129,16 @@ public class AcademyProfileService {
         Academy academy = findOrThrow(academyId);
         String url = fileStorageService.store(file, "academy-logos", IMAGE_CONTENT_TYPES, IMAGE_MAX_BYTES);
         academy.setLogoUrl(url);
+        academyRepository.save(academy);
+        return getProfile(academyId);
+    }
+
+    @Transactional
+    @Auditable(action = "ACADEMY_COVER_IMAGE_UPLOADED", entityType = "academy")
+    public AcademyProfileResponse uploadCoverImage(UUID academyId, MultipartFile file) {
+        Academy academy = findOrThrow(academyId);
+        String url = fileStorageService.store(file, "academy-covers", IMAGE_CONTENT_TYPES, IMAGE_MAX_BYTES);
+        academy.setCoverImageUrl(url);
         academyRepository.save(academy);
         return getProfile(academyId);
     }
@@ -230,8 +244,22 @@ public class AcademyProfileService {
         AcademyFeaturedTrainer featured = AcademyFeaturedTrainer.builder()
                 .academyId(academyId)
                 .trainerMembershipId(request.trainerMembershipId())
+                .designation(blankToNull(request.designation()))
                 .orderIndex(featuredTrainerRepository.findByAcademyIdOrderByOrderIndex(academyId).size())
                 .build();
+        featured = featuredTrainerRepository.save(featured);
+        return resolveFeaturedTrainers(List.of(featured)).get(0);
+    }
+
+    @Transactional
+    @Auditable(action = "ACADEMY_FEATURED_TRAINER_UPDATED", entityType = "academy")
+    public FeaturedTrainerResponse updateFeaturedTrainer(UUID academyId, UUID featuredTrainerId, UpdateFeaturedTrainerRequest request) {
+        AcademyFeaturedTrainer featured = featuredTrainerRepository.findById(featuredTrainerId)
+                .orElseThrow(() -> new ResourceNotFoundException("Featured trainer not found: " + featuredTrainerId));
+        if (!featured.getAcademyId().equals(academyId)) {
+            throw new ResourceNotFoundException("Featured trainer not found: " + featuredTrainerId);
+        }
+        featured.setDesignation(blankToNull(request.designation()));
         featured = featuredTrainerRepository.save(featured);
         return resolveFeaturedTrainers(List.of(featured)).get(0);
     }
@@ -317,7 +345,8 @@ public class AcademyProfileService {
                     AcademyMembership m = membershipsById.get(f.getTrainerMembershipId());
                     User u = m == null ? null : usersById.get(m.getUserId());
                     return new FeaturedTrainerResponse(f.getId(), f.getTrainerMembershipId(),
-                            u == null ? "Unknown" : u.getFullName(), u == null ? null : u.getProfileImageUrl());
+                            u == null ? "Unknown" : u.getFullName(), u == null ? null : u.getProfileImageUrl(),
+                            f.getDesignation());
                 })
                 .collect(Collectors.toList());
     }
@@ -345,6 +374,7 @@ public class AcademyProfileService {
         return new AcademyProfileResponse(a.getId(), a.getName(), a.getTagline(), a.getLogoUrl(), a.getDescription(),
                 a.getEstablishedBy(), a.getOwnerName(), a.getAdditionalInfo(), a.getAddress(), a.getCity(), a.getState(),
                 a.getContactNumber(), a.getEmail(), a.getInstagramUrl(), a.getXUrl(), a.getFacebookUrl(), a.getYoutubeUrl(),
+                a.getWhatsapp(), a.getWebsiteUrl(), a.getMapsUrl(), a.getCoverImageUrl(),
                 highlights, featuredTrainers, branches);
     }
 }

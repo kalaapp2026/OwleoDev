@@ -1,11 +1,16 @@
 package com.nest.app.scheduling.service;
 
+import com.nest.app.enrolment.entity.Batch;
+import com.nest.app.enrolment.repository.BatchRepository;
+import com.nest.app.identity.service.CourseFeatureGuard;
 import com.nest.app.scheduling.dto.RescheduleRequest;
 import com.nest.app.scheduling.entity.ClassInstance;
 import com.nest.app.scheduling.entity.ClassInstanceStatus;
 import com.nest.app.scheduling.repository.ClassInstanceRepository;
 import com.nest.common.exception.BadRequestException;
+import com.nest.common.exception.ForbiddenException;
 import com.nest.common.exception.ResourceNotFoundException;
+import com.nest.common.security.FeatureKey;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -22,6 +27,8 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -35,6 +42,10 @@ class RescheduleServiceTest {
     private ClassInstanceRepository classInstanceRepository;
     @Mock
     private com.nest.app.identity.repository.AcademyMembershipRepository membershipRepository;
+    @Mock
+    private BatchRepository batchRepository;
+    @Mock
+    private CourseFeatureGuard courseFeatureGuard;
 
     private RescheduleService rescheduleService;
 
@@ -42,7 +53,13 @@ class RescheduleServiceTest {
 
     @BeforeEach
     void setUp() {
-        rescheduleService = new RescheduleService(classInstanceRepository, membershipRepository);
+        rescheduleService = new RescheduleService(classInstanceRepository, membershipRepository,
+                batchRepository, courseFeatureGuard);
+        // Every mutating path resolves the class's batch to check RESCHEDULE on its course - a
+        // no-op guard mock and an arbitrary resolvable course keep tests that aren't specifically
+        // about that check from having to wire it up themselves.
+        lenient().when(batchRepository.findById(any()))
+                .thenReturn(Optional.of(Batch.builder().id(UUID.randomUUID()).courseId(UUID.randomUUID()).build()));
     }
 
     @org.junit.jupiter.api.AfterEach
@@ -114,6 +131,43 @@ class RescheduleServiceTest {
         assertThatThrownBy(() -> rescheduleService.reschedule(id,
                 new RescheduleRequest(LocalDate.now(), LocalTime.NOON, LocalTime.NOON, "reason")))
                 .isInstanceOf(BadRequestException.class);
+    }
+
+    @Test
+    void rescheduleIsRejectedWhenCallerLacksRescheduleOnThisCourse() {
+        UUID batchId = UUID.randomUUID();
+        UUID courseId = UUID.randomUUID();
+        UUID originalId = UUID.randomUUID();
+        ClassInstance original = ClassInstance.builder()
+                .id(originalId).batchId(batchId).date(LocalDate.of(2026, 7, 9))
+                .startTime(LocalTime.of(16, 0)).endTime(LocalTime.of(17, 0))
+                .status(ClassInstanceStatus.SCHEDULED)
+                .build();
+        when(classInstanceRepository.findById(originalId)).thenReturn(Optional.of(original));
+        when(batchRepository.findById(batchId)).thenReturn(Optional.of(Batch.builder().id(batchId).courseId(courseId).build()));
+        doThrow(new ForbiddenException("nope")).when(courseFeatureGuard)
+                .assertCourseFeature(courseId, FeatureKey.RESCHEDULE);
+
+        assertThatThrownBy(() -> rescheduleService.reschedule(originalId, new RescheduleRequest(
+                LocalDate.of(2026, 7, 11), LocalTime.of(17, 0), LocalTime.of(18, 0), "Trainer unavailable")))
+                .isInstanceOf(ForbiddenException.class);
+
+        verify(classInstanceRepository, org.mockito.Mockito.never()).save(any());
+    }
+
+    @Test
+    void cancelIsRejectedWhenCallerLacksRescheduleOnThisCourse() {
+        UUID id = UUID.randomUUID();
+        ClassInstance instance = scheduled(id);
+        UUID courseId = UUID.randomUUID();
+        when(classInstanceRepository.findById(id)).thenReturn(Optional.of(instance));
+        when(batchRepository.findById(instance.getBatchId()))
+                .thenReturn(Optional.of(Batch.builder().id(instance.getBatchId()).courseId(courseId).build()));
+        doThrow(new ForbiddenException("nope")).when(courseFeatureGuard)
+                .assertCourseFeature(courseId, FeatureKey.RESCHEDULE);
+
+        assertThatThrownBy(() -> rescheduleService.cancel(id, "Public holiday"))
+                .isInstanceOf(ForbiddenException.class);
     }
 
     @Test

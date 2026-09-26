@@ -15,6 +15,9 @@ public record UpdateAcademyProfileRequest(
         String instagramUrl,
         String xUrl,
         String facebookUrl,
-        String youtubeUrl
+        String youtubeUrl,
+        String whatsapp,
+        String websiteUrl,
+        String mapsUrl
 ) {
 }

@@ -176,7 +176,10 @@ class _PeoplePickerSheetState extends State<_PeoplePickerSheet> {
                             ),
                             decoration: InputDecoration(
                               isDense: true,
+                              filled: false,
                               border: InputBorder.none,
+                              focusedBorder: InputBorder.none,
+                              enabledBorder: InputBorder.none,
                               contentPadding: EdgeInsets.zero,
                               hintText: widget.searchHint,
                               hintStyle:

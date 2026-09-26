@@ -67,7 +67,10 @@ class _SearchProfilesScreenState extends ConsumerState<SearchProfilesScreen> {
           onChanged: _onChanged,
           decoration: InputDecoration(
             hintText: AppLocalizations.of(context).socSearchPeople,
+            filled: false,
             border: InputBorder.none,
+            focusedBorder: InputBorder.none,
+            enabledBorder: InputBorder.none,
           ),
         ),
       ),

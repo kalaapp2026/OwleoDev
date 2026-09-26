@@ -1,5 +1,7 @@
 package com.nest.app.scheduling.service;
 
+import com.nest.app.enrolment.repository.BatchRepository;
+import com.nest.app.identity.service.CourseFeatureGuard;
 import com.nest.app.scheduling.dto.ClassInstanceResponse;
 import com.nest.app.scheduling.dto.RescheduleRequest;
 import com.nest.app.scheduling.entity.ClassInstance;
@@ -12,6 +14,7 @@ import com.nest.common.exception.BadRequestException;
 import com.nest.common.exception.ConflictException;
 import com.nest.common.exception.ForbiddenException;
 import com.nest.common.exception.ResourceNotFoundException;
+import com.nest.common.security.FeatureKey;
 import com.nest.common.security.TenantContext;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -29,11 +32,26 @@ public class RescheduleService {
 
     private final ClassInstanceRepository classInstanceRepository;
     private final AcademyMembershipRepository membershipRepository;
+    private final BatchRepository batchRepository;
+    private final CourseFeatureGuard courseFeatureGuard;
 
     public RescheduleService(ClassInstanceRepository classInstanceRepository,
-                              AcademyMembershipRepository membershipRepository) {
+                              AcademyMembershipRepository membershipRepository,
+                              BatchRepository batchRepository, CourseFeatureGuard courseFeatureGuard) {
         this.classInstanceRepository = classInstanceRepository;
         this.membershipRepository = membershipRepository;
+        this.batchRepository = batchRepository;
+        this.courseFeatureGuard = courseFeatureGuard;
+    }
+
+    /** Per-course enforcement: the controller's @RequiresFeature(RESCHEDULE) only checks the
+     * union across all courses - without this a Trainer granted RESCHEDULE on one course could
+     * reschedule/cancel/swap-instructor on any class in the academy. */
+    private void assertCanReschedule(UUID batchId) {
+        UUID courseId = batchRepository.findById(batchId)
+                .orElseThrow(() -> new ResourceNotFoundException("Batch not found: " + batchId))
+                .getCourseId();
+        courseFeatureGuard.assertCourseFeature(courseId, FeatureKey.RESCHEDULE);
     }
 
     @Transactional
@@ -45,6 +63,7 @@ public class RescheduleService {
         if (original.getStatus() != ClassInstanceStatus.SCHEDULED) {
             throw new BadRequestException("Only a SCHEDULED class instance can be rescheduled (current status: " + original.getStatus() + ")");
         }
+        assertCanReschedule(original.getBatchId());
 
         original.setStatus(ClassInstanceStatus.RESCHEDULED_CANCELLED);
         original.setRescheduleReason(request.reason());
@@ -77,6 +96,7 @@ public class RescheduleService {
             throw new BadRequestException("Only a scheduled class can be cancelled (current status: "
                     + instance.getStatus() + ")");
         }
+        assertCanReschedule(instance.getBatchId());
         instance.setStatus(ClassInstanceStatus.CANCELLED);
         instance.setCancellationReason(reason);
         return toResponse(classInstanceRepository.save(instance));
@@ -92,6 +112,7 @@ public class RescheduleService {
             throw new BadRequestException("Only a cancelled class can be restored (current status: "
                     + instance.getStatus() + ")");
         }
+        assertCanReschedule(instance.getBatchId());
         instance.setStatus(ClassInstanceStatus.SCHEDULED);
         instance.setCancellationReason(null);
         return toResponse(classInstanceRepository.save(instance));
@@ -109,6 +130,7 @@ public class RescheduleService {
             throw new BadRequestException("Only a scheduled class can have its instructor swapped "
                     + "(current status: " + instance.getStatus() + ")");
         }
+        assertCanReschedule(instance.getBatchId());
 
         AcademyMembership substitute = membershipRepository.findById(substituteMembershipId)
                 .orElseThrow(() -> new ResourceNotFoundException(
@@ -132,6 +154,7 @@ public class RescheduleService {
         if (instance.getSubstituteTrainerMembershipId() == null) {
             throw new BadRequestException("This class has no substitute instructor to remove.");
         }
+        assertCanReschedule(instance.getBatchId());
         instance.setSubstituteTrainerMembershipId(null);
         instance.setSubstitutionReason(null);
         return toResponse(classInstanceRepository.save(instance));
@@ -171,6 +194,7 @@ public class RescheduleService {
             throw new ConflictException(
                     "The rescheduled class has already been held - undoing it would erase its attendance.");
         }
+        assertCanReschedule(original.getBatchId());
 
         classInstanceRepository.delete(replacement);
         original.setStatus(ClassInstanceStatus.SCHEDULED);

@@ -13,6 +13,8 @@ import com.nest.app.scheduling.repository.ClassInstanceRepository;
 import com.nest.app.scheduling.repository.ScheduleRepository;
 import com.nest.common.exception.BadRequestException;
 import com.nest.common.exception.ConflictException;
+import com.nest.common.exception.ForbiddenException;
+import com.nest.common.security.FeatureKey;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -27,6 +29,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -161,6 +164,50 @@ class BatchServiceTest {
         verify(classInstanceRepository).deleteByBatchId(batch.getId());
         verify(batchTrainerRepository).deleteByBatchId(batch.getId());
         verify(batchRepository).delete(batch);
+    }
+
+    // ------------------------------------------------------------------
+    // Per-course scoping: a Trainer granted BATCH_CREATION on one course must not be able to
+    // touch another course's batches just because the coarse @RequiresFeature union let them in.
+    // ------------------------------------------------------------------
+
+    @Test
+    void addingAMemberIsRejectedWhenCallerLacksBatchCreationOnThisCourse() {
+        Batch batch = Batch.builder().id(UUID.randomUUID()).courseId(courseId).batchType(BatchType.REGULAR).build();
+        when(batchRepository.findById(batch.getId())).thenReturn(java.util.Optional.of(batch));
+        doThrow(new ForbiddenException("nope")).when(courseFeatureGuard)
+                .assertCourseFeature(courseId, FeatureKey.BATCH_CREATION);
+
+        assertThatThrownBy(() -> batchService.addMember(batch.getId(), membershipId))
+                .isInstanceOf(ForbiddenException.class);
+
+        verify(batchMemberRepository, never()).save(any());
+    }
+
+    @Test
+    void removingAMemberIsRejectedWhenCallerLacksBatchCreationOnThisCourse() {
+        Batch batch = Batch.builder().id(UUID.randomUUID()).courseId(courseId).batchType(BatchType.REGULAR).build();
+        when(batchRepository.findById(batch.getId())).thenReturn(java.util.Optional.of(batch));
+        doThrow(new ForbiddenException("nope")).when(courseFeatureGuard)
+                .assertCourseFeature(courseId, FeatureKey.BATCH_CREATION);
+
+        assertThatThrownBy(() -> batchService.removeMember(batch.getId(), membershipId))
+                .isInstanceOf(ForbiddenException.class);
+
+        verify(batchMemberRepository, never()).deleteByBatchIdAndMembershipId(any(), any());
+    }
+
+    @Test
+    void deletingABatchIsRejectedWhenCallerLacksBatchCreationOnThisCourse() {
+        Batch batch = Batch.builder().id(UUID.randomUUID()).courseId(courseId).batchType(BatchType.REGULAR).build();
+        when(batchRepository.findById(batch.getId())).thenReturn(java.util.Optional.of(batch));
+        doThrow(new ForbiddenException("nope")).when(courseFeatureGuard)
+                .assertCourseFeature(courseId, FeatureKey.BATCH_CREATION);
+
+        assertThatThrownBy(() -> batchService.delete(batch.getId()))
+                .isInstanceOf(ForbiddenException.class);
+
+        verify(batchRepository, never()).delete(any());
     }
 
     // ------------------------------------------------------------------

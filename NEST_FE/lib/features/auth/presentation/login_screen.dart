@@ -895,7 +895,10 @@ class _AuthFieldState extends State<_AuthField> {
             onSubmitted: widget.onSubmitted,
             style: TextStyle(fontSize: AppType.xl, fontWeight: AppType.semi, color: palette.text),
             decoration: InputDecoration(
+              filled: false,
               border: InputBorder.none,
+              focusedBorder: InputBorder.none,
+              enabledBorder: InputBorder.none,
               isDense: true,
               contentPadding: const EdgeInsets.symmetric(horizontal: AppSpacing.x4l, vertical: AppSpacing.lg),
               suffixIcon: isPassword

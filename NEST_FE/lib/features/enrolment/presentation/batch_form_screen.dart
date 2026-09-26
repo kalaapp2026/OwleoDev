@@ -409,6 +409,11 @@ class _BatchFormScreenState extends ConsumerState<BatchFormScreen> {
                     : 'Only active courses can take on a new batch.',
                 child: AttachedSelect<Course>(
                   label: 'Course',
+                  // Once picked, the closed trigger reads in the course's own category accent
+                  // with a matching dot - the same colour language the open panel's rows use,
+                  // rather than the value reverting to plain white the moment the panel closes.
+                  valueColor: meta.color,
+                  dotColor: meta.color,
                   options: selectable,
                   labelOf: (c) => c.name,
                   value: course,

@@ -54,6 +54,8 @@ class AppPalette extends ThemeExtension<AppPalette> {
     required this.coralSoft,
     required this.magenta,
     required this.magentaSoft,
+    required this.sage,
+    required this.sageSoft,
   });
 
   /// Page background - sits behind [surface].
@@ -126,6 +128,13 @@ class AppPalette extends ThemeExtension<AppPalette> {
   final Color magenta;
   final Color magentaSoft;
 
+  /// Health & Wellness's category accent. Added after the prototype shipped (that seven-category
+  /// set never included this discipline), so unlike the others above it has no prototype hex to
+  /// match - picked to sit clearly apart from both [primary] (teal, Music) and [paidManual]
+  /// (green, a payment-status colour this must never be confused with).
+  final Color sage;
+  final Color sageSoft;
+
   /// Exact values from the prototype. Do not "tidy" these - they were chosen together and the
   /// soft variants are tuned to sit on [surfaceRaised] specifically.
   static const dark = AppPalette(
@@ -165,29 +174,32 @@ class AppPalette extends ThemeExtension<AppPalette> {
     coralSoft: Color(0x24FF8A5B),
     magenta: Color(0xFFF0629B),
     magentaSoft: Color(0x24F0629B),
+    sage: Color(0xFF7FBF7F),
+    sageSoft: Color(0x247FBF7F),
   );
 
   /// DERIVED, not from the prototype - the prototype is dark-only, but the app already ships a
   /// System/Light/Dark setting, so a light counterpart has to exist or that setting becomes a
   /// no-op on every migrated screen.
   ///
-  /// The hues are held constant and the lightness re-anchored: accents are darkened enough to
-  /// hold contrast on white (the dark palette's teal and yellow are unreadable as text on a light
-  /// ground), and the soft fills are lifted slightly since a 12% tint disappears on white.
-  /// This one needs a designer's eye before it ships - flagged, not assumed.
+  /// Warm/cream neutrals with a brown accent, replacing an earlier cool-white-plus-teal draft
+  /// per explicit design direction: the light theme reads as its own warm palette rather than a
+  /// straight lightness-inversion of the dark (teal) one. [primary] driving this means every
+  /// focus ring, selected state and primary button goes brown in light mode - that is the
+  /// intended, app-wide effect, not scoped to any one screen.
   static const light = AppPalette(
-    bg: Color(0xFFF4F6FB),
-    surface: Color(0xFFFFFFFF),
-    surfaceRaised: Color(0xFFFFFFFF),
-    surfaceHigh: Color(0xFFEDF1F8),
-    border: Color(0xFFDCE3EF),
-    borderSoft: Color(0xFFE9EDF6),
+    bg: Color(0xFFFAF3E4),
+    surface: Color(0xFFFFFDF8),
+    surfaceRaised: Color(0xFFFFFDF8),
+    surfaceHigh: Color(0xFFF1E9D8),
+    border: Color(0xFFE3D6BE),
+    borderSoft: Color(0xFFEFE6D2),
     text: Color(0xFF0E1626),
     textMuted: Color(0xFF5A6478),
     textFaint: Color(0xFF8892A6),
-    primary: Color(0xFF0E9E88),
-    primaryDim: Color(0xFF0A7767),
-    primarySoft: Color(0x1F0E9E88),
+    primary: Color(0xFF8B5A2B),
+    primaryDim: Color(0xFF6B4420),
+    primarySoft: Color(0x1F8B5A2B),
     onPrimary: Color(0xFFFFFFFF),
     revenue: Color(0xFFB07C00),
     revenueSoft: Color(0x24B07C00),
@@ -212,6 +224,8 @@ class AppPalette extends ThemeExtension<AppPalette> {
     coralSoft: Color(0x1FC8552A),
     magenta: Color(0xFFC2306B),
     magentaSoft: Color(0x1FC2306B),
+    sage: Color(0xFF4A8F4A),
+    sageSoft: Color(0x1F4A8F4A),
   );
 
   @override
@@ -252,6 +266,8 @@ class AppPalette extends ThemeExtension<AppPalette> {
     Color? coralSoft,
     Color? magenta,
     Color? magentaSoft,
+    Color? sage,
+    Color? sageSoft,
   }) {
     return AppPalette(
       bg: bg ?? this.bg,
@@ -290,6 +306,8 @@ class AppPalette extends ThemeExtension<AppPalette> {
       coralSoft: coralSoft ?? this.coralSoft,
       magenta: magenta ?? this.magenta,
       magentaSoft: magentaSoft ?? this.magentaSoft,
+      sage: sage ?? this.sage,
+      sageSoft: sageSoft ?? this.sageSoft,
     );
   }
 
@@ -334,6 +352,8 @@ class AppPalette extends ThemeExtension<AppPalette> {
       coralSoft: c(coralSoft, other.coralSoft),
       magenta: c(magenta, other.magenta),
       magentaSoft: c(magentaSoft, other.magentaSoft),
+      sage: c(sage, other.sage),
+      sageSoft: c(sageSoft, other.sageSoft),
     );
   }
 }

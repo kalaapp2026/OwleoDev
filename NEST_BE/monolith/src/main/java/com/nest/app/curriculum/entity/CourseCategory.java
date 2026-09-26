@@ -16,5 +16,6 @@ public enum CourseCategory {
     LITERATURE,
     THEATRE,
     FASHION,
+    HEALTH_WELLNESS,
     OTHERS
 }

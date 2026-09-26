@@ -77,7 +77,6 @@ class _UserListScreenState extends ConsumerState<UserListScreen> {
   UserSort _sort = UserSort.az;
   String _query = '';
   String? _courseId;
-  String? _kebabFor;
 
   late final bool _canAddStudents;
   late final bool _canAddTrainers;
@@ -113,7 +112,6 @@ class _UserListScreenState extends ConsumerState<UserListScreen> {
   }
 
   Future<void> _openForm({_Person? existing}) async {
-    setState(() => _kebabFor = null);
     final saved = await Navigator.of(context).push<bool>(MaterialPageRoute(
       builder: (_) => UserFormScreen(
         tab: _tab,
@@ -126,7 +124,6 @@ class _UserListScreenState extends ConsumerState<UserListScreen> {
   }
 
   Future<void> _toggleStatus(_Person person) async {
-    setState(() => _kebabFor = null);
     final courseId = _courseId;
     if (courseId == null) return;
     try {
@@ -144,7 +141,6 @@ class _UserListScreenState extends ConsumerState<UserListScreen> {
   }
 
   Future<void> _resetCredentials(_Person person) async {
-    setState(() => _kebabFor = null);
     try {
       final temp = await ref.read(enrolmentApiProvider).resetStudentPassword(person.membershipId);
       if (!mounted) return;
@@ -163,7 +159,6 @@ class _UserListScreenState extends ConsumerState<UserListScreen> {
   /// Removing someone from a course is what "delete" means here - the account itself belongs to
   /// the person, not to this academy, and may be in use at another one.
   Future<void> _requestRemove(_Person person) async {
-    setState(() => _kebabFor = null);
     final courseId = _courseId;
     if (courseId == null) return;
     final confirmed = await showAppConfirmDialog(
@@ -276,10 +271,17 @@ class _UserListScreenState extends ConsumerState<UserListScreen> {
                   offLabel: 'Add trainer',
                   onIcon: Icons.person_add_alt,
                   offIcon: Icons.badge_outlined,
-                  onColor: palette.primary,
-                  offColor: palette.gold,
+                  // A solid CTA pill, not the soft/translucent tint FlipToggle defaults to for the
+                  // Fees Paid/Not-Paid toggle it was built for: the fill itself is the accent
+                  // colour, with the matching onPrimary/onGold token for legible text on top of it.
+                  onSoftColor: palette.primary,
+                  onColor: palette.onPrimary,
+                  offSoftColor: palette.gold,
+                  offColor: palette.onGold,
                   width: 158,
                   height: 46,
+                  borderRadius: AppRadii.pill,
+                  fontSize: AppType.xl,
                   onTap: (_tab == UserTab.student ? _canAddStudents : _canAddTrainers)
                       ? () => _openForm()
                       : null,
@@ -335,7 +337,6 @@ class _UserListScreenState extends ConsumerState<UserListScreen> {
             child: Pressable(
               onTap: () => setState(() {
                 _tab = tab;
-                _kebabFor = null;
                 _query = '';
                 _searchController.clear();
               }),
@@ -394,7 +395,10 @@ class _UserListScreenState extends ConsumerState<UserListScreen> {
                         color: palette.text),
                     decoration: InputDecoration(
                       isDense: true,
+                      filled: false,
                       border: InputBorder.none,
+                      focusedBorder: InputBorder.none,
+                      enabledBorder: InputBorder.none,
                       contentPadding: EdgeInsets.zero,
                       hintText: 'Search ${_tab.label.toLowerCase()}',
                       hintStyle:
@@ -467,10 +471,7 @@ class _UserListScreenState extends ConsumerState<UserListScreen> {
       value: course,
       searchable: true,
       searchHint: 'Search course',
-      onSelected: (c) => setState(() {
-        _courseId = c.id;
-        _kebabFor = null;
-      }),
+      onSelected: (c) => setState(() => _courseId = c.id),
       optionBuilder: (context, option, _) {
         final meta = option.category.meta(palette);
         final selected = option.id == _courseId;
@@ -599,33 +600,26 @@ class _UserListScreenState extends ConsumerState<UserListScreen> {
             : 'No ${_tab.label.toLowerCase()} match "$_query".',
       );
     }
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: () => setState(() => _kebabFor = null),
-      child: ListView.builder(
-        padding: const EdgeInsets.fromLTRB(
-            AppSpacing.page, 0, AppSpacing.page, AppSpacing.listBottom),
-        itemCount: visible.length,
-        itemBuilder: (context, i) {
-          final person = visible[i];
-          return Padding(
-            padding: const EdgeInsets.only(bottom: AppSpacing.md),
-            child: _PersonRow(
-              person: person,
-              accent: _accent(palette),
-              roleNoun: _tab.noun,
-              kebabOpen: _kebabFor == person.membershipId,
-              onTap: () => _openForm(existing: person),
-              onToggleKebab: () => setState(() => _kebabFor =
-                  _kebabFor == person.membershipId ? null : person.membershipId),
-              onEdit: () => _openForm(existing: person),
-              onResetCredentials: () => _resetCredentials(person),
-              onToggleStatus: () => _toggleStatus(person),
-              onRemove: () => _requestRemove(person),
-            ),
-          );
-        },
-      ),
+    return ListView.builder(
+      padding: const EdgeInsets.fromLTRB(
+          AppSpacing.page, 0, AppSpacing.page, AppSpacing.listBottom),
+      itemCount: visible.length,
+      itemBuilder: (context, i) {
+        final person = visible[i];
+        return Padding(
+          padding: const EdgeInsets.only(bottom: AppSpacing.md),
+          child: _PersonRow(
+            person: person,
+            accent: _accent(palette),
+            roleNoun: _tab.noun,
+            onTap: () => _openForm(existing: person),
+            onEdit: () => _openForm(existing: person),
+            onResetCredentials: () => _resetCredentials(person),
+            onToggleStatus: () => _toggleStatus(person),
+            onRemove: () => _requestRemove(person),
+          ),
+        );
+      },
     );
   }
 
@@ -656,14 +650,12 @@ class _UserListScreenState extends ConsumerState<UserListScreen> {
       );
 }
 
-class _PersonRow extends StatelessWidget {
+class _PersonRow extends StatefulWidget {
   const _PersonRow({
     required this.person,
     required this.accent,
     required this.roleNoun,
-    required this.kebabOpen,
     required this.onTap,
-    required this.onToggleKebab,
     required this.onEdit,
     required this.onResetCredentials,
     required this.onToggleStatus,
@@ -673,19 +665,95 @@ class _PersonRow extends StatelessWidget {
   final _Person person;
   final Color accent;
   final String roleNoun;
-  final bool kebabOpen;
   final VoidCallback onTap;
-  final VoidCallback onToggleKebab;
   final VoidCallback onEdit;
   final VoidCallback onResetCredentials;
   final VoidCallback onToggleStatus;
   final VoidCallback onRemove;
 
   @override
+  State<_PersonRow> createState() => _PersonRowState();
+}
+
+/// The kebab menu renders through the app's root [Overlay] (via [CompositedTransformFollower] /
+/// [CompositedTransformTarget]) instead of as a plain `Positioned` inside this row's own `Stack` -
+/// the same pattern app_shell.dart's notification bell already uses, and for the same reason.
+///
+/// A `ListView`/sliver only ever routes a tap to a child within THAT CHILD'S OWN reported height.
+/// The old `Positioned` menu visually overflowed well past this row's box (`Clip.none` let it
+/// PAINT there), but taps landing in that overflow were still being hit-tested against whatever
+/// row actually occupies those pixels - usually the row below, sometimes nothing - so "Edit",
+/// "Reset credentials" etc. looked broken even though they were fully implemented. The Overlay
+/// sidesteps this entirely: it lives outside the list's hit-test hierarchy.
+class _PersonRowState extends State<_PersonRow> {
+  final _link = LayerLink();
+  OverlayEntry? _overlayEntry;
+
+  void _toggleMenu() => _overlayEntry != null ? _closeMenu() : _openMenu();
+
+  void _openMenu() {
+    final overlay = Overlay.of(context);
+    _overlayEntry = OverlayEntry(
+      builder: (overlayContext) => Stack(
+        children: [
+          // Tapping anywhere outside the menu closes it - lives in the same Overlay entry, above
+          // the menu in paint order but BEHIND it for hit-testing (Stack tests back-to-front), so
+          // taps on the menu itself still reach the menu.
+          Positioned.fill(
+            child: GestureDetector(behavior: HitTestBehavior.opaque, onTap: _closeMenu),
+          ),
+          CompositedTransformFollower(
+            link: _link,
+            showWhenUnlinked: false,
+            targetAnchor: Alignment.bottomRight,
+            followerAnchor: Alignment.topRight,
+            offset: const Offset(0, 6),
+            child: _KebabMenu(
+              roleNoun: widget.roleNoun,
+              active: widget.person.active,
+              onEdit: () {
+                _closeMenu();
+                widget.onEdit();
+              },
+              onResetCredentials: () {
+                _closeMenu();
+                widget.onResetCredentials();
+              },
+              onToggleStatus: () {
+                _closeMenu();
+                widget.onToggleStatus();
+              },
+              onRemove: () {
+                _closeMenu();
+                widget.onRemove();
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+    overlay.insert(_overlayEntry!);
+    setState(() {});
+  }
+
+  void _closeMenu() {
+    _overlayEntry?.remove();
+    _overlayEntry = null;
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void dispose() {
+    _overlayEntry?.remove();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final palette = context.palette;
+    final person = widget.person;
     return Pressable(
-      onTap: onTap,
+      onTap: widget.onTap,
       child: Container(
         padding: const EdgeInsets.symmetric(
             horizontal: AppSpacing.xl, vertical: AppSpacing.lg),
@@ -694,91 +762,76 @@ class _PersonRow extends StatelessWidget {
           borderRadius: AppRadii.all(AppRadii.xxl),
           border: Border.all(color: palette.borderSoft),
         ),
-        child: Stack(
-          clipBehavior: Clip.none,
+        child: Row(
           children: [
-            Row(
-              children: [
-                Opacity(
-                  opacity: person.active ? 1 : 0.6,
-                  child: Row(
-                    children: [
-                      PersonAvatar(
-                          name: person.fullName, seed: person.userId, size: 40),
-                      const SizedBox(width: AppSpacing.lg),
-                    ],
-                  ),
-                ),
-                Expanded(
-                  child: Opacity(
-                    opacity: person.active ? 1 : 0.6,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(person.fullName,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                                fontSize: AppType.x3l,
-                                fontWeight: AppType.bold,
-                                color: palette.text)),
-                        const SizedBox(height: 2),
-                        Text('@${person.username}',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                                fontSize: AppType.base, color: palette.textFaint)),
-                      ],
-                    ),
-                  ),
-                ),
-                if (!person.active) ...[
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: AppSpacing.sm, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: palette.goldSoft,
-                      borderRadius: AppRadii.all(AppRadii.xs),
-                      border: Border.all(color: palette.gold),
-                    ),
-                    child: Text('INACTIVE',
-                        style: TextStyle(
-                            fontSize: AppType.micro,
-                            fontWeight: AppType.heavy,
-                            letterSpacing: 0.3,
-                            color: palette.gold)),
-                  ),
-                  const SizedBox(width: AppSpacing.sm),
+            Opacity(
+              opacity: person.active ? 1 : 0.6,
+              child: Row(
+                children: [
+                  PersonAvatar(
+                      name: person.fullName, seed: person.userId, size: 40),
+                  const SizedBox(width: AppSpacing.lg),
                 ],
-                Pressable(
-                  onTap: onToggleKebab,
-                  child: Container(
-                    height: 30,
-                    width: 30,
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      color: kebabOpen ? palette.surfaceHigh : Colors.transparent,
-                      borderRadius: AppRadii.all(AppRadii.smd),
-                    ),
-                    child: Icon(Icons.more_vert, size: 15, color: palette.textMuted),
-                  ),
-                ),
-              ],
+              ),
             ),
-            if (kebabOpen)
-              Positioned(
-                top: 34,
-                right: 0,
-                child: _KebabMenu(
-                  roleNoun: roleNoun,
-                  active: person.active,
-                  onEdit: onEdit,
-                  onResetCredentials: onResetCredentials,
-                  onToggleStatus: onToggleStatus,
-                  onRemove: onRemove,
+            Expanded(
+              child: Opacity(
+                opacity: person.active ? 1 : 0.6,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(person.fullName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                            fontSize: AppType.x3l,
+                            fontWeight: AppType.bold,
+                            color: palette.text)),
+                    const SizedBox(height: 2),
+                    Text('@${person.username}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                            fontSize: AppType.base, color: palette.textFaint)),
+                  ],
                 ),
               ),
+            ),
+            if (!person.active) ...[
+              Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: AppSpacing.sm, vertical: 3),
+                decoration: BoxDecoration(
+                  color: palette.goldSoft,
+                  borderRadius: AppRadii.all(AppRadii.xs),
+                  border: Border.all(color: palette.gold),
+                ),
+                child: Text('INACTIVE',
+                    style: TextStyle(
+                        fontSize: AppType.micro,
+                        fontWeight: AppType.heavy,
+                        letterSpacing: 0.3,
+                        color: palette.gold)),
+              ),
+              const SizedBox(width: AppSpacing.sm),
+            ],
+            CompositedTransformTarget(
+              link: _link,
+              child: Pressable(
+                onTap: _toggleMenu,
+                child: Container(
+                  height: 30,
+                  width: 30,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: _overlayEntry != null ? palette.surfaceHigh : Colors.transparent,
+                    borderRadius: AppRadii.all(AppRadii.smd),
+                  ),
+                  child: Icon(Icons.more_vert, size: 15, color: palette.textMuted),
+                ),
+              ),
+            ),
           ],
         ),
       ),
@@ -817,41 +870,53 @@ class _KebabMenu extends StatelessWidget {
       (label: 'Remove from course', onTap: onRemove, danger: true),
     ];
 
-    return Material(
-      color: Colors.transparent,
-      child: Container(
-        width: 196,
-        decoration: BoxDecoration(
-          color: palette.surface,
-          borderRadius: AppRadii.all(AppRadii.xl),
-          border: Border.all(color: palette.border),
-          boxShadow: AppShadows.dropdown,
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            for (var i = 0; i < items.length; i++)
-              Pressable(
-                onTap: items[i].onTap,
-                child: Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: AppSpacing.xl, vertical: AppSpacing.lg),
-                  decoration: BoxDecoration(
-                    border: i < items.length - 1
-                        ? Border(bottom: BorderSide(color: palette.borderSoft))
-                        : null,
+    // Same fade + settle-in slide AttachedSelect's own dropdown panel uses (see its
+    // TweenAnimationBuilder) - this menu is a plain Positioned rather than an AttachedSelect, so it
+    // needs its own copy of that entrance rather than inheriting it.
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0, end: 1),
+      duration: AppMotion.dropdown,
+      curve: AppMotion.enter,
+      builder: (context, t, child) => Opacity(
+        opacity: t,
+        child: Transform.translate(offset: Offset(0, (1 - t) * -6), child: child),
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: Container(
+          width: 196,
+          decoration: BoxDecoration(
+            color: palette.surface,
+            borderRadius: AppRadii.all(AppRadii.xl),
+            border: Border.all(color: palette.border),
+            boxShadow: AppShadows.dropdown,
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              for (var i = 0; i < items.length; i++)
+                Pressable(
+                  onTap: items[i].onTap,
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: AppSpacing.xl, vertical: AppSpacing.lg),
+                    decoration: BoxDecoration(
+                      border: i < items.length - 1
+                          ? Border(bottom: BorderSide(color: palette.borderSoft))
+                          : null,
+                    ),
+                    child: Text(items[i].label,
+                        style: TextStyle(
+                          fontSize: AppType.lg,
+                          fontWeight: AppType.regular,
+                          color: items[i].danger ? palette.notPaid : palette.text,
+                        )),
                   ),
-                  child: Text(items[i].label,
-                      style: TextStyle(
-                        fontSize: AppType.lg,
-                        fontWeight: AppType.regular,
-                        color: items[i].danger ? palette.notPaid : palette.text,
-                      )),
                 ),
-              ),
-          ],
+            ],
+          ),
         ),
       ),
     );

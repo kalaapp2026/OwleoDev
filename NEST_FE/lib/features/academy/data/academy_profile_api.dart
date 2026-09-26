@@ -28,6 +28,9 @@ class AcademyProfileApi {
     String? xUrl,
     String? facebookUrl,
     String? youtubeUrl,
+    String? whatsapp,
+    String? websiteUrl,
+    String? mapsUrl,
   }) {
     return _client.call(
       (dio) => dio.put('/academies/me', data: {
@@ -43,7 +46,18 @@ class AcademyProfileApi {
         'xUrl': xUrl,
         'facebookUrl': facebookUrl,
         'youtubeUrl': youtubeUrl,
+        'whatsapp': whatsapp,
+        'websiteUrl': websiteUrl,
+        'mapsUrl': mapsUrl,
       }),
+      (data) => AcademyProfile.fromJson(data as Map<String, dynamic>),
+    );
+  }
+
+  Future<AcademyProfile> uploadCoverImage(Uint8List bytes, String filename) {
+    final formData = FormData.fromMap({'file': MultipartFile.fromBytes(bytes, filename: filename)});
+    return _client.call(
+      (dio) => dio.post('/academies/me/cover-image', data: formData),
       (data) => AcademyProfile.fromJson(data as Map<String, dynamic>),
     );
   }
@@ -107,15 +121,32 @@ class AcademyProfileApi {
     );
   }
 
-  Future<FeaturedTrainer> addFeaturedTrainer(String trainerMembershipId) {
+  Future<FeaturedTrainer> addFeaturedTrainer(String trainerMembershipId, {String? designation}) {
     return _client.call(
-      (dio) => dio.post('/academies/me/featured-trainers', data: {'trainerMembershipId': trainerMembershipId}),
+      (dio) => dio.post('/academies/me/featured-trainers',
+          data: {'trainerMembershipId': trainerMembershipId, 'designation': designation}),
+      (data) => FeaturedTrainer.fromJson(data as Map<String, dynamic>),
+    );
+  }
+
+  Future<FeaturedTrainer> updateFeaturedTrainerDesignation(String featuredTrainerId, String? designation) {
+    return _client.call(
+      (dio) => dio.put('/academies/me/featured-trainers/$featuredTrainerId', data: {'designation': designation}),
       (data) => FeaturedTrainer.fromJson(data as Map<String, dynamic>),
     );
   }
 
   Future<void> deleteFeaturedTrainer(String featuredTrainerId) {
     return _client.callVoid((dio) => dio.delete('/academies/me/featured-trainers/$featuredTrainerId'));
+  }
+
+  /// The public-safe trainer card a featured trainer's avatar opens - see TrainerCard's own doc
+  /// comment. Lives here rather than a new file since it's only ever used from this feature.
+  Future<TrainerCard> getTrainerCard(String membershipId) {
+    return _client.call(
+      (dio) => dio.get('/trainers/$membershipId/card'),
+      (data) => TrainerCard.fromJson(data as Map<String, dynamic>),
+    );
   }
 
   Future<AcademyBranchInfo> addBranch({required String name, String? address}) {

@@ -86,8 +86,11 @@ class _CourseFormScreenState extends ConsumerState<CourseFormScreen> {
       ? (_intOf(_feePerClassController) ?? 0) > 0
       : (_intOf(_feeController) ?? 0) > 0;
 
+  // Both fields accept 0 as a deliberately-entered value (a 0 threshold means "the discount never
+  // applies" - a valid, if degenerate, configuration). The `?? -1` fallback is what still catches
+  // an empty field: an unparsed/blank controller must fail this check, not silently pass as 0.
   bool get _hybridValid => _feeModel != FeeModel.hybrid ||
-      ((_intOf(_thresholdController) ?? 0) > 0 && (_intOf(_belowPercentController) ?? -1) >= 0);
+      ((_intOf(_thresholdController) ?? -1) >= 0 && (_intOf(_belowPercentController) ?? -1) >= 0);
 
   bool get _valid =>
       _nameController.text.trim().length > 1 &&
@@ -220,6 +223,15 @@ class _CourseFormScreenState extends ConsumerState<CourseFormScreen> {
             label: 'Category',
             child: AttachedSelect<CourseCategory>(
               label: 'Category',
+              // _Field above already draws the "CATEGORY" heading - the default trigger drawing
+              // its own copy on top produced a literal doubled heading.
+              showLabel: false,
+              // Once picked, the closed trigger reads as "this course is Music" in Music's own
+              // accent, with a matching dot - the same colour language the open panel's rows and
+              // every course-list row already use, rather than the value reverting to plain white
+              // the moment the panel closes.
+              valueColor: meta.color,
+              dotColor: meta.color,
               options: CourseCategory.selectable,
               labelOf: (c) => c.label,
               value: _category,
@@ -364,6 +376,8 @@ class _CourseFormScreenState extends ConsumerState<CourseFormScreen> {
               label: 'Fee cycle',
               child: AttachedSelect<FeeCycle>(
                 label: 'Fee cycle',
+                // Same doubled-heading issue as Category above - _Field already draws it.
+                showLabel: false,
                 options: FeeCycle.values,
                 labelOf: (c) => c.label,
                 value: _feeCycle,

@@ -34,6 +34,9 @@ public class AttendanceController {
         return attendanceService.submitSheet(id, request);
     }
 
+    // No @RequiresFeature: a Trainer without ATTENDANCE anywhere still needs a coherent 403 rather
+    // than a 401-shaped rejection, so the per-course check lives in the service (assertCourseFeature),
+    // matching submit's pattern one step later in the pipeline.
     @GetMapping("/class-instances/{id}/attendance")
     public List<AttendanceResponse> forClassInstance(@PathVariable UUID id) {
         return attendanceService.forClassInstance(id);

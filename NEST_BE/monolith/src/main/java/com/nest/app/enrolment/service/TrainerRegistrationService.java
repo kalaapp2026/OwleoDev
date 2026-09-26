@@ -1,6 +1,7 @@
 package com.nest.app.enrolment.service;
 
 import com.nest.app.enrolment.dto.RegisterTrainerRequest;
+import com.nest.app.enrolment.dto.TrainerCardResponse;
 import com.nest.app.enrolment.dto.TrainerResponse;
 import com.nest.app.enrolment.dto.TrainerSummaryResponse;
 import com.nest.app.enrolment.dto.TrainerDetailResponse;
@@ -16,6 +17,7 @@ import com.nest.app.identity.repository.AcademyMembershipRepository;
 import com.nest.app.identity.repository.CourseFeatureGrantRepository;
 import com.nest.app.identity.repository.CourseMapRepository;
 import com.nest.app.identity.repository.UserRepository;
+import com.nest.app.identity.service.CourseFeatureGuard;
 import com.nest.app.identity.service.IdentityRegistrationService;
 import com.nest.app.identity.service.MembershipConfirmationService;
 import com.nest.app.identity.service.UserWithTempPassword;
@@ -57,13 +59,15 @@ public class TrainerRegistrationService {
     private final CourseRepository courseRepository;
     private final MembershipConfirmationService membershipConfirmationService;
     private final com.nest.app.identity.repository.TrainerCourseBatchRepository trainerCourseBatchRepository;
+    private final CourseFeatureGuard courseFeatureGuard;
 
     public TrainerRegistrationService(IdentityRegistrationService identityRegistrationService, CourseMapRepository courseMapRepository,
                                        AcademyMembershipRepository membershipRepository, UserRepository userRepository,
                                        CourseFeatureGrantRepository courseFeatureGrantRepository,
                                        CourseRepository courseRepository,
                                        MembershipConfirmationService membershipConfirmationService,
-                                       com.nest.app.identity.repository.TrainerCourseBatchRepository trainerCourseBatchRepository) {
+                                       com.nest.app.identity.repository.TrainerCourseBatchRepository trainerCourseBatchRepository,
+                                       CourseFeatureGuard courseFeatureGuard) {
         this.identityRegistrationService = identityRegistrationService;
         this.courseMapRepository = courseMapRepository;
         this.membershipRepository = membershipRepository;
@@ -72,12 +76,14 @@ public class TrainerRegistrationService {
         this.courseRepository = courseRepository;
         this.membershipConfirmationService = membershipConfirmationService;
         this.trainerCourseBatchRepository = trainerCourseBatchRepository;
+        this.courseFeatureGuard = courseFeatureGuard;
     }
 
     /** Pre-fills the trainer edit form: profile + the current per-course feature checklist. */
     @Transactional(readOnly = true)
     public TrainerDetailResponse getTrainerDetail(UUID membershipId) {
         AcademyMembership membership = trainerInActiveAcademy(membershipId);
+        assertCanManageTrainer(membershipId);
         User user = userRepository.findById(membership.getUserId())
                 .orElseThrow(() -> new ResourceNotFoundException("No account for this membership"));
         return new TrainerDetailResponse(user.getId(), membership.getId(), user.getUsername(), user.getFullName(),
@@ -87,10 +93,32 @@ public class TrainerRegistrationService {
                 courseBatchesOf(membershipId));
     }
 
+    /** The public-safe trainer card the Academy Profile page's featured-trainer drill-down opens -
+     * see {@link TrainerCardResponse}'s own doc comment for why this stays separate from
+     * {@link #getTrainerDetail}. Its own inline scoping check rather than
+     * {@link #trainerInActiveAcademy} deliberately: that helper hard-requires Role.TRAINER, and a
+     * featured "trainer" can just as validly be an ACADEMY_ADMIN (see
+     * AcademyProfileService.addFeaturedTrainer's own check). */
+    @Transactional(readOnly = true)
+    public TrainerCardResponse getTrainerCard(UUID membershipId) {
+        AcademyMembership membership = membershipRepository.findById(membershipId)
+                .orElseThrow(() -> new ResourceNotFoundException("Trainer not found: " + membershipId));
+        if (!membership.getAcademyId().equals(TenantContext.currentAcademyId())
+                || (membership.getRoleType() != Role.TRAINER && membership.getRoleType() != Role.ACADEMY_ADMIN)) {
+            throw new ForbiddenException("That person does not belong to the active academy");
+        }
+        User user = userRepository.findById(membership.getUserId())
+                .orElseThrow(() -> new ResourceNotFoundException("No account for this membership"));
+        var details = identityRegistrationService.personDetailsOf(user, membership);
+        return new TrainerCardResponse(membership.getId(), user.getFullName(), user.getProfileImageUrl(),
+                details.qualification(), user.getPhone(), user.getEmail(), details.joiningDate());
+    }
+
     @Transactional
     @Auditable(action = "TRAINER_UPDATED", entityType = "user")
     public TrainerResponse updateTrainer(UUID membershipId, UpdateTrainerRequest request) {
         AcademyMembership membership = trainerInActiveAcademy(membershipId);
+        assertCanManageTrainer(membershipId);
         assertGrantable(request.courseFeatures());
 
         identityRegistrationService.updateTrainerProfile(membership.getUserId(), request.fullName(), request.phone(),
@@ -121,6 +149,24 @@ public class TrainerRegistrationService {
         return membership;
     }
 
+    /** A Trainer may view/edit another trainer's registration only if they hold
+     * TRAINER_REGISTRATION on at least one course that trainer is actually mapped to - being in
+     * the same academy is not enough, since without this a Trainer granted the feature on one
+     * course could reach every trainer in the academy through these membershipId-only endpoints.
+     * Admins bypass inside the guard. */
+    private void assertCanManageTrainer(UUID membershipId) {
+        Optional<Set<UUID>> visibleCourseIds = courseFeatureGuard.visibleCourseIds(FeatureKey.TRAINER_REGISTRATION);
+        if (visibleCourseIds.isEmpty()) {
+            return;
+        }
+        Set<UUID> targetCourseIds = courseMapRepository.findByMembershipId(membershipId).stream()
+                .map(CourseMap::getCourseId).collect(Collectors.toSet());
+        boolean allowed = targetCourseIds.stream().anyMatch(visibleCourseIds.get()::contains);
+        if (!allowed) {
+            throw new ForbiddenException("You do not have TRAINER_REGISTRATION on any of this trainer's courses.");
+        }
+    }
+
     /** courseId -&gt; the batches this trainer is scoped to on it. A course with no rows is absent
      * from the map, which reads as "every batch on that course". */
     private Map<UUID, Set<UUID>> courseBatchesOf(UUID membershipId) {
@@ -145,6 +191,9 @@ public class TrainerRegistrationService {
      * keeps them, flagged. */
     @Transactional(readOnly = true)
     public List<TrainerSummaryResponse> listTrainersForCourse(UUID courseId, boolean includeInactive) {
+        // Per-course enforcement: the controller's @RequiresFeature(BATCH_CREATION) only checks
+        // the union across all courses.
+        courseFeatureGuard.assertCourseFeature(courseId, FeatureKey.BATCH_CREATION);
         UUID academyId = TenantContext.currentAcademyId();
 
         Map<UUID, Boolean> activeByMembership = courseMapRepository.findByCourseId(courseId).stream()
@@ -298,29 +347,37 @@ public class TrainerRegistrationService {
         return (name.startsWith("a") ? "an " : "a ") + name;
     }
 
-    /** Cascading-delegation cap (PRD 3.5), applied across the flat set of features requested over
-     * ALL courses: nothing NON_DELEGABLE, and nothing the creator doesn't themselves hold. */
+    /** Cascading-delegation cap (PRD 3.5): nothing NON_DELEGABLE, ever - and for a Trainer creator,
+     * nothing on a course they don't themselves hold that exact feature on. Checked per (course,
+     * feature) pair via {@link CourseFeatureGuard#hasCourseFeature} rather than against the flat
+     * {@code MembershipClaim.features()} union, which doesn't distinguish which course a feature
+     * came from - that flat check let a Trainer holding, say, ATTENDANCE on Guitar grant ATTENDANCE
+     * on Dance to someone else, a course they have no standing on at all. An Admin creator isn't
+     * gated by feature_grants at all (PRD 2.2/2.3), so they're capped only at ALL_DELEGABLE. */
     private void assertGrantable(Map<UUID, Set<String>> courseFeatures) {
-        Set<String> grantable = grantableFeatureSet(TenantContext.currentMembership());
         Set<String> allRequested = courseFeatures.values().stream().flatMap(Set::stream).collect(Collectors.toSet());
-
         Set<String> requestedNonDelegable = allRequested.stream()
                 .filter(FeatureKey.NON_DELEGABLE::contains).collect(Collectors.toSet());
         if (!requestedNonDelegable.isEmpty()) {
             throw new ForbiddenException("These features are Admin-only and never delegable to a Trainer: " + requestedNonDelegable);
         }
 
-        Set<String> notHeldByCreator = new HashSet<>(allRequested);
-        notHeldByCreator.removeAll(grantable);
-        if (!notHeldByCreator.isEmpty()) {
-            throw new ForbiddenException("Cannot grant features you do not yourself hold: " + notHeldByCreator);
+        if (TenantContext.currentMembership().roleType() == Role.ACADEMY_ADMIN) {
+            Set<String> notDelegableAtAll = new HashSet<>(allRequested);
+            notDelegableAtAll.removeAll(FeatureKey.ALL_DELEGABLE);
+            if (!notDelegableAtAll.isEmpty()) {
+                throw new ForbiddenException("Cannot grant features you do not yourself hold: " + notDelegableAtAll);
+            }
+            return;
         }
-    }
 
-    private Set<String> grantableFeatureSet(MembershipClaim creator) {
-        if (creator.roleType() == Role.ACADEMY_ADMIN) {
-            return FeatureKey.ALL_DELEGABLE;
-        }
-        return creator.features();
+        courseFeatures.forEach((courseId, features) -> {
+            Set<String> notHeldOnThisCourse = features.stream()
+                    .filter(f -> !courseFeatureGuard.hasCourseFeature(courseId, f))
+                    .collect(Collectors.toSet());
+            if (!notHeldOnThisCourse.isEmpty()) {
+                throw new ForbiddenException("Cannot grant features you do not yourself hold on this course: " + notHeldOnThisCourse);
+            }
+        });
     }
 }

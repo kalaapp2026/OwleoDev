@@ -1,81 +1,88 @@
-import 'package:nest_fe/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
+import 'package:nest_fe/app/theme/app_tokens.dart';
+import 'package:nest_fe/core/auth/feature_keys.dart';
 import 'package:nest_fe/core/auth/session_controller.dart';
+import 'package:nest_fe/features/attendance/data/attendance_api.dart';
 import 'package:nest_fe/features/curriculum/data/curriculum_api.dart';
-import 'package:nest_fe/features/shell/domain/erp_action.dart';
-import 'package:nest_fe/features/shell/presentation/app_shell.dart';
+import 'package:nest_fe/features/dashboard/presentation/widgets/admin_welcome_header.dart';
+import 'package:nest_fe/features/dashboard/presentation/widgets/revenue_dues_card.dart';
+import 'package:nest_fe/features/dashboard/presentation/widgets/stats_row.dart';
+import 'package:nest_fe/features/dashboard/presentation/widgets/student_summary.dart';
+import 'package:nest_fe/features/dashboard/presentation/widgets/student_welcome_header.dart';
+import 'package:nest_fe/features/dashboard/presentation/widgets/todays_schedule_card.dart';
+import 'package:nest_fe/features/dashboard/presentation/widgets/upcoming_events_card.dart';
+import 'package:nest_fe/features/scheduling/data/scheduling_api.dart';
 
-/// PRD 3.1: the ERP home screen is a grid of tiles scoped to the caller's role+feature grants -
-/// same source list as the More sheet (features/shell/domain/erp_action.dart), just rendered
-/// full-page instead of as an overlay.
+/// PRD 3.1: the ERP home screen. A Student sees the original tile-grid body (their "courses"
+/// figure is their own enrolment count, never the academy's whole catalog); an Academy Admin or
+/// Trainer sees the richer real-data home built from 07-module-dashboard.jsx - see the "Dashboard
+/// v1" plan for exactly which of that reference's cards are backed by real data today and which
+/// were deliberately left out rather than faked (growth trend, course leaderboard, birthdays,
+/// activity feed).
 class DashboardScreen extends ConsumerWidget {
   const DashboardScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final user = ref.watch(sessionControllerProvider).user;
-    final colorScheme = Theme.of(context).colorScheme;
-
     if (user == null) return const SizedBox.shrink();
 
     final membership = user.activeMembership;
-    final visibleActions =
-        kErpActions.where((a) => a.visibleFor(user) && (a.route != null || a.erpTabIndex != null)).toList();
-
-    // A Student's "courses" means the ones THEY are enrolled in (membership.courseIds, already
-    // scoped server-side to this one membership) - never the academy's whole catalog. Admin/
-    // Trainer aren't personally "enrolled" in anything, so for them this still means "how many
-    // courses does this academy offer" (activeCoursesProvider).
     final isStudent = membership?.roleType == 'STUDENT';
-    final coursesAsync = ref.watch(activeCoursesProvider);
-    final courseCountLabel = isStudent ? 'My courses' : 'Active courses';
-    final courseCountValue =
-        isStudent ? '${membership?.courseIds.length ?? 0}' : coursesAsync.maybeWhen(data: (c) => '${c.length}', orElse: () => '—');
+
+    return isStudent
+        ? const _StudentDashboardBody()
+        : const _AdminTrainerDashboardBody();
+  }
+}
+
+class _StudentDashboardBody extends ConsumerWidget {
+  const _StudentDashboardBody();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final user = ref.watch(sessionControllerProvider).user;
+    if (user == null) return const SizedBox.shrink();
+
+    final membership = user.activeMembership;
+    final membershipId = membership?.membershipId;
+    final academyId = membership?.academyId;
+    final today = DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
 
     return RefreshIndicator(
-      onRefresh: () => ref.refresh(activeCoursesProvider.future),
+      onRefresh: () async {
+        if (membershipId != null) {
+          ref.invalidate(studentAttendanceProvider(membershipId));
+        }
+        ref.invalidate(scheduleFeedProvider((from: today, to: today, courseId: null)));
+      },
       child: ListView(
-        padding: const EdgeInsets.all(20),
+        padding: EdgeInsets.zero,
         children: [
-          Text(AppLocalizations.of(context).dashWelcomeBack, style: Theme.of(context).textTheme.bodyMedium),
-          Text(user.fullName, style: Theme.of(context).textTheme.headlineSmall),
-          if (membership?.academyName != null) ...[
-            const SizedBox(height: 4),
-            Text(membership!.academyName!, style: TextStyle(color: colorScheme.primary, fontWeight: FontWeight.w600)),
-          ],
-          const SizedBox(height: 20),
-          Row(
-            children: [
-              Expanded(
-                child: _StatCard(
-                  icon: Icons.auto_stories_outlined,
-                  label: courseCountLabel,
-                  value: courseCountValue,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _StatCard(
-                  icon: Icons.badge_outlined,
-                  label: 'Your role',
-                  value: (membership?.roleType ?? user.role).replaceAll('_', ' '),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 28),
-          Text(AppLocalizations.of(context).dashQuickActions, style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 14),
-          GridView.count(
-            crossAxisCount: 4,
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            mainAxisSpacing: 18,
-            crossAxisSpacing: 8,
-            childAspectRatio: 0.85,
-            children: visibleActions.map((action) => _ActionTile(action: action)).toList(),
+          StudentWelcomeHeader(user: user, membership: membership),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, AppSpacing.xxl, 20, 20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (membershipId != null && academyId != null) ...[
+                  StudentQuickStats(
+                    membershipId: membershipId,
+                    academyId: academyId,
+                    courseCount: membership?.courseIds.length ?? 0,
+                  ),
+                  const SizedBox(height: AppSpacing.xxl),
+                  StudentAttendanceSummary(membershipId: membershipId),
+                  const SizedBox(height: AppSpacing.xxl),
+                ],
+                const TodaysScheduleCard(),
+                if (academyId != null) ...[
+                  const SizedBox(height: AppSpacing.xxl),
+                  UpcomingEventsCard(academyId: academyId),
+                ],
+              ],
+            ),
           ),
         ],
       ),
@@ -83,69 +90,43 @@ class DashboardScreen extends ConsumerWidget {
   }
 }
 
-class _StatCard extends StatelessWidget {
-  const _StatCard({required this.icon, required this.label, required this.value});
-
-  final IconData icon;
-  final String label;
-  final String value;
+class _AdminTrainerDashboardBody extends ConsumerWidget {
+  const _AdminTrainerDashboardBody();
 
   @override
-  Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Icon(icon, color: colorScheme.primary, size: 22),
-            const SizedBox(height: 10),
-            Text(value, style: Theme.of(context).textTheme.titleLarge),
-            const SizedBox(height: 2),
-            Text(label, style: Theme.of(context).textTheme.bodySmall),
-          ],
-        ),
-      ),
-    );
-  }
-}
+  Widget build(BuildContext context, WidgetRef ref) {
+    final user = ref.watch(sessionControllerProvider).user;
+    if (user == null) return const SizedBox.shrink();
 
-class _ActionTile extends StatelessWidget {
-  const _ActionTile({required this.action});
-  final ErpAction action;
+    final membership = user.activeMembership;
+    final academyId = membership?.academyId;
+    final canSeeFees =
+        user.isActiveAcademyAdmin || user.hasFeature(FeatureKeys.feesEntry);
 
-  @override
-  Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    return InkWell(
-      borderRadius: BorderRadius.circular(16),
-      onTap: () {
-        if (action.erpTabIndex != null) {
-          context.findAncestorStateOfType<AppShellState>()?.goToErpTab(action.erpTabIndex!);
-        } else if (action.route != null) {
-          context.push(action.route!);
-        }
-      },
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
+    return RefreshIndicator(
+      onRefresh: () => ref.refresh(activeCoursesProvider.future),
+      child: ListView(
+        padding: EdgeInsets.zero,
         children: [
-          Container(
-            width: 52,
-            height: 52,
-            decoration: BoxDecoration(
-              color: colorScheme.primary.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(16),
+          const AdminWelcomeHeader(),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, AppSpacing.xxl, 20, 20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                DashboardStatsRow(isAdmin: user.isActiveAcademyAdmin),
+                const SizedBox(height: AppSpacing.xxl),
+                const TodaysScheduleCard(),
+                if (canSeeFees) ...[
+                  const SizedBox(height: AppSpacing.xxl),
+                  const RevenueDuesCard(),
+                ],
+                if (academyId != null) ...[
+                  const SizedBox(height: AppSpacing.xxl),
+                  UpcomingEventsCard(academyId: academyId),
+                ],
+              ],
             ),
-            child: Icon(action.icon, color: colorScheme.primary, size: 22),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            action.label,
-            textAlign: TextAlign.center,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: Theme.of(context).textTheme.bodySmall,
           ),
         ],
       ),

@@ -5,10 +5,15 @@ import com.nest.app.curriculum.repository.CourseRepository;
 import com.nest.app.enrolment.dto.ConfirmMembershipRequest;
 import com.nest.app.enrolment.dto.CourseFeeSelection;
 import com.nest.app.enrolment.dto.RegisterStudentRequest;
+import com.nest.app.enrolment.dto.StudentCardResponse;
 import com.nest.app.enrolment.dto.StudentDetailResponse;
 import com.nest.app.enrolment.dto.StudentResponse;
 import com.nest.app.enrolment.dto.StudentSummaryResponse;
 import com.nest.app.enrolment.dto.UpdateStudentRequest;
+import com.nest.app.enrolment.entity.Batch;
+import com.nest.app.enrolment.entity.BatchMember;
+import com.nest.app.enrolment.repository.BatchMemberRepository;
+import com.nest.app.enrolment.repository.BatchRepository;
 import com.nest.app.identity.entity.AcademyMembership;
 import com.nest.app.identity.entity.CourseMap;
 import com.nest.app.identity.entity.MembershipStatus;
@@ -17,6 +22,7 @@ import com.nest.app.identity.entity.User;
 import com.nest.app.identity.repository.AcademyMembershipRepository;
 import com.nest.app.identity.repository.CourseMapRepository;
 import com.nest.app.identity.repository.UserRepository;
+import com.nest.app.identity.service.CourseFeatureGuard;
 import com.nest.app.identity.service.IdentityRegistrationService;
 import com.nest.app.identity.service.UserWithTempPassword;
 import com.nest.app.identity.service.OtpService;
@@ -25,7 +31,9 @@ import com.nest.app.notification.entity.NotificationType;
 import com.nest.app.notification.service.NotificationService;
 import com.nest.common.audit.Auditable;
 import com.nest.common.exception.BadRequestException;
+import com.nest.common.exception.ForbiddenException;
 import com.nest.common.exception.ResourceNotFoundException;
+import com.nest.common.security.FeatureKey;
 import com.nest.common.security.MembershipClaim;
 import com.nest.common.security.Role;
 import com.nest.common.security.TenantContext;
@@ -68,11 +76,15 @@ public class StudentRegistrationService {
     private final AcademyMembershipRepository membershipRepository;
     private final UserRepository userRepository;
     private final NotificationService notificationService;
+    private final CourseFeatureGuard courseFeatureGuard;
+    private final BatchRepository batchRepository;
+    private final BatchMemberRepository batchMemberRepository;
 
     public StudentRegistrationService(IdentityRegistrationService identityRegistrationService, CourseRepository courseRepository,
                                        OtpService otpService, CourseMapRepository courseMapRepository,
                                        AcademyMembershipRepository membershipRepository, UserRepository userRepository,
-                                       NotificationService notificationService) {
+                                       NotificationService notificationService, CourseFeatureGuard courseFeatureGuard,
+                                       BatchRepository batchRepository, BatchMemberRepository batchMemberRepository) {
         this.identityRegistrationService = identityRegistrationService;
         this.courseRepository = courseRepository;
         this.otpService = otpService;
@@ -80,6 +92,60 @@ public class StudentRegistrationService {
         this.membershipRepository = membershipRepository;
         this.userRepository = userRepository;
         this.notificationService = notificationService;
+        this.courseFeatureGuard = courseFeatureGuard;
+        this.batchRepository = batchRepository;
+        this.batchMemberRepository = batchMemberRepository;
+    }
+
+    /** The public-safe student card the new Student Profile module opens - identity fields only,
+     * open to any Admin or Trainer in the academy regardless of which features they hold, mirroring
+     * {@link TrainerRegistrationService#getTrainerCard}. The profile screen's Fees/Attendance
+     * sections layer on top of this through their own already feature-gated endpoints. */
+    @Transactional(readOnly = true)
+    public StudentCardResponse getStudentCard(UUID membershipId) {
+        AcademyMembership membership = studentInActiveAcademy(membershipId);
+        User user = userRepository.findById(membership.getUserId())
+                .orElseThrow(() -> new ResourceNotFoundException("No account for this membership"));
+        var details = identityRegistrationService.personDetailsOf(user, membership);
+
+        List<CourseMap> enrolments = courseMapRepository.findByMembershipId(membershipId).stream()
+                .filter(CourseMap::isActive).toList();
+        Map<UUID, Course> coursesById = courseRepository.findAllById(
+                enrolments.stream().map(CourseMap::getCourseId).collect(Collectors.toSet())
+        ).stream().collect(Collectors.toMap(Course::getId, c -> c));
+        Set<UUID> batchIds = batchMemberRepository.findByMembershipId(membershipId).stream()
+                .map(BatchMember::getBatchId).collect(Collectors.toSet());
+        Map<UUID, String> batchNameByCourse = batchRepository.findAllById(batchIds).stream()
+                .collect(Collectors.toMap(Batch::getCourseId, Batch::getName, (a, b) -> a));
+
+        List<StudentCardResponse.EnrolledCourse> courses = enrolments.stream()
+                .map(cm -> {
+                    Course course = coursesById.get(cm.getCourseId());
+                    return new StudentCardResponse.EnrolledCourse(cm.getCourseId(),
+                            course == null ? "Unknown course" : course.getName(),
+                            batchNameByCourse.get(cm.getCourseId()));
+                })
+                .toList();
+
+        return new StudentCardResponse(membershipId, user.getFullName(), user.getProfileImageUrl(),
+                user.getPhone(), user.getEmail(), user.getDob(), details.guardianName(),
+                user.getAddress(), user.getCity(), user.getState(), details.joiningDate(), courses);
+    }
+
+    /** A Trainer may view/edit/reset a student's own registration only if they hold
+     * STUDENT_REGISTRATION on at least one course that student is actually enrolled in - being in
+     * the same academy is not enough, since without this a Trainer granted the feature on one
+     * course could reach every student in the academy through these membershipId-only endpoints.
+     * Admins bypass inside the guard. */
+    private void assertCanManageStudent(UUID membershipId) {
+        Optional<Set<UUID>> visibleCourseIds = courseFeatureGuard.visibleCourseIds(FeatureKey.STUDENT_REGISTRATION);
+        if (visibleCourseIds.isEmpty()) {
+            return;
+        }
+        boolean allowed = courseIdsFor(membershipId).stream().anyMatch(visibleCourseIds.get()::contains);
+        if (!allowed) {
+            throw new ForbiddenException("You do not have STUDENT_REGISTRATION on any of this student's courses.");
+        }
     }
 
     /** Roster source for batch creation/editing and the Users management screen - every Student
@@ -88,6 +154,9 @@ public class StudentRegistrationService {
      * flagged, so an admin can reactivate them. */
     @Transactional(readOnly = true)
     public List<StudentSummaryResponse> listStudentsForCourse(UUID courseId, boolean includeInactive) {
+        // Per-course enforcement: the controller's @RequiresFeature(BATCH_CREATION) only checks
+        // the union across all courses.
+        courseFeatureGuard.assertCourseFeature(courseId, FeatureKey.BATCH_CREATION);
         UUID academyId = TenantContext.currentAcademyId();
 
         Map<UUID, Boolean> activeByMembership = courseMapRepository.findByCourseId(courseId).stream()
@@ -128,6 +197,7 @@ public class StudentRegistrationService {
         if (!membership.getAcademyId().equals(academyId)) {
             throw new com.nest.common.exception.ForbiddenException("That membership does not belong to the active academy");
         }
+        courseFeatureGuard.assertCourseFeature(courseId, FeatureKey.STUDENT_REGISTRATION);
         CourseMap courseMap = courseMapRepository.findByMembershipIdAndCourseId(membershipId, courseId)
                 .orElseThrow(() -> new ResourceNotFoundException("That person is not enrolled in this course"));
         courseMap.setActive(active);
@@ -196,6 +266,7 @@ public class StudentRegistrationService {
         if (!membership.getAcademyId().equals(academyId)) {
             throw new com.nest.common.exception.ForbiddenException("That membership does not belong to the active academy");
         }
+        assertCanManageStudent(membershipId);
         return identityRegistrationService.resetPassword(membership.getUserId());
     }
 
@@ -227,6 +298,7 @@ public class StudentRegistrationService {
     @Transactional(readOnly = true)
     public StudentDetailResponse getStudentDetail(UUID membershipId) {
         AcademyMembership membership = studentInActiveAcademy(membershipId);
+        assertCanManageStudent(membershipId);
         User student = userRepository.findById(membership.getUserId())
                 .orElseThrow(() -> new ResourceNotFoundException("No account for this membership"));
         Map<UUID, BigDecimal> courseFees = new HashMap<>();
@@ -241,6 +313,7 @@ public class StudentRegistrationService {
     @Auditable(action = "STUDENT_UPDATED", entityType = "user")
     public StudentResponse updateStudent(UUID membershipId, UpdateStudentRequest request) {
         AcademyMembership membership = studentInActiveAcademy(membershipId);
+        assertCanManageStudent(membershipId);
         identityRegistrationService.updateStudentProfile(membership.getUserId(), request.fullName(), request.phone(),
                 request.email(), request.dob(), request.address(), request.city(), request.state());
 

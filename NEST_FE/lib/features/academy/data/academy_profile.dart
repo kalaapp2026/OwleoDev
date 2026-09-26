@@ -46,13 +46,57 @@ class FeaturedTrainer {
   final String fullName;
   final String? profileImageUrl;
 
-  const FeaturedTrainer({required this.id, required this.trainerMembershipId, required this.fullName, required this.profileImageUrl});
+  /// The Admin's own custom label for this person (e.g. "Head of Dance & Founder"), overriding
+  /// whatever the page shows by default when set.
+  final String? designation;
+
+  const FeaturedTrainer({
+    required this.id,
+    required this.trainerMembershipId,
+    required this.fullName,
+    required this.profileImageUrl,
+    required this.designation,
+  });
 
   factory FeaturedTrainer.fromJson(Map<String, dynamic> json) => FeaturedTrainer(
         id: json['id'] as String,
         trainerMembershipId: json['trainerMembershipId'] as String,
         fullName: json['fullName'] as String,
         profileImageUrl: json['profileImageUrl'] as String?,
+        designation: json['designation'] as String?,
+      );
+}
+
+/// The public-safe trainer card shown when a featured trainer is tapped - see the backend's
+/// TrainerCardResponse doc comment for why this is intentionally thinner than the trainer edit
+/// form's own model.
+class TrainerCard {
+  final String membershipId;
+  final String fullName;
+  final String? profileImageUrl;
+  final String? qualification;
+  final String? phone;
+  final String? email;
+  final String? joiningDate;
+
+  const TrainerCard({
+    required this.membershipId,
+    required this.fullName,
+    required this.profileImageUrl,
+    required this.qualification,
+    required this.phone,
+    required this.email,
+    required this.joiningDate,
+  });
+
+  factory TrainerCard.fromJson(Map<String, dynamic> json) => TrainerCard(
+        membershipId: json['membershipId'] as String,
+        fullName: json['fullName'] as String,
+        profileImageUrl: json['profileImageUrl'] as String?,
+        qualification: json['qualification'] as String?,
+        phone: json['phone'] as String?,
+        email: json['email'] as String?,
+        joiningDate: json['joiningDate'] as String?,
       );
 }
 
@@ -90,6 +134,10 @@ class AcademyProfile {
   final String? xUrl;
   final String? facebookUrl;
   final String? youtubeUrl;
+  final String? whatsapp;
+  final String? websiteUrl;
+  final String? mapsUrl;
+  final String? coverImageUrl;
   final List<AcademyHighlight> highlights;
   final List<FeaturedTrainer> featuredTrainers;
   final List<AcademyBranchInfo> branches;
@@ -112,6 +160,10 @@ class AcademyProfile {
     required this.xUrl,
     required this.facebookUrl,
     required this.youtubeUrl,
+    required this.whatsapp,
+    required this.websiteUrl,
+    required this.mapsUrl,
+    required this.coverImageUrl,
     required this.highlights,
     required this.featuredTrainers,
     required this.branches,
@@ -135,6 +187,10 @@ class AcademyProfile {
         xUrl: json['xUrl'] as String?,
         facebookUrl: json['facebookUrl'] as String?,
         youtubeUrl: json['youtubeUrl'] as String?,
+        whatsapp: json['whatsapp'] as String?,
+        websiteUrl: json['websiteUrl'] as String?,
+        mapsUrl: json['mapsUrl'] as String?,
+        coverImageUrl: json['coverImageUrl'] as String?,
         highlights: (json['highlights'] as List? ?? []).map((e) => AcademyHighlight.fromJson(e as Map<String, dynamic>)).toList(),
         featuredTrainers: (json['featuredTrainers'] as List? ?? []).map((e) => FeaturedTrainer.fromJson(e as Map<String, dynamic>)).toList(),
         branches: (json['branches'] as List? ?? []).map((e) => AcademyBranchInfo.fromJson(e as Map<String, dynamic>)).toList(),

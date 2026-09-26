@@ -20,12 +20,14 @@ import com.nest.app.identity.entity.CourseMap;
 import com.nest.app.identity.entity.MembershipStatus;
 import com.nest.app.identity.repository.AcademyMembershipRepository;
 import com.nest.app.identity.repository.CourseMapRepository;
+import com.nest.app.identity.service.CourseFeatureGuard;
 import com.nest.app.scheduling.entity.ClassInstance;
 import com.nest.app.scheduling.entity.ClassInstanceStatus;
 import com.nest.app.scheduling.repository.ClassInstanceRepository;
 import com.nest.common.audit.Auditable;
 import com.nest.common.exception.ForbiddenException;
 import com.nest.common.exception.ResourceNotFoundException;
+import com.nest.common.security.FeatureKey;
 import com.nest.common.security.Role;
 import com.nest.common.security.TenantContext;
 import org.slf4j.Logger;
@@ -68,12 +70,13 @@ public class FeeSlipService {
     private final AttendanceRepository attendanceRepository;
     private final FeeSlipRepository feeSlipRepository;
     private final FeeTransactionRepository feeTransactionRepository;
+    private final CourseFeatureGuard courseFeatureGuard;
 
     public FeeSlipService(CourseRepository courseRepository, AcademyMembershipRepository membershipRepository,
                            CourseMapRepository courseMapRepository, BatchRepository batchRepository,
                            BatchMemberRepository batchMemberRepository, ClassInstanceRepository classInstanceRepository,
                            AttendanceRepository attendanceRepository, FeeSlipRepository feeSlipRepository,
-                           FeeTransactionRepository feeTransactionRepository) {
+                           FeeTransactionRepository feeTransactionRepository, CourseFeatureGuard courseFeatureGuard) {
         this.courseRepository = courseRepository;
         this.membershipRepository = membershipRepository;
         this.courseMapRepository = courseMapRepository;
@@ -83,6 +86,7 @@ public class FeeSlipService {
         this.attendanceRepository = attendanceRepository;
         this.feeSlipRepository = feeSlipRepository;
         this.feeTransactionRepository = feeTransactionRepository;
+        this.courseFeatureGuard = courseFeatureGuard;
     }
 
     /** Runs daily with no HTTP request/TenantContext behind it, so it must look across every
@@ -118,12 +122,18 @@ public class FeeSlipService {
         if (!course.getAcademyId().equals(TenantContext.currentAcademyId())) {
             throw new ForbiddenException("That course does not belong to the active academy");
         }
+        // Per-course enforcement: the controller's @RequiresFeature(FEES_ENTRY) only checks the
+        // union across all courses.
+        courseFeatureGuard.assertCourseFeature(courseId, FeatureKey.FEES_ENTRY);
         return generateSlipsForCourse(course, LocalDate.now()).stream().map(this::toResponse).collect(Collectors.toList());
     }
 
     @Transactional(readOnly = true)
     public List<FeeSlipResponse> historyForStudent(java.util.UUID membershipId) {
-        return feeSlipRepository.findByMembershipIdOrderByGeneratedAtDesc(membershipId).stream()
+        List<FeeSlip> slips = feeSlipRepository.findByMembershipIdOrderByGeneratedAtDesc(membershipId);
+        boolean isSelf = membershipId.equals(TenantContext.currentMembershipId());
+        return slips.stream()
+                .filter(s -> isSelf || courseFeatureGuard.hasCourseFeature(s.getCourseId(), FeatureKey.FEES_ENTRY))
                 .map(this::toResponse).collect(Collectors.toList());
     }
 

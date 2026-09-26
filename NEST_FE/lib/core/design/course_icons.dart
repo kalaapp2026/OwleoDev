@@ -343,6 +343,42 @@ const _heel = CourseIconSpec('heel', 'Footwear', '''
 <line x1="18" y1="15" x2="19" y2="19" />''');
 
 // ---------------------------------------------------------------------------
+// Health & Wellness
+// ---------------------------------------------------------------------------
+
+const _healthWellnessGeneral = CourseIconSpec('healthwellness_general', 'Health & Wellness', '''
+<path d="M12 20 C12 20 3 14.5 3 8.5 C3 5.5 5.5 3 8.5 3 C10.5 3 12 4.2 12 4.2 C12 4.2 13.5 3 15.5 3 C18.5 3 21 5.5 21 8.5 C21 14.5 12 20 12 20 Z" />
+<path d="M5 11 H8.5 L10 8 L12.5 14 L14 10 L15.5 11 H19" />''');
+
+const _yoga = CourseIconSpec('yoga', 'Yoga', '''
+<circle cx="12" cy="4.5" r="1.8" />
+<line x1="12" y1="6.3" x2="12" y2="12" />
+<line x1="12" y1="7.5" x2="7" y2="10" />
+<line x1="12" y1="7.5" x2="17" y2="10" />
+<path d="M12 12 Q7 13 6 17" />
+<path d="M12 12 Q17 13 18 17" />
+<path d="M6 17 Q9 15.5 12 17" />
+<path d="M18 17 Q15 15.5 12 17" />''');
+
+const _lotus = CourseIconSpec('lotus', 'Meditation', '''
+<path d="M12 20 L12 12" />
+<path d="M12 12 C9 12 7 10 7 7 C10 7 12 9 12 12 Z" />
+<path d="M12 12 C15 12 17 10 17 7 C14 7 12 9 12 12 Z" />
+<path d="M12 12 C9.5 12 8 9.5 8.5 6.5 C11 7.5 12.3 9.5 12 12 Z" />
+<path d="M12 12 C14.5 12 16 9.5 15.5 6.5 C13 7.5 11.7 9.5 12 12 Z" />
+<path d="M6 20 Q12 17 18 20" />''');
+
+const _pulse = CourseIconSpec('pulse', 'Pulse', '''
+<path d="M2 12 H7 L9 6 L12.5 18 L15 9 L16.5 12 H22" />''');
+
+const _dumbbell = CourseIconSpec('dumbbell', 'Fitness', '''
+<rect x="2" y="9.5" width="3" height="5" rx="1" />
+<rect x="19" y="9.5" width="3" height="5" rx="1" />
+<line x1="5" y1="12" x2="19" y2="12" />
+<rect x="6" y="7" width="2.2" height="10" rx="1" />
+<rect x="15.8" y="7" width="2.2" height="10" rx="1" />''');
+
+// ---------------------------------------------------------------------------
 // Others / general
 // ---------------------------------------------------------------------------
 
@@ -390,6 +426,7 @@ const Map<CourseCategory, List<CourseIconSpec>> courseIconsByCategory = {
   CourseCategory.literature: [_literatureGeneral, _bookopen, _quill, _scroll, _bookmark],
   CourseCategory.theatre: [_theatreGeneral, _masks, _curtain, _spotlight],
   CourseCategory.fashion: [_fashionGeneral, _shirt, _scissors, _needle, _heel],
+  CourseCategory.healthWellness: [_healthWellnessGeneral, _yoga, _lotus, _pulse, _dumbbell],
   CourseCategory.others: [_othersGeneral, _star, _sparkle, _group, _ribbon],
 };
 

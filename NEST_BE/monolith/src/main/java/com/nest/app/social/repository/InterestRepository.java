@@ -12,4 +12,9 @@ public interface InterestRepository extends JpaRepository<Interest, UUID> {
     boolean existsByUserIdAndEventId(UUID userId, UUID eventId);
 
     boolean existsByUserIdAndPostId(UUID userId, UUID postId);
+
+    /** The ERP event detail screen's "N interested" count and interested-students list. */
+    long countByEventId(UUID eventId);
+
+    List<Interest> findByEventId(UUID eventId);
 }

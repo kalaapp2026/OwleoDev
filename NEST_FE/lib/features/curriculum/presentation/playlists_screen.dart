@@ -684,7 +684,10 @@ class _AddSongsScreenState extends ConsumerState<_AddSongsScreen> {
                             fontSize: AppType.lg, color: palette.text),
                         decoration: InputDecoration(
                           isDense: true,
+                          filled: false,
                           border: InputBorder.none,
+                          focusedBorder: InputBorder.none,
+                          enabledBorder: InputBorder.none,
                           contentPadding: EdgeInsets.zero,
                           hintText: 'Search songs',
                           hintStyle: TextStyle(

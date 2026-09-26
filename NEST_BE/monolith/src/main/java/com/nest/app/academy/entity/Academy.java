@@ -89,6 +89,17 @@ public class Academy {
     @Column(name = "youtube_url")
     private String youtubeUrl;
 
+    private String whatsapp;
+
+    @Column(name = "website_url")
+    private String websiteUrl;
+
+    @Column(name = "maps_url")
+    private String mapsUrl;
+
+    @Column(name = "cover_image_url")
+    private String coverImageUrl;
+
     @Column(nullable = false)
     @Builder.Default
     private String plan = "STANDARD";

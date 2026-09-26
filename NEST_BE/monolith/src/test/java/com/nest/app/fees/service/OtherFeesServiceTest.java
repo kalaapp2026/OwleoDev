@@ -26,8 +26,11 @@ import com.nest.app.identity.entity.MembershipStatus;
 import com.nest.app.identity.entity.User;
 import com.nest.app.identity.repository.AcademyMembershipRepository;
 import com.nest.app.identity.repository.UserRepository;
+import com.nest.app.identity.service.CourseFeatureGuard;
 import com.nest.common.exception.ConflictException;
+import com.nest.common.exception.ForbiddenException;
 import com.nest.common.exception.ResourceNotFoundException;
+import com.nest.common.security.FeatureKey;
 import com.nest.common.security.MembershipClaim;
 import com.nest.common.security.NestPrincipal;
 import com.nest.common.security.Role;
@@ -53,6 +56,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyIterable;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -70,6 +74,7 @@ class OtherFeesServiceTest {
     @Mock private CourseRepository courseRepository;
     @Mock private AcademyMembershipRepository membershipRepository;
     @Mock private UserRepository userRepository;
+    @Mock private CourseFeatureGuard courseFeatureGuard;
 
     private OtherFeesService service;
 
@@ -83,7 +88,7 @@ class OtherFeesServiceTest {
     void setUp() {
         service = new OtherFeesService(feeTypeRepository, feeTypeBatchRepository, studentFeeRepository,
                 feeTransactionRepository, batchRepository, batchMemberRepository, courseRepository,
-                membershipRepository, userRepository);
+                membershipRepository, userRepository, courseFeatureGuard);
         UUID adminMembershipId = UUID.randomUUID();
         TenantContext.set(new NestPrincipal(UUID.randomUUID(), "meera", Role.ACADEMY_ADMIN,
                 List.of(new MembershipClaim(adminMembershipId, academyId, "Kalakshetra",
@@ -147,6 +152,49 @@ class OtherFeesServiceTest {
                 .hasMessageContaining("already exists");
     }
 
+    @Test
+    void creatingAFeeTypeIsRejectedWhenCallerLacksFeesEntryOnABoundCourse() {
+        when(feeTypeRepository.existsByAcademyIdAndNameIgnoreCase(academyId, "Costume Fee")).thenReturn(false);
+        when(batchRepository.findAllById(List.of(batchId))).thenReturn(List.of(batch(batchId, courseId)));
+        when(courseRepository.findAllById(Set.of(courseId))).thenReturn(List.of(course(courseId, academyId)));
+        doThrow(new ForbiddenException("nope")).when(courseFeatureGuard)
+                .assertCourseFeature(courseId, FeatureKey.FEES_ENTRY);
+
+        assertThatThrownBy(() -> service.createFeeType(new CreateFeeTypeRequest(
+                "Costume Fee", new BigDecimal("750"), List.of(batchId), null, null)))
+                .isInstanceOf(ForbiddenException.class);
+
+        verify(feeTypeRepository, org.mockito.Mockito.never()).save(any());
+    }
+
+    @Test
+    void listFeeTypesHidesTypesBoundToCoursesTheCallerCannotSee() {
+        UUID hiddenCourseId = UUID.randomUUID();
+        UUID hiddenBatchId = UUID.randomUUID();
+        UUID visibleFeeTypeId = feeTypeId;
+        UUID hiddenFeeTypeId = UUID.randomUUID();
+
+        when(feeTypeRepository.findByAcademyIdAndActiveTrueOrderByNameAsc(academyId)).thenReturn(List.of(
+                FeeType.builder().id(visibleFeeTypeId).academyId(academyId).name("Costume Fee")
+                        .amount(new BigDecimal("750")).active(true).build(),
+                FeeType.builder().id(hiddenFeeTypeId).academyId(academyId).name("Exam Fee")
+                        .amount(new BigDecimal("500")).active(true).build()));
+        when(feeTypeBatchRepository.findByFeeTypeIdIn(any())).thenReturn(List.of(
+                FeeTypeBatch.builder().feeTypeId(visibleFeeTypeId).batchId(batchId).build(),
+                FeeTypeBatch.builder().feeTypeId(hiddenFeeTypeId).batchId(hiddenBatchId).build()));
+        when(batchRepository.findAllById(Set.of(batchId, hiddenBatchId))).thenReturn(List.of(
+                batch(batchId, courseId), batch(hiddenBatchId, hiddenCourseId)));
+        when(courseRepository.findAllById(Set.of(courseId, hiddenCourseId))).thenReturn(List.of(
+                course(courseId, academyId), course(hiddenCourseId, academyId)));
+        when(courseFeatureGuard.visibleCourseIds(FeatureKey.FEES_ENTRY))
+                .thenReturn(Optional.of(Set.of(courseId)));
+
+        var types = service.listFeeTypes(false);
+
+        assertThat(types).hasSize(1);
+        assertThat(types.get(0).id()).isEqualTo(visibleFeeTypeId);
+    }
+
     // ---- recording a payment ----
 
     @Test
@@ -196,6 +244,23 @@ class OtherFeesServiceTest {
     }
 
     @Test
+    void recordingPaymentAgainstASharedFeeTypeIsRejectedWhenCallerLacksFeesEntryOnItsCourse() {
+        when(feeTypeRepository.findByIdAndAcademyId(feeTypeId, academyId))
+                .thenReturn(Optional.of(feeType("750", null)));
+        when(feeTypeBatchRepository.findByFeeTypeId(feeTypeId)).thenReturn(List.of(
+                FeeTypeBatch.builder().feeTypeId(feeTypeId).batchId(batchId).build()));
+        when(batchRepository.findAllById(Set.of(batchId))).thenReturn(List.of(batch(batchId, courseId)));
+        when(courseFeatureGuard.hasCourseFeature(courseId, FeatureKey.FEES_ENTRY)).thenReturn(false);
+
+        assertThatThrownBy(() -> service.recordPayment(new RecordOtherFeeRequest(
+                UUID.randomUUID(), feeTypeId, null, new BigDecimal("750"),
+                FeeMode.CASH, null, null, null)))
+                .isInstanceOf(ForbiddenException.class);
+
+        verify(feeTransactionRepository, org.mockito.Mockito.never()).saveAndFlush(any());
+    }
+
+    @Test
     void cannotPayAnotherAcademysFeeType() {
         when(feeTypeRepository.findByIdAndAcademyId(feeTypeId, academyId)).thenReturn(Optional.empty());
 
@@ -238,6 +303,20 @@ class OtherFeesServiceTest {
         assertThatThrownBy(() -> service.roster(feeTypeId, batchId))
                 .isInstanceOf(ConflictException.class)
                 .hasMessageContaining("does not apply to this batch");
+    }
+
+    @Test
+    void rosterIsRejectedWhenCallerLacksFeesEntryOnThisCourse() {
+        when(feeTypeRepository.findByIdAndAcademyId(feeTypeId, academyId))
+                .thenReturn(Optional.of(feeType("750", null)));
+        when(batchRepository.findById(batchId)).thenReturn(Optional.of(batch(batchId, courseId)));
+        when(courseRepository.findAllById(Set.of(courseId)))
+                .thenReturn(List.of(course(courseId, academyId)));
+        doThrow(new ForbiddenException("nope")).when(courseFeatureGuard)
+                .assertCourseFeature(courseId, FeatureKey.FEES_ENTRY);
+
+        assertThatThrownBy(() -> service.roster(feeTypeId, batchId))
+                .isInstanceOf(ForbiddenException.class);
     }
 
     @Test

@@ -456,7 +456,10 @@ class _BatchMaterialScreenState extends ConsumerState<BatchMaterialScreen> {
                     ),
                     decoration: InputDecoration(
                       isDense: true,
+                      filled: false,
                       border: InputBorder.none,
+                      focusedBorder: InputBorder.none,
+                      enabledBorder: InputBorder.none,
                       contentPadding: EdgeInsets.zero,
                       hintText: 'Search files',
                       hintStyle: TextStyle(fontSize: AppType.lg, color: palette.textFaint),

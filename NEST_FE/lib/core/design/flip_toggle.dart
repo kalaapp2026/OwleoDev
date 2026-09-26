@@ -29,6 +29,8 @@ class FlipToggle extends StatefulWidget {
     this.height = 34,
     this.onIcon,
     this.offIcon,
+    this.borderRadius = AppRadii.md,
+    this.fontSize = AppType.sm,
   });
 
   final bool isOn;
@@ -50,6 +52,15 @@ class FlipToggle extends StatefulWidget {
   /// and letting the button resize mid-flip makes the whole list row jump.
   final double width;
   final double height;
+
+  /// A compact chip by default (the Fees Paid/Not-Paid toggle this was built for). A CTA-sized
+  /// instance - the User List "Add student" FAB, say - passes [AppRadii.pill] instead so a bigger
+  /// button reads as a full stadium rather than a barely-rounded rectangle.
+  final double borderRadius;
+
+  /// The chip-sized default. A CTA-sized instance passes a larger value to match its bigger
+  /// button, rather than the label staying chip-scale inside a much bigger pill.
+  final double fontSize;
 
   @override
   State<FlipToggle> createState() => _FlipToggleState();
@@ -125,7 +136,7 @@ class _FlipToggleState extends State<FlipToggle> with SingleTickerProviderStateM
           height: widget.height,
           decoration: BoxDecoration(
             color: _displayOn ? onBg : offBg,
-            borderRadius: AppRadii.all(AppRadii.md),
+            borderRadius: AppRadii.all(widget.borderRadius),
           ),
           alignment: Alignment.center,
           child: Row(
@@ -145,8 +156,8 @@ class _FlipToggleState extends State<FlipToggle> with SingleTickerProviderStateM
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    fontSize: AppType.sm,
-                    fontWeight: AppType.bold,
+                    fontSize: widget.fontSize,
+                    fontWeight: AppType.heavy,
                     color: _displayOn ? onFg : offFg,
                   ),
                 ),

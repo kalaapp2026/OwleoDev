@@ -40,26 +40,45 @@ class AppSegmentedControl<T> extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final palette = context.palette;
+    // Container's own border/borderRadius clip (Clip.antiAlias) clips a child to the OUTER edge
+    // of the box, not inset for the border's own width - so a segment's flat-cornered fill was
+    // painting right up to (and, at the first/last segment's corners, past) the pill's rounded
+    // silhouette, on top of the border stroke instead of staying inside it. Explicit padding
+    // equal to the border width keeps every fill strictly inside the stroke, and clipping the end
+    // segments to the same pill radius keeps their outer corners rounded regardless of how the
+    // parent's own clip behaves.
+    const borderWidth = 1.5;
+    final pillRadius = AppRadii.all(AppRadii.pill);
 
     return Container(
+      padding: const EdgeInsets.all(borderWidth),
       decoration: BoxDecoration(
-        border: Border.all(color: const Color(0x66FFFFFF), width: 1.5),
-        borderRadius: AppRadii.all(AppRadii.pill),
+        border: Border.all(color: const Color(0x66FFFFFF), width: borderWidth),
+        borderRadius: pillRadius,
       ),
       clipBehavior: Clip.antiAlias,
       child: Row(
         children: [
           for (var i = 0; i < options.length; i++)
             Expanded(
-              child: _Segment(
-                label: labelOf(options[i]),
-                selected: isSelected(options[i]),
-                activeColor: activeColorOf?.call(context, options[i]) ?? palette.primary,
-                activeTextColor: activeTextColorOf?.call(context, options[i]) ?? palette.onPrimary,
-                // Divider on every segment but the last, so the pill's own rounded edge isn't
-                // cut by a stray vertical line.
-                showDivider: i < options.length - 1,
-                onTap: () => onTap(options[i]),
+              child: ClipRRect(
+                borderRadius: BorderRadius.only(
+                  topLeft: i == 0 ? pillRadius.topLeft : Radius.zero,
+                  bottomLeft: i == 0 ? pillRadius.bottomLeft : Radius.zero,
+                  topRight: i == options.length - 1 ? pillRadius.topRight : Radius.zero,
+                  bottomRight: i == options.length - 1 ? pillRadius.bottomRight : Radius.zero,
+                ),
+                child: _Segment(
+                  label: labelOf(options[i]),
+                  selected: isSelected(options[i]),
+                  activeColor: activeColorOf?.call(context, options[i]) ?? palette.primary,
+                  activeTextColor:
+                      activeTextColorOf?.call(context, options[i]) ?? palette.onPrimary,
+                  // Divider on every segment but the last, so the pill's own rounded edge isn't
+                  // cut by a stray vertical line.
+                  showDivider: i < options.length - 1,
+                  onTap: () => onTap(options[i]),
+                ),
               ),
             ),
         ],

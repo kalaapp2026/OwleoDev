@@ -11,12 +11,15 @@ import com.nest.app.identity.entity.User;
 import com.nest.app.identity.repository.AcademyMembershipRepository;
 import com.nest.app.identity.repository.CourseMapRepository;
 import com.nest.app.identity.repository.UserRepository;
+import com.nest.app.identity.service.CourseFeatureGuard;
 import com.nest.app.identity.service.IdentityRegistrationService;
 import com.nest.app.identity.service.OtpService;
 import com.nest.app.notification.entity.NotificationModule;
 import com.nest.app.notification.entity.NotificationType;
 import com.nest.app.notification.service.NotificationService;
 import com.nest.common.exception.BadRequestException;
+import com.nest.common.exception.ForbiddenException;
+import com.nest.common.security.FeatureKey;
 import com.nest.common.security.MembershipClaim;
 import com.nest.common.security.NestPrincipal;
 import com.nest.common.security.Role;
@@ -41,6 +44,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -69,6 +73,12 @@ class StudentRegistrationServiceTest {
     private UserRepository userRepository;
     @Mock
     private NotificationService notificationService;
+    @Mock
+    private CourseFeatureGuard courseFeatureGuard;
+    @Mock
+    private com.nest.app.enrolment.repository.BatchRepository batchRepository;
+    @Mock
+    private com.nest.app.enrolment.repository.BatchMemberRepository batchMemberRepository;
 
     private StudentRegistrationService service;
     private final UUID academyId = UUID.randomUUID();
@@ -81,7 +91,8 @@ class StudentRegistrationServiceTest {
 
     private void newService() {
         service = new StudentRegistrationService(identityRegistrationService, courseRepository, otpService,
-                courseMapRepository, membershipRepository, userRepository, notificationService);
+                courseMapRepository, membershipRepository, userRepository, notificationService, courseFeatureGuard,
+                batchRepository, batchMemberRepository);
     }
 
     private void actingAsAdmin() {
@@ -249,6 +260,79 @@ class StudentRegistrationServiceTest {
 
         assertThat(courseMap.isActive()).isFalse();
         verify(courseMapRepository).save(courseMap);
+    }
+
+    @Test
+    void settingCourseMemberActiveIsRejectedWhenCallerLacksStudentRegistrationOnThisCourse() {
+        newService();
+        actingAsAdmin();
+        UUID membershipId = UUID.randomUUID();
+        when(membershipRepository.findById(membershipId))
+                .thenReturn(Optional.of(AcademyMembership.builder().id(membershipId).academyId(academyId).build()));
+        doThrow(new ForbiddenException("nope")).when(courseFeatureGuard)
+                .assertCourseFeature(courseId, FeatureKey.STUDENT_REGISTRATION);
+
+        assertThatThrownBy(() -> service.setCourseMemberActive(courseId, membershipId, false))
+                .isInstanceOf(ForbiddenException.class);
+
+        verify(courseMapRepository, never()).save(any());
+    }
+
+    @Test
+    void listingStudentsForCourseIsRejectedWhenCallerLacksBatchCreationOnThisCourse() {
+        newService();
+        actingAsAdmin();
+        doThrow(new ForbiddenException("nope")).when(courseFeatureGuard)
+                .assertCourseFeature(courseId, FeatureKey.BATCH_CREATION);
+
+        assertThatThrownBy(() -> service.listStudentsForCourse(courseId, false))
+                .isInstanceOf(ForbiddenException.class);
+    }
+
+    @Test
+    void gettingStudentDetailIsRejectedWhenCallerLacksStudentRegistrationOnAnyOfTheirCourses() {
+        newService();
+        actingAsAdmin();
+        UUID membershipId = UUID.randomUUID();
+        UUID otherCourseId = UUID.randomUUID();
+        when(membershipRepository.findById(membershipId)).thenReturn(Optional.of(
+                AcademyMembership.builder().id(membershipId).academyId(academyId).roleType(Role.STUDENT).build()));
+        // Restricted to a course this student isn't enrolled in at all.
+        when(courseFeatureGuard.visibleCourseIds(FeatureKey.STUDENT_REGISTRATION))
+                .thenReturn(Optional.of(Set.of(UUID.randomUUID())));
+        when(identityRegistrationService.courseIdsForMembership(membershipId)).thenReturn(List.of(otherCourseId));
+
+        assertThatThrownBy(() -> service.getStudentDetail(membershipId))
+                .isInstanceOf(ForbiddenException.class);
+    }
+
+    @Test
+    void getStudentCardReturnsIdentityAndEnrolledCourses() {
+        newService();
+        actingAsAdmin();
+        UUID membershipId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+        AcademyMembership membership = AcademyMembership.builder()
+                .id(membershipId).academyId(academyId).userId(userId).roleType(Role.STUDENT).build();
+        User user = User.builder().id(userId).fullName("Ananya Rao").phone("9000000003")
+                .email("ananya@example.com").build();
+        when(membershipRepository.findById(membershipId)).thenReturn(Optional.of(membership));
+        when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+        var details = new com.nest.app.enrolment.dto.PersonDetails(null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null, "Radha Rao", null,
+                null, null, LocalDate.of(2024, 6, 1));
+        when(identityRegistrationService.personDetailsOf(user, membership)).thenReturn(details);
+        when(courseMapRepository.findByMembershipId(membershipId)).thenReturn(List.of(
+                com.nest.app.identity.entity.CourseMap.builder().membershipId(membershipId).courseId(courseId).active(true).build()));
+        when(courseRepository.findAllById(Set.of(courseId))).thenReturn(List.of());
+        when(batchMemberRepository.findByMembershipId(membershipId)).thenReturn(List.of());
+
+        var card = service.getStudentCard(membershipId);
+
+        assertThat(card.fullName()).isEqualTo("Ananya Rao");
+        assertThat(card.guardianName()).isEqualTo("Radha Rao");
+        assertThat(card.courses()).hasSize(1);
+        assertThat(card.courses().get(0).courseId()).isEqualTo(courseId);
     }
 
     @Test

@@ -7,6 +7,7 @@ import com.nest.app.identity.entity.User;
 import com.nest.app.identity.repository.AcademyMembershipRepository;
 import com.nest.app.identity.repository.CourseMapRepository;
 import com.nest.app.identity.repository.UserRepository;
+import com.nest.app.identity.service.CourseFeatureGuard;
 import com.nest.app.identity.service.IdentityRegistrationService;
 import com.nest.app.identity.service.UserWithTempPassword;
 import com.nest.common.exception.ForbiddenException;
@@ -58,8 +59,16 @@ class TrainerRegistrationServiceTest {
     private com.nest.app.identity.service.MembershipConfirmationService membershipConfirmationService;
     @Mock
     private com.nest.app.identity.repository.TrainerCourseBatchRepository trainerCourseBatchRepository;
+    @Mock
+    private CourseFeatureGuard courseFeatureGuard;
 
     private TrainerRegistrationService trainerRegistrationService;
+
+    private void newService() {
+        trainerRegistrationService = new TrainerRegistrationService(identityRegistrationService, courseMapRepository,
+                membershipRepository, userRepository, courseFeatureGrantRepository, courseRepository,
+                membershipConfirmationService, trainerCourseBatchRepository, courseFeatureGuard);
+    }
 
     @AfterEach
     void tearDown() {
@@ -80,8 +89,7 @@ class TrainerRegistrationServiceTest {
 
     @Test
     void trainerCannotDelegateASuperiorFeatureSet() {
-        trainerRegistrationService = new TrainerRegistrationService(identityRegistrationService, courseMapRepository,
-                membershipRepository, userRepository, courseFeatureGrantRepository, courseRepository, membershipConfirmationService, trainerCourseBatchRepository);
+        newService();
         actingAsTrainerWithFeatures(Set.of(FeatureKey.ATTENDANCE, FeatureKey.BATCH_SCHEDULING));
 
         var request = new RegisterTrainerRequest("junior", "Junior Trainer", "9000000001", "junior@example.com",
@@ -95,9 +103,12 @@ class TrainerRegistrationServiceTest {
 
     @Test
     void trainerCanDelegateExactlyTheirOwnFeatureSet() {
-        trainerRegistrationService = new TrainerRegistrationService(identityRegistrationService, courseMapRepository,
-                membershipRepository, userRepository, courseFeatureGrantRepository, courseRepository, membershipConfirmationService, trainerCourseBatchRepository);
+        newService();
         actingAsTrainerWithFeatures(Set.of(FeatureKey.ATTENDANCE, FeatureKey.BATCH_SCHEDULING, FeatureKey.RESCHEDULE));
+        UUID guitarCourseId = UUID.randomUUID();
+        // The per-course check now asks the guard, not the flat MembershipClaim.features() union -
+        // this trainer holds all three on the one course they're delegating over.
+        when(courseFeatureGuard.hasCourseFeature(eq(guitarCourseId), any())).thenReturn(true);
 
         User createdUser = User.builder().id(UUID.randomUUID()).username("junior").build();
         when(identityRegistrationService.createTrainerWithPassword(
@@ -108,7 +119,7 @@ class TrainerRegistrationServiceTest {
 
         var request = new RegisterTrainerRequest("junior", "Junior Trainer", "9000000001", "junior@example.com",
                 java.time.LocalDate.of(1995, 1, 1), null, null, null, null,
-                Map.of(UUID.randomUUID(), Set.of(FeatureKey.ATTENDANCE, FeatureKey.BATCH_SCHEDULING, FeatureKey.RESCHEDULE)), null, null);
+                Map.of(guitarCourseId, Set.of(FeatureKey.ATTENDANCE, FeatureKey.BATCH_SCHEDULING, FeatureKey.RESCHEDULE)), null, null);
 
         var response = trainerRegistrationService.registerTrainer(request);
 
@@ -117,9 +128,39 @@ class TrainerRegistrationServiceTest {
     }
 
     @Test
+    void trainerCannotDelegateAFeatureTheyHoldOnlyOnADifferentCourse() {
+        newService();
+        // Flat-union felt safe before this fix: this trainer really does hold ATTENDANCE, just not
+        // on the course they're trying to grant it on - the exact gap PRD 3.5's cascading cap was
+        // supposed to close.
+        actingAsTrainerWithFeatures(Set.of(FeatureKey.ATTENDANCE));
+        UUID danceCourseId = UUID.randomUUID();
+        when(courseFeatureGuard.hasCourseFeature(danceCourseId, FeatureKey.ATTENDANCE)).thenReturn(false);
+
+        var request = new RegisterTrainerRequest("junior", "Junior Trainer", "9000000001", "junior@example.com",
+                java.time.LocalDate.of(1995, 1, 1), null, null, null, null,
+                Map.of(danceCourseId, Set.of(FeatureKey.ATTENDANCE)), null, null);
+
+        assertThatThrownBy(() -> trainerRegistrationService.registerTrainer(request))
+                .isInstanceOf(ForbiddenException.class)
+                .hasMessageContaining("ATTENDANCE");
+    }
+
+    @Test
+    void listingTrainersForCourseIsRejectedWhenCallerLacksBatchCreationOnThisCourse() {
+        newService();
+        actingAsAcademyAdmin();
+        UUID courseId = UUID.randomUUID();
+        org.mockito.Mockito.doThrow(new ForbiddenException("nope")).when(courseFeatureGuard)
+                .assertCourseFeature(courseId, FeatureKey.BATCH_CREATION);
+
+        assertThatThrownBy(() -> trainerRegistrationService.listTrainersForCourse(courseId, false))
+                .isInstanceOf(ForbiddenException.class);
+    }
+
+    @Test
     void academyAdminCannotDelegateNonDelegableFeatures() {
-        trainerRegistrationService = new TrainerRegistrationService(identityRegistrationService, courseMapRepository,
-                membershipRepository, userRepository, courseFeatureGrantRepository, courseRepository, membershipConfirmationService, trainerCourseBatchRepository);
+        newService();
         actingAsAcademyAdmin();
 
         var request = new RegisterTrainerRequest("ravi", "Ravi", "9000000002", "ravi@example.com",
@@ -133,8 +174,7 @@ class TrainerRegistrationServiceTest {
 
     @Test
     void academyAdminCanGrantAnyDelegableFeatureDespiteHoldingNoFeatureGrantsThemselves() {
-        trainerRegistrationService = new TrainerRegistrationService(identityRegistrationService, courseMapRepository,
-                membershipRepository, userRepository, courseFeatureGrantRepository, courseRepository, membershipConfirmationService, trainerCourseBatchRepository);
+        newService();
         actingAsAcademyAdmin();
 
         User createdUser = User.builder().id(UUID.randomUUID()).username("ravi").build();
@@ -156,8 +196,7 @@ class TrainerRegistrationServiceTest {
 
     @Test
     void anExistingNestUserIsLinkedToThisAcademyInsteadOfBeingRejectedAsADuplicate() {
-        trainerRegistrationService = new TrainerRegistrationService(identityRegistrationService, courseMapRepository,
-                membershipRepository, userRepository, courseFeatureGrantRepository, courseRepository, membershipConfirmationService, trainerCourseBatchRepository);
+        newService();
         actingAsAcademyAdmin();
 
         // Someone already on NEST - e.g. a student at a different academy.
@@ -185,8 +224,7 @@ class TrainerRegistrationServiceTest {
 
     @Test
     void someoneAlreadyInThisAcademyIsRejectedWithAClearReason() {
-        trainerRegistrationService = new TrainerRegistrationService(identityRegistrationService, courseMapRepository,
-                membershipRepository, userRepository, courseFeatureGrantRepository, courseRepository, membershipConfirmationService, trainerCourseBatchRepository);
+        newService();
         actingAsAcademyAdmin();
 
         User existing = User.builder().id(UUID.randomUUID()).username("priya").fullName("Priya").build();
@@ -202,5 +240,73 @@ class TrainerRegistrationServiceTest {
         assertThatThrownBy(() -> trainerRegistrationService.registerTrainer(request))
                 .isInstanceOf(com.nest.common.exception.BadRequestException.class)
                 .hasMessageContaining("already");
+    }
+
+    @Test
+    void getTrainerCardSucceedsForATrainerInTheActiveAcademy() {
+        newService();
+        UUID academyId = UUID.randomUUID();
+        UUID callerMembershipId = UUID.randomUUID();
+        TenantContext.set(new NestPrincipal(UUID.randomUUID(), "meera", Role.ACADEMY_ADMIN,
+                List.of(new MembershipClaim(callerMembershipId, academyId, "Natyalaya", Role.ACADEMY_ADMIN, Set.of(), Set.of())),
+                callerMembershipId));
+
+        UUID membershipId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+        AcademyMembership membership = AcademyMembership.builder()
+                .id(membershipId).academyId(academyId).userId(userId).roleType(Role.TRAINER).build();
+        User user = User.builder().id(userId).fullName("Kavya Iyer").phone("9800000000").email("kavya@example.com").build();
+        when(membershipRepository.findById(membershipId)).thenReturn(java.util.Optional.of(membership));
+        when(userRepository.findById(userId)).thenReturn(java.util.Optional.of(user));
+        var details = new com.nest.app.enrolment.dto.PersonDetails(null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null, null, null,
+                "Carnatic Vocals", null, java.time.LocalDate.of(2018, 6, 1));
+        when(identityRegistrationService.personDetailsOf(user, membership)).thenReturn(details);
+
+        var card = trainerRegistrationService.getTrainerCard(membershipId);
+
+        assertThat(card.fullName()).isEqualTo("Kavya Iyer");
+        assertThat(card.qualification()).isEqualTo("Carnatic Vocals");
+        assertThat(card.joiningDate()).isEqualTo(java.time.LocalDate.of(2018, 6, 1));
+    }
+
+    @Test
+    void getTrainerCardAllowsAFeaturedAcademyAdminNotJustTrainers() {
+        newService();
+        UUID academyId = UUID.randomUUID();
+        UUID callerMembershipId = UUID.randomUUID();
+        TenantContext.set(new NestPrincipal(UUID.randomUUID(), "meera", Role.ACADEMY_ADMIN,
+                List.of(new MembershipClaim(callerMembershipId, academyId, "Natyalaya", Role.ACADEMY_ADMIN, Set.of(), Set.of())),
+                callerMembershipId));
+
+        UUID membershipId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+        AcademyMembership membership = AcademyMembership.builder()
+                .id(membershipId).academyId(academyId).userId(userId).roleType(Role.ACADEMY_ADMIN).build();
+        User user = User.builder().id(userId).fullName("Ritika Shah").build();
+        when(membershipRepository.findById(membershipId)).thenReturn(java.util.Optional.of(membership));
+        when(userRepository.findById(userId)).thenReturn(java.util.Optional.of(user));
+        when(identityRegistrationService.personDetailsOf(user, membership)).thenReturn(
+                new com.nest.app.enrolment.dto.PersonDetails(null, null, null, null, null, null,
+                        null, null, null, null, null, null, null, null, null, null, null, null, null));
+
+        assertThat(trainerRegistrationService.getTrainerCard(membershipId).fullName()).isEqualTo("Ritika Shah");
+    }
+
+    @Test
+    void getTrainerCardRejectsAMembershipFromAnotherAcademy() {
+        newService();
+        UUID callerMembershipId = UUID.randomUUID();
+        TenantContext.set(new NestPrincipal(UUID.randomUUID(), "meera", Role.ACADEMY_ADMIN,
+                List.of(new MembershipClaim(callerMembershipId, UUID.randomUUID(), "Natyalaya", Role.ACADEMY_ADMIN, Set.of(), Set.of())),
+                callerMembershipId));
+
+        UUID membershipId = UUID.randomUUID();
+        AcademyMembership membership = AcademyMembership.builder()
+                .id(membershipId).academyId(UUID.randomUUID()).userId(UUID.randomUUID()).roleType(Role.TRAINER).build();
+        when(membershipRepository.findById(membershipId)).thenReturn(java.util.Optional.of(membership));
+
+        assertThatThrownBy(() -> trainerRegistrationService.getTrainerCard(membershipId))
+                .isInstanceOf(ForbiddenException.class);
     }
 }

@@ -25,6 +25,10 @@ public record AcademyProfileResponse(
         String xUrl,
         String facebookUrl,
         String youtubeUrl,
+        String whatsapp,
+        String websiteUrl,
+        String mapsUrl,
+        String coverImageUrl,
         List<HighlightResponse> highlights,
         List<FeaturedTrainerResponse> featuredTrainers,
         List<BranchResponse> branches

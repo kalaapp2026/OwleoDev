@@ -26,9 +26,12 @@ import com.nest.app.identity.entity.MembershipStatus;
 import com.nest.app.identity.entity.User;
 import com.nest.app.identity.repository.AcademyMembershipRepository;
 import com.nest.app.identity.repository.UserRepository;
+import com.nest.app.identity.service.CourseFeatureGuard;
 import com.nest.common.audit.Auditable;
 import com.nest.common.exception.ConflictException;
+import com.nest.common.exception.ForbiddenException;
 import com.nest.common.exception.ResourceNotFoundException;
+import com.nest.common.security.FeatureKey;
 import com.nest.common.security.Role;
 import com.nest.common.security.TenantContext;
 import org.springframework.stereotype.Service;
@@ -41,6 +44,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -65,6 +69,7 @@ public class OtherFeesService {
     private final CourseRepository courseRepository;
     private final AcademyMembershipRepository membershipRepository;
     private final UserRepository userRepository;
+    private final CourseFeatureGuard courseFeatureGuard;
 
     public OtherFeesService(FeeTypeRepository feeTypeRepository,
                             FeeTypeBatchRepository feeTypeBatchRepository,
@@ -74,7 +79,8 @@ public class OtherFeesService {
                             BatchMemberRepository batchMemberRepository,
                             CourseRepository courseRepository,
                             AcademyMembershipRepository membershipRepository,
-                            UserRepository userRepository) {
+                            UserRepository userRepository,
+                            CourseFeatureGuard courseFeatureGuard) {
         this.feeTypeRepository = feeTypeRepository;
         this.feeTypeBatchRepository = feeTypeBatchRepository;
         this.studentFeeRepository = studentFeeRepository;
@@ -84,6 +90,7 @@ public class OtherFeesService {
         this.courseRepository = courseRepository;
         this.membershipRepository = membershipRepository;
         this.userRepository = userRepository;
+        this.courseFeatureGuard = courseFeatureGuard;
     }
 
     @Transactional(readOnly = true)
@@ -108,7 +115,19 @@ public class OtherFeesService {
                 batchesById.values().stream().map(Batch::getCourseId).collect(Collectors.toSet())
         ).stream().collect(Collectors.toMap(Course::getId, Course::getName));
 
-        return types.stream().map(type -> toResponse(type, bindingsByType.getOrDefault(type.getId(), List.of()),
+        // A Trainer only manages the fee types that touch a course they hold FEES_ENTRY on - a
+        // type bound to several courses' batches is visible to them if any one of those is theirs.
+        Optional<Set<UUID>> visibleCourseIds = courseFeatureGuard.visibleCourseIds(FeatureKey.FEES_ENTRY);
+        List<FeeType> visibleTypes = visibleCourseIds.isEmpty() ? types
+                : types.stream()
+                        .filter(t -> bindingsByType.getOrDefault(t.getId(), List.of()).stream()
+                                .map(FeeTypeBatch::getBatchId)
+                                .map(batchesById::get)
+                                .filter(Objects::nonNull)
+                                .anyMatch(b -> visibleCourseIds.get().contains(b.getCourseId())))
+                        .toList();
+
+        return visibleTypes.stream().map(type -> toResponse(type, bindingsByType.getOrDefault(type.getId(), List.of()),
                 batchesById, courseNames)).toList();
     }
 
@@ -128,6 +147,11 @@ public class OtherFeesService {
         // to another's batch and start charging their students.
         List<Batch> batches = batchRepository.findAllById(request.batchIds());
         assertBatchesBelongToAcademy(batches, request.batchIds(), academyId);
+        // A Trainer must hold FEES_ENTRY on every course these batches belong to - otherwise
+        // binding a fee type to a batch is a way to start charging students on a course they
+        // don't manage. Admins bypass inside the guard.
+        batches.stream().map(Batch::getCourseId).distinct()
+                .forEach(cid -> courseFeatureGuard.assertCourseFeature(cid, FeatureKey.FEES_ENTRY));
 
         FeeType type = feeTypeRepository.save(FeeType.builder()
                 .academyId(academyId)
@@ -188,6 +212,7 @@ public class OtherFeesService {
         Batch batch = batchRepository.findById(batchId)
                 .orElseThrow(() -> new ResourceNotFoundException("Batch not found: " + batchId));
         assertBatchesBelongToAcademy(List.of(batch), List.of(batchId), academyId);
+        courseFeatureGuard.assertCourseFeature(batch.getCourseId(), FeatureKey.FEES_ENTRY);
 
         // The fee only applies to batches it is bound to. Showing a roster for an unbound batch
         // would invite collecting a charge those students were never billed.
@@ -282,8 +307,9 @@ public class OtherFeesService {
         // Both lookups are by id AND academy: these ids come from a client and must not resolve
         // outside the caller's own tenant.
         if (hasType) {
-            feeTypeRepository.findByIdAndAcademyId(request.feeTypeId(), academyId)
+            FeeType type = feeTypeRepository.findByIdAndAcademyId(request.feeTypeId(), academyId)
                     .orElseThrow(() -> new ResourceNotFoundException("Fee type not found"));
+            assertCallerCanActOnFeeType(type.getId());
         } else {
             StudentFee fee = studentFeeRepository.findByIdAndAcademyId(request.studentFeeId(), academyId)
                     .orElseThrow(() -> new ResourceNotFoundException("Student fee not found"));
@@ -337,15 +363,35 @@ public class OtherFeesService {
 
         // Fee types bound to any batch this student sits in. A type bound to two of their batches
         // is still one obligation, so this is a set of types, not of bindings.
-        Set<UUID> applicableTypeIds = studentBatchIds.isEmpty() ? Set.of()
-                : feeTypeBatchRepository.findByBatchIdIn(new ArrayList<>(studentBatchIds)).stream()
-                        .map(FeeTypeBatch::getFeeTypeId).collect(Collectors.toSet());
+        List<FeeTypeBatch> studentBindings = studentBatchIds.isEmpty() ? List.of()
+                : feeTypeBatchRepository.findByBatchIdIn(new ArrayList<>(studentBatchIds));
+        Set<UUID> applicableTypeIds = studentBindings.stream()
+                .map(FeeTypeBatch::getFeeTypeId).collect(Collectors.toSet());
 
         List<FeeType> types = applicableTypeIds.isEmpty() ? List.of()
                 : feeTypeRepository.findAllById(applicableTypeIds).stream()
                         .filter(t -> t.getAcademyId().equals(academyId))
                         .filter(FeeType::isActive)
                         .toList();
+
+        // A Trainer only sees this student's obligations for a course they hold FEES_ENTRY on -
+        // matched through the specific one of the student's OWN batches this type is bound to,
+        // since a shared type can span batches across several courses.
+        Optional<Set<UUID>> visibleCourseIds = courseFeatureGuard.visibleCourseIds(FeatureKey.FEES_ENTRY);
+        if (visibleCourseIds.isPresent() && !types.isEmpty()) {
+            Set<UUID> visibleSet = visibleCourseIds.get();
+            Map<UUID, Batch> studentBatchesById = batchRepository.findAllById(studentBatchIds).stream()
+                    .collect(Collectors.toMap(Batch::getId, b -> b));
+            Map<UUID, List<UUID>> studentBatchIdsByType = studentBindings.stream()
+                    .collect(Collectors.groupingBy(FeeTypeBatch::getFeeTypeId,
+                            Collectors.mapping(FeeTypeBatch::getBatchId, Collectors.toList())));
+            types = types.stream()
+                    .filter(t -> studentBatchIdsByType.getOrDefault(t.getId(), List.of()).stream()
+                            .map(studentBatchesById::get)
+                            .filter(Objects::nonNull)
+                            .anyMatch(b -> visibleSet.contains(b.getCourseId())))
+                    .toList();
+        }
 
         List<StudentFee> customFees =
                 studentFeeRepository.findByMembershipIdAndAcademyIdOrderByCreatedAtDesc(membershipId, academyId);
@@ -516,6 +562,27 @@ public class OtherFeesService {
             return PaymentStatus.PARTIAL;
         }
         return dueDate != null && dueDate.isBefore(today) ? PaymentStatus.DUE : PaymentStatus.NOT_PAID;
+    }
+
+    /** A Trainer may record payment against a shared fee type only if they hold FEES_ENTRY on at
+     * least one course it is actually bound to - the same requirement {@link #createFeeType} puts
+     * on binding the type in the first place, applied again here since a type once created can be
+     * paid against by anyone with FEES_ENTRY on any course, and that must stay narrowed to courses
+     * the caller manages. A type with no batches bound yet has nothing to check against. Admins
+     * bypass inside the guard. */
+    private void assertCallerCanActOnFeeType(UUID feeTypeId) {
+        Set<UUID> boundBatchIds = feeTypeBatchRepository.findByFeeTypeId(feeTypeId).stream()
+                .map(FeeTypeBatch::getBatchId).collect(Collectors.toSet());
+        Set<UUID> courseIds = batchRepository.findAllById(boundBatchIds).stream()
+                .map(Batch::getCourseId).collect(Collectors.toSet());
+        if (courseIds.isEmpty()) {
+            return;
+        }
+        boolean allowed = courseIds.stream()
+                .anyMatch(id -> courseFeatureGuard.hasCourseFeature(id, FeatureKey.FEES_ENTRY));
+        if (!allowed) {
+            throw new ForbiddenException("You do not have FEES_ENTRY on any course this fee type applies to.");
+        }
     }
 
     private void assertBatchesBelongToAcademy(List<Batch> batches, List<UUID> requestedIds, UUID academyId) {

@@ -31,6 +31,18 @@
 
   <title>Owleo Nest</title>
   <link rel="manifest" href="manifest.json">
+
+  <!--
+    Every text field in the app draws its own focus indicator (an outer stroke that switches to
+    the accent colour) via the Flutter widget tree. Flutter Web also injects a real, invisibly-
+    positioned <input>/<textarea> element to host native text editing, and some browsers draw
+    their own default focus outline on that element regardless of what Flutter painted - showing
+    up as a second, browser-native box nested inside the app's own bordered field. This turns
+    that off app-wide so only the one intentional focus indicator is ever visible.
+  -->
+  <style>
+    input:focus, textarea:focus { outline: none; }
+  </style>
 </head>
 <body>
   <!--

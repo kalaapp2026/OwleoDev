@@ -72,14 +72,55 @@ public class AttendanceService {
 
     @Transactional(readOnly = true)
     public List<AttendanceResponse> forClassInstance(UUID classInstanceId) {
+        // This is a full-roster view (every student's mark for one class) - unlike the
+        // student-facing history below there is no "it's my own record" case, so only Admins and
+        // a Trainer holding ATTENDANCE on this class's course may see it.
+        courseFeatureGuard.assertCourseFeature(courseIdOf(classInstanceId), FeatureKey.ATTENDANCE);
         return attendanceRepository.findByClassInstanceId(classInstanceId).stream()
                 .map(this::toResponse).collect(Collectors.toList());
     }
 
     @Transactional(readOnly = true)
     public List<AttendanceResponse> historyForStudent(UUID membershipId) {
-        return attendanceRepository.findByMembershipIdOrderByMarkedAtDesc(membershipId).stream()
-                .map(this::toResponse).collect(Collectors.toList());
+        List<Attendance> records = attendanceRepository.findByMembershipIdOrderByMarkedAtDesc(membershipId);
+        if (records.isEmpty() || isSelf(membershipId)) {
+            return records.stream().map(this::toResponse).collect(Collectors.toList());
+        }
+
+        Map<UUID, UUID> courseIdByClassInstance = resolveCourseIds(records);
+        return records.stream()
+                .filter(r -> isVisible(courseIdByClassInstance.get(r.getClassInstanceId())))
+                .map(this::toResponse)
+                .collect(Collectors.toList());
+    }
+
+    private boolean isSelf(UUID membershipId) {
+        return membershipId.equals(TenantContext.currentMembershipId());
+    }
+
+    /** A caller who isn't looking at their own record needs ATTENDANCE on that record's course
+     * (Admins pass automatically inside the guard). A record whose class/batch/course can no
+     * longer be resolved - e.g. a hard-deleted reschedule - is hidden rather than guessed at. */
+    private boolean isVisible(UUID courseId) {
+        return courseId != null && courseFeatureGuard.hasCourseFeature(courseId, FeatureKey.ATTENDANCE);
+    }
+
+    private Map<UUID, UUID> resolveCourseIds(List<Attendance> records) {
+        Map<UUID, ClassInstance> instancesById = classInstanceRepository
+                .findAllById(records.stream().map(Attendance::getClassInstanceId).collect(Collectors.toSet()))
+                .stream().collect(Collectors.toMap(ClassInstance::getId, c -> c));
+        Map<UUID, UUID> courseIdByBatch = batchRepository
+                .findAllById(instancesById.values().stream().map(ClassInstance::getBatchId).collect(Collectors.toSet()))
+                .stream().collect(Collectors.toMap(Batch::getId, Batch::getCourseId));
+
+        Map<UUID, UUID> result = new java.util.HashMap<>();
+        for (ClassInstance instance : instancesById.values()) {
+            UUID courseId = courseIdByBatch.get(instance.getBatchId());
+            if (courseId != null) {
+                result.put(instance.getId(), courseId);
+            }
+        }
+        return result;
     }
 
     /**
@@ -97,6 +138,7 @@ public class AttendanceService {
         if (records.isEmpty()) {
             return List.of();
         }
+        boolean isSelf = isSelf(membershipId);
 
         Map<UUID, ClassInstance> instancesById = classInstanceRepository
                 .findAllById(records.stream().map(Attendance::getClassInstanceId).collect(Collectors.toSet()))
@@ -125,6 +167,9 @@ public class AttendanceService {
                 continue;
             }
             Course course = batch == null ? null : coursesById.get(batch.getCourseId());
+            if (!isSelf && !isVisible(course == null ? null : course.getId())) {
+                continue;
+            }
 
             result.add(new StudentAttendanceRecord(
                     instance.getId(), instance.getDate(), instance.getStartTime(), instance.getEndTime(),

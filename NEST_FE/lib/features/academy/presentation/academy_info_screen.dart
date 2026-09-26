@@ -10,6 +10,9 @@ import 'package:nest_fe/core/widgets/async_value_view.dart';
 import 'package:nest_fe/core/widgets/avatar.dart';
 import 'package:nest_fe/features/academy/data/academy_profile.dart';
 import 'package:nest_fe/features/academy/data/academy_profile_api.dart';
+import 'package:nest_fe/features/academy/presentation/trainer_card_screen.dart';
+import 'package:nest_fe/features/curriculum/data/curriculum_api.dart';
+import 'package:nest_fe/features/dashboard/data/dashboard_api.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 final academyProfileApiProvider = Provider((ref) => AcademyProfileApi(ref.watch(dioClientProvider)));
@@ -75,6 +78,61 @@ class _SectionHeader extends StatelessWidget {
   }
 }
 
+/// Students/Trainers/Courses, reusing the same /dashboard/stats endpoint the ERP Dashboard's own
+/// stats row reads, so the two screens can never disagree on the numbers. Courses specifically
+/// reuses activeCoursesProvider rather than the endpoint's own course count, matching the
+/// Dashboard's own precedent for the same reason.
+class _StatsRow extends ConsumerWidget {
+  const _StatsRow();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final coursesAsync = ref.watch(activeCoursesProvider);
+    final statsAsync = ref.watch(dashboardStatsProvider);
+    final courseCount = coursesAsync.maybeWhen(data: (c) => '${c.length}', orElse: () => '—');
+    final studentCount = statsAsync.maybeWhen(data: (s) => '${s.totalStudents}', orElse: () => '—');
+    final trainerCount = statsAsync.maybeWhen(data: (s) => '${s.totalTrainers}', orElse: () => '—');
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+      child: Row(
+        children: [
+          Expanded(child: _StatTile(value: studentCount, label: 'Students')),
+          const SizedBox(width: 10),
+          Expanded(child: _StatTile(value: trainerCount, label: 'Trainers')),
+          const SizedBox(width: 10),
+          Expanded(child: _StatTile(value: courseCount, label: 'Courses')),
+        ],
+      ),
+    );
+  }
+}
+
+class _StatTile extends StatelessWidget {
+  const _StatTile({required this.value, required this.label});
+  final String value;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      decoration: BoxDecoration(
+        border: Border.all(color: colorScheme.outlineVariant),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Column(
+        children: [
+          Text(value, style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
+          const SizedBox(height: 2),
+          Text(label, style: Theme.of(context).textTheme.bodySmall),
+        ],
+      ),
+    );
+  }
+}
+
 class _AboutInstituteView extends ConsumerWidget {
   const _AboutInstituteView({required this.profile, required this.canEdit});
   final AcademyProfile profile;
@@ -94,6 +152,20 @@ class _AboutInstituteView extends ConsumerWidget {
     }
   }
 
+  Future<void> _changeCoverImage(BuildContext context, WidgetRef ref) async {
+    final result = await FilePicker.pickFiles(type: FileType.image, withData: true);
+    if (result == null || result.files.isEmpty) return;
+    final picked = result.files.first;
+    if (picked.bytes == null) return;
+    try {
+      await ref.read(academyProfileApiProvider).uploadCoverImage(picked.bytes!, picked.name);
+      ref.invalidate(academyProfileProvider);
+      if (context.mounted) AppNotice.success(context, 'Cover photo updated.');
+    } on ApiException catch (e) {
+      if (context.mounted) AppNotice.error(context, e.message);
+    }
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final colorScheme = Theme.of(context).colorScheme;
@@ -101,8 +173,14 @@ class _AboutInstituteView extends ConsumerWidget {
     final hasContactInfo = profile.address != null ||
         profile.email != null ||
         profile.contactNumber != null ||
+        profile.whatsapp != null ||
+        profile.mapsUrl != null ||
         profile.branches.isNotEmpty;
-    final hasSocials = profile.instagramUrl != null || profile.xUrl != null || profile.facebookUrl != null || profile.youtubeUrl != null;
+    final hasSocials = profile.instagramUrl != null ||
+        profile.xUrl != null ||
+        profile.facebookUrl != null ||
+        profile.youtubeUrl != null ||
+        profile.websiteUrl != null;
 
     return RefreshIndicator(
       onRefresh: () async => ref.invalidate(academyProfileProvider),
@@ -111,14 +189,22 @@ class _AboutInstituteView extends ConsumerWidget {
         children: [
           // Hero: a soft gradient backdrop behind the logo/name/tagline instead of a bare white
           // header, so the page reads like a real institute profile rather than a settings form.
+          // The cover photo, when set, sits behind that same gradient as a DecorationImage - the
+          // gradient then doubles as a legibility scrim over the photo instead of needing a
+          // second, separate banner element.
           Container(
             width: double.infinity,
             padding: const EdgeInsets.fromLTRB(20, 32, 20, 28),
             decoration: BoxDecoration(
+              image: profile.coverImageUrl == null
+                  ? null
+                  : DecorationImage(image: NetworkImage(profile.coverImageUrl!), fit: BoxFit.cover),
               gradient: LinearGradient(
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
-                colors: [colorScheme.primaryContainer.withValues(alpha: 0.55), colorScheme.surface],
+                colors: profile.coverImageUrl == null
+                    ? [colorScheme.primaryContainer.withValues(alpha: 0.55), colorScheme.surface]
+                    : [Colors.black.withValues(alpha: 0.35), colorScheme.surface.withValues(alpha: 0.9)],
               ),
             ),
             child: Column(
@@ -150,15 +236,28 @@ class _AboutInstituteView extends ConsumerWidget {
                 ],
                 if (canEdit) ...[
                   const SizedBox(height: 14),
-                  OutlinedButton.icon(
-                    onPressed: () => showEditProfileSheet(context, ref, profile: profile),
-                    icon: const Icon(Icons.edit_outlined, size: 16),
-                    label: const Text('Edit details'),
+                  Wrap(
+                    alignment: WrapAlignment.center,
+                    spacing: 10,
+                    runSpacing: 8,
+                    children: [
+                      OutlinedButton.icon(
+                        onPressed: () => showEditProfileSheet(context, ref, profile: profile),
+                        icon: const Icon(Icons.edit_outlined, size: 16),
+                        label: const Text('Edit details'),
+                      ),
+                      OutlinedButton.icon(
+                        onPressed: () => _changeCoverImage(context, ref),
+                        icon: const Icon(Icons.image_outlined, size: 16),
+                        label: const Text('Change cover'),
+                      ),
+                    ],
                   ),
                 ],
               ],
             ),
           ),
+          const _StatsRow(),
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 20, 20, 32),
             child: Column(
@@ -207,6 +306,8 @@ class _AboutInstituteView extends ConsumerWidget {
                         if (profile.youtubeUrl != null)
                           _SocialButton(
                               icon: Icons.smart_display_outlined, label: 'YouTube', onTap: () => _openUrl(context, profile.youtubeUrl)),
+                        if (profile.websiteUrl != null)
+                          _SocialButton(icon: Icons.language_outlined, label: 'Website', onTap: () => _openUrl(context, profile.websiteUrl)),
                       ],
                     ),
                   ),
@@ -226,8 +327,16 @@ class _AboutInstituteView extends ConsumerWidget {
                         const _SectionHeader(icon: Icons.contact_page_outlined, title: 'Contact'),
                         const SizedBox(height: 12),
                         if (profile.address != null) _ContactRow(icon: Icons.location_on_outlined, text: profile.address!),
+                        if (profile.mapsUrl != null)
+                          _ContactRow(icon: Icons.map_outlined, text: 'Open in Google Maps', onTap: () => _openUrl(context, profile.mapsUrl)),
                         if (profile.email != null) _ContactRow(icon: Icons.mail_outline, text: profile.email!),
                         if (profile.contactNumber != null) _ContactRow(icon: Icons.call_outlined, text: profile.contactNumber!),
+                        if (profile.whatsapp != null)
+                          _ContactRow(
+                            icon: Icons.chat_outlined,
+                            text: 'WhatsApp: ${profile.whatsapp}',
+                            onTap: () => _openUrl(context, 'wa.me/${profile.whatsapp!.replaceAll(RegExp(r'[^0-9]'), '')}'),
+                          ),
                         _BranchesSection(branches: profile.branches, canEdit: canEdit),
                       ],
                     ),
@@ -290,23 +399,28 @@ class _LabelledValue extends StatelessWidget {
 }
 
 class _ContactRow extends StatelessWidget {
-  const _ContactRow({required this.icon, required this.text});
+  const _ContactRow({required this.icon, required this.text, this.onTap});
   final IconData icon;
   final String text;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final row = Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, size: 18, color: colorScheme.outline),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Text(text, style: TextStyle(fontSize: 13.5, color: onTap != null ? colorScheme.primary : null)),
+        ),
+        if (onTap != null) Icon(Icons.chevron_right, size: 16, color: colorScheme.outline),
+      ],
+    );
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(icon, size: 18, color: colorScheme.outline),
-          const SizedBox(width: 10),
-          Expanded(child: Text(text, style: const TextStyle(fontSize: 13.5))),
-        ],
-      ),
+      child: onTap == null ? row : InkWell(onTap: onTap, borderRadius: BorderRadius.circular(8), child: row),
     );
   }
 }
@@ -623,6 +737,36 @@ class _FeaturedTrainersSection extends ConsumerWidget {
     }
   }
 
+  Future<void> _editDesignation(BuildContext context, WidgetRef ref, FeaturedTrainer trainer) async {
+    final controller = TextEditingController(text: trainer.designation);
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text('${trainer.fullName}\'s title'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: const InputDecoration(labelText: 'Designation', hintText: 'e.g. Head of Dance & Founder'),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(dialogContext).pop(false), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.of(dialogContext).pop(true), child: const Text('Save')),
+        ],
+      ),
+    );
+    if (saved != true) return;
+    try {
+      await ref.read(academyProfileApiProvider).updateFeaturedTrainerDesignation(
+            trainer.id,
+            controller.text.trim().isEmpty ? null : controller.text.trim(),
+          );
+      ref.invalidate(academyProfileProvider);
+      if (context.mounted) AppNotice.success(context, 'Updated.');
+    } on ApiException catch (e) {
+      if (context.mounted) AppNotice.error(context, e.message);
+    }
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     if (trainers.isEmpty && !canEdit) return const SizedBox.shrink();
@@ -650,30 +794,49 @@ class _FeaturedTrainersSection extends ConsumerWidget {
             children: trainers
                 .map((t) => SizedBox(
                       width: 84,
-                      child: Column(
-                        children: [
-                          Stack(
-                            clipBehavior: Clip.none,
-                            children: [
-                              Avatar(name: t.fullName, imageUrl: t.profileImageUrl, radius: 32),
-                              if (canEdit)
-                                Positioned(
-                                  right: -4,
-                                  top: -4,
-                                  child: InkWell(
-                                    onTap: () => _remove(context, ref, t),
-                                    child: CircleAvatar(
-                                      radius: 10,
-                                      backgroundColor: Theme.of(context).colorScheme.error,
-                                      child: const Icon(Icons.close, size: 12, color: Colors.white),
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(12),
+                        onTap: () => Navigator.of(context).push(MaterialPageRoute(
+                          builder: (_) => TrainerCardScreen(membershipId: t.trainerMembershipId, designation: t.designation),
+                        )),
+                        child: Column(
+                          children: [
+                            Stack(
+                              clipBehavior: Clip.none,
+                              children: [
+                                Avatar(name: t.fullName, imageUrl: t.profileImageUrl, radius: 32),
+                                if (canEdit)
+                                  Positioned(
+                                    right: -4,
+                                    top: -4,
+                                    child: InkWell(
+                                      onTap: () => _remove(context, ref, t),
+                                      child: CircleAvatar(
+                                        radius: 10,
+                                        backgroundColor: Theme.of(context).colorScheme.error,
+                                        child: const Icon(Icons.close, size: 12, color: Colors.white),
+                                      ),
                                     ),
                                   ),
+                              ],
+                            ),
+                            const SizedBox(height: 6),
+                            Text(t.fullName, textAlign: TextAlign.center, style: Theme.of(context).textTheme.bodySmall, maxLines: 2),
+                            if (t.designation != null)
+                              Text(t.designation!,
+                                  textAlign: TextAlign.center,
+                                  maxLines: 2,
+                                  style: Theme.of(context).textTheme.bodySmall?.copyWith(fontSize: 10.5, color: Theme.of(context).colorScheme.outline)),
+                            if (canEdit)
+                              InkWell(
+                                onTap: () => _editDesignation(context, ref, t),
+                                child: Padding(
+                                  padding: const EdgeInsets.only(top: 2),
+                                  child: Icon(Icons.edit_outlined, size: 12, color: Theme.of(context).colorScheme.outline),
                                 ),
-                            ],
-                          ),
-                          const SizedBox(height: 6),
-                          Text(t.fullName, textAlign: TextAlign.center, style: Theme.of(context).textTheme.bodySmall, maxLines: 2),
-                        ],
+                              ),
+                          ],
+                        ),
                       ),
                     ))
                 .toList(),
@@ -963,6 +1126,9 @@ class _EditProfileSheetState extends ConsumerState<_EditProfileSheet> {
   late final _xController = TextEditingController(text: widget.profile.xUrl);
   late final _facebookController = TextEditingController(text: widget.profile.facebookUrl);
   late final _youtubeController = TextEditingController(text: widget.profile.youtubeUrl);
+  late final _websiteController = TextEditingController(text: widget.profile.websiteUrl);
+  late final _whatsappController = TextEditingController(text: widget.profile.whatsapp);
+  late final _mapsController = TextEditingController(text: widget.profile.mapsUrl);
   bool _isSaving = false;
 
   Future<void> _submit() async {
@@ -981,6 +1147,9 @@ class _EditProfileSheetState extends ConsumerState<_EditProfileSheet> {
             xUrl: _xController.text.trim(),
             facebookUrl: _facebookController.text.trim(),
             youtubeUrl: _youtubeController.text.trim(),
+            whatsapp: _whatsappController.text.trim(),
+            websiteUrl: _websiteController.text.trim(),
+            mapsUrl: _mapsController.text.trim(),
           );
       ref.invalidate(academyProfileProvider);
       if (mounted) {
@@ -1034,6 +1203,10 @@ class _EditProfileSheetState extends ConsumerState<_EditProfileSheet> {
                 Expanded(child: TextField(controller: _emailController, decoration: const InputDecoration(labelText: 'Email'))),
               ],
             ),
+            const SizedBox(height: 12),
+            TextField(controller: _whatsappController, decoration: const InputDecoration(labelText: 'WhatsApp number')),
+            const SizedBox(height: 12),
+            TextField(controller: _mapsController, decoration: const InputDecoration(labelText: 'Google Maps link')),
             const SizedBox(height: 16),
             Text('Social links', style: Theme.of(context).textTheme.titleSmall),
             const SizedBox(height: 8),
@@ -1044,6 +1217,8 @@ class _EditProfileSheetState extends ConsumerState<_EditProfileSheet> {
             TextField(controller: _facebookController, decoration: const InputDecoration(labelText: 'Facebook')),
             const SizedBox(height: 12),
             TextField(controller: _youtubeController, decoration: const InputDecoration(labelText: 'YouTube')),
+            const SizedBox(height: 12),
+            TextField(controller: _websiteController, decoration: const InputDecoration(labelText: 'Website')),
             const SizedBox(height: 18),
             ElevatedButton(
               onPressed: _isSaving ? null : _submit,

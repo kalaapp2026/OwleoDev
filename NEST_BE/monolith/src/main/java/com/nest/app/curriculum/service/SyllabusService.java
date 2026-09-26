@@ -165,6 +165,9 @@ public class SyllabusService {
     public List<SyllabusUnitResponse> listForCourse(UUID courseId, UUID membershipId) {
         List<SyllabusUnit> units = syllabusUnitRepository.findByCourseIdOrderByOrderIndex(courseId);
         if (membershipId == null) {
+            // The admin/trainer management view showing everything, unfiltered by any one
+            // membership's own access - a Trainer must hold SYLLABUS_EDIT on this course to see it.
+            courseFeatureGuard.assertCourseFeature(courseId, FeatureKey.SYLLABUS_EDIT);
             return units.stream().map(this::toResponse).collect(Collectors.toList());
         }
 

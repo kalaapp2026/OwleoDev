@@ -306,7 +306,10 @@ class _BatchListScreenState extends ConsumerState<BatchListScreen> {
                         color: palette.text),
                     decoration: InputDecoration(
                       isDense: true,
+                      filled: false,
                       border: InputBorder.none,
+                      focusedBorder: InputBorder.none,
+                      enabledBorder: InputBorder.none,
                       contentPadding: EdgeInsets.zero,
                       hintText: 'Search batch or course',
                       hintStyle:
@@ -406,7 +409,7 @@ class _BatchListScreenState extends ConsumerState<BatchListScreen> {
     return Row(
       children: [
         Expanded(
-          flex: 13,
+          flex: 3,
           child: AttachedSelect<CourseCategory?>(
             label: 'Category',
             // A leading null is the "All batches" entry - modelled as absence rather than a

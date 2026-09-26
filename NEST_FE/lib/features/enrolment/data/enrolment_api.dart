@@ -44,6 +44,12 @@ final batchMembersProvider =
   return ref.watch(enrolmentApiProvider).members(batchId);
 });
 
+/// The Student Profile module's identity header.
+final studentCardProvider =
+    FutureProvider.autoDispose.family<StudentCard, String>((ref, membershipId) {
+  return ref.watch(enrolmentApiProvider).studentCard(membershipId);
+});
+
 class StudentRegistrationResult {
   final String userId;
   final String membershipId;
@@ -130,6 +136,71 @@ class StudentSummary {
         username: json['username'] as String,
         fullName: json['fullName'] as String,
         active: json['active'] as bool? ?? true,
+      );
+}
+
+/// One of a student's course enrolments, as shown on their identity card.
+class StudentCardCourse {
+  final String courseId;
+  final String courseName;
+  final String? batchName;
+
+  StudentCardCourse({required this.courseId, required this.courseName, this.batchName});
+
+  factory StudentCardCourse.fromJson(Map<String, dynamic> json) => StudentCardCourse(
+        courseId: json['courseId'] as String,
+        courseName: json['courseName'] as String,
+        batchName: json['batchName'] as String?,
+      );
+}
+
+/// The public-safe student identity card the Student Profile module opens - deliberately thinner
+/// than a full edit form (no course fees), mirroring the Trainer Card the Academy Profile screen
+/// already shows.
+class StudentCard {
+  final String membershipId;
+  final String fullName;
+  final String? photoUrl;
+  final String? phone;
+  final String? email;
+  final String? dob;
+  final String? guardianName;
+  final String? address;
+  final String? city;
+  final String? state;
+  final String? joiningDate;
+  final List<StudentCardCourse> courses;
+
+  StudentCard({
+    required this.membershipId,
+    required this.fullName,
+    this.photoUrl,
+    this.phone,
+    this.email,
+    this.dob,
+    this.guardianName,
+    this.address,
+    this.city,
+    this.state,
+    this.joiningDate,
+    required this.courses,
+  });
+
+  factory StudentCard.fromJson(Map<String, dynamic> json) => StudentCard(
+        membershipId: json['membershipId'] as String,
+        fullName: json['fullName'] as String,
+        photoUrl: json['photoUrl'] as String?,
+        phone: json['phone'] as String?,
+        email: json['email'] as String?,
+        dob: json['dob'] as String?,
+        guardianName: json['guardianName'] as String?,
+        address: json['address'] as String?,
+        city: json['city'] as String?,
+        state: json['state'] as String?,
+        joiningDate: json['joiningDate'] as String?,
+        courses: (json['courses'] as List? ?? [])
+            .map((e) => StudentCardCourse.fromJson(e as Map<String, dynamic>))
+            .toList(),
       );
 }
 
@@ -601,5 +672,14 @@ class EnrolmentApi {
   Future<void> uploadProfileImage(String userId, Uint8List bytes, String filename) {
     final formData = FormData.fromMap({'file': MultipartFile.fromBytes(bytes, filename: filename)});
     return _client.callVoid((dio) => dio.post('/users/$userId/profile-image', data: formData));
+  }
+
+  /// The public-safe student card the Student Profile module opens - identity fields only, no
+  /// feature gate on the backend, so any Admin or Trainer in the academy can open it.
+  Future<StudentCard> studentCard(String membershipId) {
+    return _client.call(
+      (dio) => dio.get('/students/$membershipId/card'),
+      (data) => StudentCard.fromJson(data as Map<String, dynamic>),
+    );
   }
 }

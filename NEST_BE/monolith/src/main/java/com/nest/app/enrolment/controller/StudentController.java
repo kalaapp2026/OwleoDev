@@ -2,6 +2,7 @@ package com.nest.app.enrolment.controller;
 
 import com.nest.app.enrolment.dto.ConfirmMembershipRequest;
 import com.nest.app.enrolment.dto.RegisterStudentRequest;
+import com.nest.app.enrolment.dto.StudentCardResponse;
 import com.nest.app.enrolment.dto.StudentDetailResponse;
 import com.nest.app.enrolment.dto.StudentResponse;
 import com.nest.app.enrolment.dto.StudentSummaryResponse;
@@ -54,6 +55,14 @@ public class StudentController {
     @RequiresFeature(FeatureKey.STUDENT_REGISTRATION)
     public StudentDetailResponse detail(@PathVariable UUID membershipId) {
         return studentRegistrationService.getStudentDetail(membershipId);
+    }
+
+    /** The public-safe student card the Student Profile module opens - no @RequiresFeature, open
+     * to any Admin or Trainer in the active academy regardless of which features they hold,
+     * mirroring GET /trainers/{membershipId}/card. */
+    @GetMapping("/students/{membershipId}/card")
+    public StudentCardResponse card(@PathVariable UUID membershipId) {
+        return studentRegistrationService.getStudentCard(membershipId);
     }
 
     @PutMapping("/students/{membershipId}")

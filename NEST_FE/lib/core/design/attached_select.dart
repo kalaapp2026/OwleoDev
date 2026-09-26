@@ -40,6 +40,9 @@ class AttachedSelect<T> extends StatefulWidget {
     required this.onSelected,
     this.value,
     this.placeholder = 'Select',
+    this.showLabel = true,
+    this.valueColor,
+    this.dotColor,
     this.locked = false,
     this.enabled = true,
     this.searchable = false,
@@ -51,6 +54,7 @@ class AttachedSelect<T> extends StatefulWidget {
     this.onOpenChanged,
     this.optionBuilder,
     this.emptyLabel = 'No options',
+    this.showPanelHeader = true,
     this.trailingAction,
     this.triggerBuilder,
   });
@@ -61,6 +65,23 @@ class AttachedSelect<T> extends StatefulWidget {
   final ValueChanged<T> onSelected;
   final T? value;
   final String placeholder;
+
+  /// Draws the field's own "LABEL" heading above the trigger box, in [_Trigger]'s default
+  /// (non-custom) rendering only. Set false when the caller already draws that heading itself -
+  /// e.g. wrapped in a `_Field`-style label widget - so the two don't stack into a doubled
+  /// heading. Has no effect when [triggerBuilder] is supplied, since that replaces the default
+  /// trigger (and its heading) entirely.
+  final bool showLabel;
+
+  /// Tints the trigger's own value text (once a value is set) in [_Trigger]'s default rendering.
+  /// Null keeps the neutral `palette.text` - e.g. a course category dropdown passes its category's
+  /// accent so the closed trigger reads as "this course is Music" the same way the open panel's
+  /// rows already do, rather than going back to plain white the moment it's collapsed.
+  final Color? valueColor;
+
+  /// A small colour swatch drawn before the value text, in [_Trigger]'s default rendering only -
+  /// the closed-trigger equivalent of the coloured dot each option row shows in the open panel.
+  final Color? dotColor;
 
   /// Shows a padlock instead of a chevron and refuses to open. Distinct from [enabled]: locked
   /// means "this is decided for you" (a fee type bound to exactly one batch), not "unavailable".
@@ -89,6 +110,12 @@ class AttachedSelect<T> extends StatefulWidget {
   final Widget Function(BuildContext, T, bool selected)? optionBuilder;
 
   final String emptyLabel;
+
+  /// The "N options" / search-toggle row atop the panel. Meant for a genuine value picker
+  /// (Category, Sort) where the count is informative; an action menu built on this same widget
+  /// purely for its anchoring (a row's kebab: Edit / Deactivate / ...) isn't choosing a value from
+  /// a set, so "3 options" above three unrelated actions read as stray debug text. Off for those.
+  final bool showPanelHeader;
 
   /// A row pinned under the list - the "+ Create fee type" affordance.
   final Widget? trailingAction;
@@ -215,8 +242,11 @@ class _AttachedSelectState<T> extends State<AttachedSelect<T>> {
               )
             : _Trigger(
                 label: widget.label,
+                showLabel: widget.showLabel,
                 text: widget.value == null ? widget.placeholder : widget.labelOf(widget.value as T),
                 hasValue: widget.value != null,
+                valueColor: widget.valueColor,
+                dotColor: widget.dotColor,
                 locked: widget.locked,
                 enabled: widget.enabled,
                 open: _isOpen,
@@ -285,22 +315,23 @@ class _AttachedSelectState<T> extends State<AttachedSelect<T>> {
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      _PanelHeader(
-                        count: options.length,
-                        total: widget.options.length,
-                        searchable: widget.searchable,
-                        searchVisible: _searchVisible,
-                        onToggleSearch: () {
-                          setState(() {
-                            _searchVisible = !_searchVisible;
-                            if (!_searchVisible) {
-                              _query = '';
-                              _searchController.clear();
-                            }
-                          });
-                          if (_searchVisible) _searchFocus.requestFocus();
-                        },
-                      ),
+                      if (widget.showPanelHeader)
+                        _PanelHeader(
+                          count: options.length,
+                          total: widget.options.length,
+                          searchable: widget.searchable,
+                          searchVisible: _searchVisible,
+                          onToggleSearch: () {
+                            setState(() {
+                              _searchVisible = !_searchVisible;
+                              if (!_searchVisible) {
+                                _query = '';
+                                _searchController.clear();
+                              }
+                            });
+                            if (_searchVisible) _searchFocus.requestFocus();
+                          },
+                        ),
                       if (_searchVisible)
                         Padding(
                           padding: const EdgeInsets.fromLTRB(
@@ -373,8 +404,11 @@ class _AttachedSelectState<T> extends State<AttachedSelect<T>> {
 class _Trigger extends StatelessWidget {
   const _Trigger({
     required this.label,
+    this.showLabel = true,
     required this.text,
     required this.hasValue,
+    this.valueColor,
+    this.dotColor,
     required this.locked,
     required this.enabled,
     required this.open,
@@ -382,8 +416,11 @@ class _Trigger extends StatelessWidget {
   });
 
   final String label;
+  final bool showLabel;
   final String text;
   final bool hasValue;
+  final Color? valueColor;
+  final Color? dotColor;
   final bool locked;
   final bool enabled;
   final bool open;
@@ -398,8 +435,10 @@ class _Trigger extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text(label.toUpperCase(), style: AppType.sectionLabel(palette.textMuted)),
-        const SizedBox(height: AppSpacing.xs),
+        if (showLabel) ...[
+          Text(label.toUpperCase(), style: AppType.sectionLabel(palette.textMuted)),
+          const SizedBox(height: AppSpacing.xs),
+        ],
         GestureDetector(
           onTap: inert ? null : onTap,
           behavior: HitTestBehavior.opaque,
@@ -416,6 +455,14 @@ class _Trigger extends StatelessWidget {
             ),
             child: Row(
               children: [
+                if (dotColor != null && hasValue) ...[
+                  Container(
+                    width: 9,
+                    height: 9,
+                    decoration: BoxDecoration(color: dotColor, shape: BoxShape.circle),
+                  ),
+                  const SizedBox(width: AppSpacing.md),
+                ],
                 Expanded(
                   child: Text(
                     text,
@@ -427,7 +474,7 @@ class _Trigger extends StatelessWidget {
                       color: !enabled
                           ? palette.textFaint
                           : hasValue
-                              ? palette.text
+                              ? (valueColor ?? palette.text)
                               : palette.textMuted,
                     ),
                   ),

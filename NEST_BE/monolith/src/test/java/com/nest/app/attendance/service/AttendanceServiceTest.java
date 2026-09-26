@@ -5,12 +5,14 @@ import com.nest.app.attendance.dto.SubmitAttendanceSheetRequest;
 import com.nest.app.attendance.entity.Attendance;
 import com.nest.app.attendance.entity.AttendanceStatus;
 import com.nest.app.attendance.repository.AttendanceRepository;
+import com.nest.app.curriculum.entity.Course;
 import com.nest.app.enrolment.entity.Batch;
 import com.nest.app.enrolment.repository.BatchRepository;
 import com.nest.app.identity.service.CourseFeatureGuard;
 import com.nest.app.scheduling.entity.ClassInstance;
 import com.nest.app.scheduling.repository.ClassInstanceRepository;
 import com.nest.common.exception.ForbiddenException;
+import com.nest.common.security.FeatureKey;
 import com.nest.common.security.MembershipClaim;
 import com.nest.common.security.NestPrincipal;
 import com.nest.common.security.Role;
@@ -28,9 +30,12 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.when;
 
 /** Covers PRD 3.8: same-day edit window for Trainers, Admin can always correct. */
@@ -64,14 +69,19 @@ class AttendanceServiceTest {
      * (the CourseFeatureGuard itself is a no-op mock, so it never blocks these tests). */
     private void newService() {
         attendanceService = new AttendanceService(attendanceRepository, classInstanceRepository, batchRepository, courseRepository, courseFeatureGuard);
-        when(classInstanceRepository.findById(classInstanceId))
+        // lenient: only submitSheet/forClassInstance resolve via findById - historyForStudent and
+        // detailedHistory resolve via findAllById instead, so these two are unused there.
+        lenient().when(classInstanceRepository.findById(classInstanceId))
                 .thenReturn(Optional.of(ClassInstance.builder().id(classInstanceId).batchId(batchId).build()));
-        when(batchRepository.findById(batchId))
+        lenient().when(batchRepository.findById(batchId))
                 .thenReturn(Optional.of(Batch.builder().id(batchId).courseId(courseId).build()));
     }
 
     private void actingAs(Role roleType) {
-        UUID actorMembershipId = UUID.randomUUID();
+        actingAs(roleType, UUID.randomUUID());
+    }
+
+    private void actingAs(Role roleType, UUID actorMembershipId) {
         MembershipClaim claim = new MembershipClaim(actorMembershipId, UUID.randomUUID(), "Natyalaya", roleType, Set.of(), Set.of());
         TenantContext.set(new NestPrincipal(UUID.randomUUID(), "actor", roleType, List.of(claim), actorMembershipId));
     }
@@ -124,5 +134,112 @@ class AttendanceServiceTest {
         var sheet = new SubmitAttendanceSheetRequest(List.of(new AttendanceEntry(membershipId, AttendanceStatus.PRESENT, null)));
 
         assertThatCode(() -> attendanceService.submitSheet(classInstanceId, sheet)).doesNotThrowAnyException();
+    }
+
+    @Test
+    void forClassInstanceIsRejectedWhenCallerLacksAttendanceOnThisCourse() {
+        newService();
+        actingAs(Role.TRAINER);
+        doThrow(new ForbiddenException("nope")).when(courseFeatureGuard).assertCourseFeature(courseId, FeatureKey.ATTENDANCE);
+
+        assertThatThrownBy(() -> attendanceService.forClassInstance(classInstanceId))
+                .isInstanceOf(ForbiddenException.class);
+    }
+
+    @Test
+    void forClassInstanceSucceedsWhenCallerHoldsAttendanceOnThisCourse() {
+        newService();
+        actingAs(Role.TRAINER);
+        when(attendanceRepository.findByClassInstanceId(classInstanceId)).thenReturn(List.of());
+
+        assertThatCode(() -> attendanceService.forClassInstance(classInstanceId)).doesNotThrowAnyException();
+    }
+
+    @Test
+    void historyForStudentIsAlwaysVisibleToTheStudentThemselves() {
+        newService();
+        actingAs(Role.STUDENT, membershipId);
+        Attendance record = Attendance.builder().id(UUID.randomUUID()).classInstanceId(classInstanceId)
+                .membershipId(membershipId).status(AttendanceStatus.PRESENT).markedAt(Instant.now()).build();
+        when(attendanceRepository.findByMembershipIdOrderByMarkedAtDesc(membershipId)).thenReturn(List.of(record));
+
+        assertThat(attendanceService.historyForStudent(membershipId)).hasSize(1);
+    }
+
+    @Test
+    void historyForStudentHidesRecordsFromATrainerWithoutAttendanceOnThatCourse() {
+        newService();
+        actingAs(Role.TRAINER);
+        Attendance record = Attendance.builder().id(UUID.randomUUID()).classInstanceId(classInstanceId)
+                .membershipId(membershipId).status(AttendanceStatus.PRESENT).markedAt(Instant.now()).build();
+        when(attendanceRepository.findByMembershipIdOrderByMarkedAtDesc(membershipId)).thenReturn(List.of(record));
+        when(classInstanceRepository.findAllById(any()))
+                .thenReturn(List.of(ClassInstance.builder().id(classInstanceId).batchId(batchId).build()));
+        when(batchRepository.findAllById(any())).thenReturn(List.of(Batch.builder().id(batchId).courseId(courseId).build()));
+        when(courseFeatureGuard.hasCourseFeature(courseId, FeatureKey.ATTENDANCE)).thenReturn(false);
+
+        assertThat(attendanceService.historyForStudent(membershipId)).isEmpty();
+    }
+
+    @Test
+    void historyForStudentShowsRecordsToATrainerWhoHoldsAttendanceOnThatCourse() {
+        newService();
+        actingAs(Role.TRAINER);
+        Attendance record = Attendance.builder().id(UUID.randomUUID()).classInstanceId(classInstanceId)
+                .membershipId(membershipId).status(AttendanceStatus.PRESENT).markedAt(Instant.now()).build();
+        when(attendanceRepository.findByMembershipIdOrderByMarkedAtDesc(membershipId)).thenReturn(List.of(record));
+        when(classInstanceRepository.findAllById(any()))
+                .thenReturn(List.of(ClassInstance.builder().id(classInstanceId).batchId(batchId).build()));
+        when(batchRepository.findAllById(any())).thenReturn(List.of(Batch.builder().id(batchId).courseId(courseId).build()));
+        when(courseFeatureGuard.hasCourseFeature(courseId, FeatureKey.ATTENDANCE)).thenReturn(true);
+
+        assertThat(attendanceService.historyForStudent(membershipId)).hasSize(1);
+    }
+
+    @Test
+    void detailedHistoryIsAlwaysVisibleToTheStudentThemselves() {
+        newService();
+        actingAs(Role.STUDENT, membershipId);
+        Attendance record = Attendance.builder().id(UUID.randomUUID()).classInstanceId(classInstanceId)
+                .membershipId(membershipId).status(AttendanceStatus.PRESENT).markedAt(Instant.now()).build();
+        when(attendanceRepository.findByMembershipIdOrderByMarkedAtDesc(membershipId)).thenReturn(List.of(record));
+        when(classInstanceRepository.findAllById(any())).thenReturn(
+                List.of(ClassInstance.builder().id(classInstanceId).batchId(batchId).date(java.time.LocalDate.now()).build()));
+        when(batchRepository.findAllById(any())).thenReturn(List.of(Batch.builder().id(batchId).courseId(courseId).build()));
+        when(courseRepository.findAllById(any())).thenReturn(List.of(Course.builder().id(courseId).build()));
+
+        assertThat(attendanceService.detailedHistory(membershipId, null)).hasSize(1);
+    }
+
+    @Test
+    void detailedHistoryHidesRecordsFromATrainerWithoutAttendanceOnThatCourse() {
+        newService();
+        actingAs(Role.TRAINER);
+        Attendance record = Attendance.builder().id(UUID.randomUUID()).classInstanceId(classInstanceId)
+                .membershipId(membershipId).status(AttendanceStatus.PRESENT).markedAt(Instant.now()).build();
+        when(attendanceRepository.findByMembershipIdOrderByMarkedAtDesc(membershipId)).thenReturn(List.of(record));
+        when(classInstanceRepository.findAllById(any())).thenReturn(
+                List.of(ClassInstance.builder().id(classInstanceId).batchId(batchId).date(java.time.LocalDate.now()).build()));
+        when(batchRepository.findAllById(any())).thenReturn(List.of(Batch.builder().id(batchId).courseId(courseId).build()));
+        when(courseRepository.findAllById(any())).thenReturn(List.of(Course.builder().id(courseId).build()));
+        when(courseFeatureGuard.hasCourseFeature(courseId, FeatureKey.ATTENDANCE)).thenReturn(false);
+
+        assertThat(attendanceService.detailedHistory(membershipId, null)).isEmpty();
+    }
+
+    @Test
+    void detailedHistoryShowsRecordsToATrainerWhoHoldsAttendanceOnThatCourse() {
+        newService();
+        actingAs(Role.TRAINER);
+        Attendance record = Attendance.builder().id(UUID.randomUUID()).classInstanceId(classInstanceId)
+                .membershipId(membershipId).status(AttendanceStatus.PRESENT).markedAt(Instant.now()).build();
+        when(attendanceRepository.findByMembershipIdOrderByMarkedAtDesc(membershipId)).thenReturn(List.of(record));
+        when(classInstanceRepository.findAllById(any())).thenReturn(
+                List.of(ClassInstance.builder().id(classInstanceId).batchId(batchId).date(java.time.LocalDate.now()).build()));
+        when(batchRepository.findAllById(any())).thenReturn(List.of(Batch.builder().id(batchId).courseId(courseId).build()));
+        when(courseRepository.findAllById(any())).thenReturn(List.of(Course.builder().id(courseId).build()));
+        when(courseFeatureGuard.hasCourseFeature(courseId, FeatureKey.ATTENDANCE)).thenReturn(true);
+
+        assertThat(attendanceService.detailedHistory(membershipId, null)).hasSize(1);
     }
 }

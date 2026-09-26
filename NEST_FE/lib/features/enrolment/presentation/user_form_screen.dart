@@ -361,10 +361,15 @@ class _UserFormScreenState extends ConsumerState<UserFormScreen> {
   }
 
   Future<void> _pickDob() async {
+    // 12 years back is a reasonable guess for a student's birth year to land on first open, but
+    // it's wrong for a trainer - landing there just makes an adult's DOB entry start with a long
+    // climb back through the year picker. 30 is a closer starting point for an adult.
+    final defaultYearsAgo = _isTrainer ? 30 : 12;
     final picked = await showAppCalendar(
       context: context,
-      month: _dob ?? DateTime(DateTime.now().year - 12),
+      month: _dob ?? DateTime(DateTime.now().year - defaultYearsAgo),
       selectedDay: _dob?.day,
+      earliestMonth: DateTime(DateTime.now().year - 100, 1),
       latestMonth: DateTime.now(),
     );
     if (picked != null) setState(() => _dob = picked);

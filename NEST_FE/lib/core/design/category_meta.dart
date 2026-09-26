@@ -13,6 +13,7 @@ enum CourseCategory {
   literature('LITERATURE', 'Literature'),
   theatre('THEATRE', 'Theatre'),
   fashion('FASHION', 'Fashion'),
+  healthWellness('HEALTH_WELLNESS', 'Health & Wellness'),
   others('OTHERS', 'Others'),
   unknown('', 'Others');
 
@@ -36,6 +37,7 @@ enum CourseCategory {
     literature,
     theatre,
     fashion,
+    healthWellness,
     others,
   ];
 
@@ -78,6 +80,8 @@ extension CategoryMetaLookup on CourseCategory {
         return CategoryMeta(color: p.magenta, soft: p.magentaSoft, dim: p.magenta);
       case CourseCategory.fashion:
         return CategoryMeta(color: p.gateway, soft: p.gatewaySoft, dim: p.gateway);
+      case CourseCategory.healthWellness:
+        return CategoryMeta(color: p.sage, soft: p.sageSoft, dim: p.sage);
       case CourseCategory.others:
       case CourseCategory.unknown:
         return CategoryMeta(color: p.textMuted, soft: p.surfaceHigh, dim: p.textMuted);

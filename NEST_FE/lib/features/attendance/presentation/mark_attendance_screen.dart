@@ -311,7 +311,10 @@ class _MarkAttendanceScreenState extends ConsumerState<MarkAttendanceScreen> {
                   color: palette.text),
               decoration: InputDecoration(
                 isDense: true,
+                filled: false,
                 border: InputBorder.none,
+                focusedBorder: InputBorder.none,
+                enabledBorder: InputBorder.none,
                 contentPadding: EdgeInsets.zero,
                 hintText: 'Search student',
                 hintStyle: TextStyle(fontSize: AppType.lg, color: palette.textFaint),

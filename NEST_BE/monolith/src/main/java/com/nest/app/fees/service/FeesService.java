@@ -623,6 +623,9 @@ public class FeesService {
      * slip yet fall back to agreedFee exactly as before this feature existed. */
     @Transactional(readOnly = true)
     public FeeBalanceResponse getBalance(UUID membershipId, UUID courseId, String period) {
+        // Per-course enforcement: the controller route carries no coarse gate at all, so without
+        // this a Trainer (or anyone else authenticated) could read any course's balance.
+        courseFeatureGuard.assertCourseFeature(courseId, FeatureKey.FEES_ENTRY);
         var slip = feeSlipRepository.findByMembershipIdAndCourseIdAndPeriod(membershipId, courseId, period);
         BigDecimal agreedFee = slip.map(FeeSlip::getAmountDue)
                 .orElseGet(() -> courseMapRepository.findByMembershipIdAndCourseId(membershipId, courseId)
@@ -637,7 +640,12 @@ public class FeesService {
 
     @Transactional(readOnly = true)
     public List<FeeTransactionResponse> historyForStudent(UUID membershipId) {
-        return feeTransactionRepository.findByMembershipIdOrderByCreatedAtDesc(membershipId).stream()
+        List<FeeTransaction> transactions = feeTransactionRepository
+                .findByMembershipIdOrderByCreatedAtDesc(membershipId);
+        boolean isSelf = membershipId.equals(TenantContext.currentMembershipId());
+        return transactions.stream()
+                .filter(t -> isSelf || t.getCourseId() == null
+                        || courseFeatureGuard.hasCourseFeature(t.getCourseId(), FeatureKey.FEES_ENTRY))
                 .map(this::toResponse).collect(Collectors.toList());
     }
 
@@ -645,6 +653,7 @@ public class FeesService {
      * ships the course+period slice; full multi-dimension filtering is later polish. */
     @Transactional(readOnly = true)
     public BigDecimal collectedForCourseAndPeriod(UUID courseId, String period) {
+        courseFeatureGuard.assertCourseFeature(courseId, FeatureKey.FEES_DASHBOARD);
         return feeTransactionRepository.findByCourseIdAndPeriod(courseId, period).stream()
                 .map(FeeTransaction::getAmountPaid)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
@@ -654,6 +663,9 @@ public class FeesService {
      * this period, and the course's own fee cycle label - one CSV row per student. */
     @Transactional(readOnly = true)
     public String generateCourseReport(UUID courseId, String period) {
+        // Per-course enforcement: the controller's @RequiresFeature(FEES_DASHBOARD) only checks
+        // the union across all courses.
+        courseFeatureGuard.assertCourseFeature(courseId, FeatureKey.FEES_DASHBOARD);
         Course course = courseRepository.findById(courseId)
                 .orElseThrow(() -> new ResourceNotFoundException("Course not found: " + courseId));
 

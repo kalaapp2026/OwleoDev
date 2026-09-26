@@ -5,6 +5,9 @@ import com.nest.app.scheduling.dto.ClassInstanceResponse;
 import com.nest.app.scheduling.dto.ScheduleResponse;
 import com.nest.app.scheduling.dto.SetScheduleRequest;
 import com.nest.app.scheduling.dto.SlotRequest;
+import com.nest.app.enrolment.entity.Batch;
+import com.nest.app.enrolment.repository.BatchRepository;
+import com.nest.app.identity.service.CourseFeatureGuard;
 import com.nest.app.scheduling.entity.ClassInstance;
 import com.nest.app.scheduling.entity.ClassInstanceStatus;
 import com.nest.app.scheduling.entity.Schedule;
@@ -12,6 +15,8 @@ import com.nest.app.scheduling.repository.ClassInstanceRepository;
 import com.nest.app.scheduling.repository.ScheduleRepository;
 import com.nest.common.audit.Auditable;
 import com.nest.common.exception.ConflictException;
+import com.nest.common.exception.ResourceNotFoundException;
+import com.nest.common.security.FeatureKey;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -36,10 +41,21 @@ public class SchedulingService {
 
     private final ScheduleRepository scheduleRepository;
     private final ClassInstanceRepository classInstanceRepository;
+    private final BatchRepository batchRepository;
+    private final CourseFeatureGuard courseFeatureGuard;
 
-    public SchedulingService(ScheduleRepository scheduleRepository, ClassInstanceRepository classInstanceRepository) {
+    public SchedulingService(ScheduleRepository scheduleRepository, ClassInstanceRepository classInstanceRepository,
+                              BatchRepository batchRepository, CourseFeatureGuard courseFeatureGuard) {
         this.scheduleRepository = scheduleRepository;
         this.classInstanceRepository = classInstanceRepository;
+        this.batchRepository = batchRepository;
+        this.courseFeatureGuard = courseFeatureGuard;
+    }
+
+    private UUID courseIdOfBatch(UUID batchId) {
+        return batchRepository.findById(batchId)
+                .orElseThrow(() -> new ResourceNotFoundException("Batch not found: " + batchId))
+                .getCourseId();
     }
 
     /**
@@ -52,6 +68,9 @@ public class SchedulingService {
     @Transactional
     @Auditable(action = "SCHEDULE_SET", entityType = "schedule")
     public List<ScheduleResponse> setSchedule(SetScheduleRequest request) {
+        // Per-course enforcement: the controller's @RequiresFeature(BATCH_SCHEDULING) only checks
+        // the union across all courses.
+        courseFeatureGuard.assertCourseFeature(courseIdOfBatch(request.batchId()), FeatureKey.BATCH_SCHEDULING);
         supersedeExistingSchedule(request.batchId(), request.effectiveFrom());
 
         List<Schedule> saved = new ArrayList<>();
@@ -82,6 +101,9 @@ public class SchedulingService {
     @Transactional
     @Auditable(action = "CLASS_INSTANCE_ADDED", entityType = "class_instance")
     public ClassInstanceResponse addAdHocInstance(UUID batchId, AddClassInstanceRequest request) {
+        // Per-course enforcement: the controller's @RequiresFeature(ATTENDANCE) only checks the
+        // union across all courses.
+        courseFeatureGuard.assertCourseFeature(courseIdOfBatch(batchId), FeatureKey.ATTENDANCE);
         if (classInstanceRepository.existsByBatchIdAndDateAndStartTime(batchId, request.date(), request.startTime())) {
             throw new ConflictException("A class already exists for this batch at that date and time.");
         }

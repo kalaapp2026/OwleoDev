@@ -253,7 +253,10 @@ class _MaterialLibraryScreenState extends ConsumerState<MaterialLibraryScreen> {
                         color: palette.text),
                     decoration: InputDecoration(
                       isDense: true,
+                      filled: false,
                       border: InputBorder.none,
+                      focusedBorder: InputBorder.none,
+                      enabledBorder: InputBorder.none,
                       contentPadding: EdgeInsets.zero,
                       hintText: 'Search ${_noun}s',
                       hintStyle:

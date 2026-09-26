@@ -35,6 +35,10 @@ public class AcademyFeaturedTrainer {
     @Column(name = "trainer_membership_id", nullable = false)
     private UUID trainerMembershipId;
 
+    /** The Admin's own custom label for this person on the About page (e.g. "Head of Dance &
+     * Founder"), overriding whatever the frontend shows by default when set. */
+    private String designation;
+
     @Column(name = "order_index", nullable = false)
     @Builder.Default
     private int orderIndex = 0;

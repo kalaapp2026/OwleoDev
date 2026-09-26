@@ -49,6 +49,8 @@ class CourseListScreen extends ConsumerStatefulWidget {
 
 class _CourseListScreenState extends ConsumerState<CourseListScreen> {
   final _searchController = TextEditingController();
+  final _searchFocus = FocusNode();
+  bool _searchFocused = false;
 
   String _query = '';
   CourseSort _sort = CourseSort.az;
@@ -62,12 +64,28 @@ class _CourseListScreenState extends ConsumerState<CourseListScreen> {
   String? _kebabFor;
 
   @override
+  void initState() {
+    super.initState();
+    _searchFocus.addListener(() {
+      setState(() => _searchFocused = _searchFocus.hasFocus);
+    });
+  }
+
+  @override
   void dispose() {
     _searchController.dispose();
+    _searchFocus.dispose();
     super.dispose();
   }
 
-  void _refresh() => ref.invalidate(allCoursesProvider);
+  // Both providers: this screen reads allCoursesProvider, but the Dashboard's stats row, course
+  // pickers elsewhere, and this screen's own kebab actions all read activeCoursesProvider - and
+  // since the Dashboard stays alive in AppShell's IndexedStack rather than being torn down,
+  // its cached copy never refetches on its own after a course is created or edited here.
+  void _refresh() {
+    ref.invalidate(allCoursesProvider);
+    ref.invalidate(activeCoursesProvider);
+  }
 
   Future<void> _openForm({Course? existing}) async {
     setState(() => _kebabFor = null);
@@ -240,13 +258,16 @@ class _CourseListScreenState extends ConsumerState<CourseListScreen> {
     return Row(
       children: [
         Expanded(
-          child: Container(
+          child: AnimatedContainer(
+            duration: AppMotion.fade,
             padding: const EdgeInsets.symmetric(
                 horizontal: AppSpacing.lg, vertical: AppSpacing.md),
             decoration: BoxDecoration(
               color: palette.surfaceRaised,
               borderRadius: AppRadii.all(AppRadii.lg),
-              border: Border.all(color: palette.border),
+              // Same convention as every other input/dropdown in the app: the OUTER stroke takes
+              // the accent colour on focus.
+              border: Border.all(color: _searchFocused ? palette.primary : palette.border),
             ),
             child: Row(
               children: [
@@ -255,6 +276,7 @@ class _CourseListScreenState extends ConsumerState<CourseListScreen> {
                 Expanded(
                   child: TextField(
                     controller: _searchController,
+                    focusNode: _searchFocus,
                     onChanged: (v) => setState(() => _query = v),
                     style: TextStyle(
                       fontSize: AppType.lg,
@@ -263,7 +285,17 @@ class _CourseListScreenState extends ConsumerState<CourseListScreen> {
                     ),
                     decoration: InputDecoration(
                       isDense: true,
+                      // The app's global (legacy, pre-AppPalette) InputDecorationTheme defaults
+                      // every field to `filled: true, fillColor: AppColors.darkSurface` - a
+                      // teal-tinted dark green, unrelated to this screen's own navy
+                      // palette.surfaceRaised. Left unset here, this field silently inherited
+                      // that fill and painted it as a second, mismatched rectangle nested inside
+                      // this Container's own border. Disabling the fill outright leaves only the
+                      // one, intentional background: this Container's.
+                      filled: false,
                       border: InputBorder.none,
+                      focusedBorder: InputBorder.none,
+                      enabledBorder: InputBorder.none,
                       contentPadding: EdgeInsets.zero,
                       hintText: 'Search course',
                       hintStyle: TextStyle(fontSize: AppType.lg, color: palette.textFaint),
@@ -604,7 +636,10 @@ class _CourseRow extends StatelessWidget {
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
                             fontSize: AppType.xxl,
-                            fontWeight: AppType.semi,
+                            // Prototype uses 650 - not a step Flutter's FontWeight offers (100
+                            // increments only), and w600 was reading visibly lighter than the
+                            // reference. w700 is the closer of the two available neighbours.
+                            fontWeight: AppType.bold,
                             color: inactive ? palette.textMuted : palette.text,
                           ),
                         ),
@@ -692,6 +727,10 @@ class _Kebab extends StatelessWidget {
 
     return AttachedSelect<(String, bool, VoidCallback)>(
       label: '',
+      // This is an action menu (Edit / Deactivate / ...) reusing AttachedSelect purely for its
+      // anchoring - it isn't picking a value out of a set, so the panel's usual "N options"
+      // header read as stray, unexplained text sitting above three unrelated actions.
+      showPanelHeader: false,
       options: actions,
       labelOf: (a) => a.$1,
       isOpen: open,

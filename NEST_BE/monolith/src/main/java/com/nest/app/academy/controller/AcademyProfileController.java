@@ -9,6 +9,7 @@ import com.nest.app.academy.dto.FeaturedTrainerResponse;
 import com.nest.app.academy.dto.HighlightResponse;
 import com.nest.app.academy.dto.TrainerCandidateResponse;
 import com.nest.app.academy.dto.UpdateAcademyProfileRequest;
+import com.nest.app.academy.dto.UpdateFeaturedTrainerRequest;
 import com.nest.app.academy.dto.UpdateHighlightRequest;
 import com.nest.app.academy.service.AcademyProfileService;
 import com.nest.common.security.FeatureKey;
@@ -59,6 +60,12 @@ public class AcademyProfileController {
         return academyProfileService.uploadLogo(TenantContext.currentAcademyId(), file);
     }
 
+    @PostMapping("/academies/me/cover-image")
+    @RequiresFeature(FeatureKey.ABOUT_US_EDIT)
+    public AcademyProfileResponse uploadCoverImage(@RequestParam("file") MultipartFile file) {
+        return academyProfileService.uploadCoverImage(TenantContext.currentAcademyId(), file);
+    }
+
     @PostMapping("/academies/me/highlights")
     @RequiresFeature(FeatureKey.ABOUT_US_EDIT)
     public HighlightResponse addHighlight(@Valid @RequestBody AddHighlightRequest request) {
@@ -100,6 +107,12 @@ public class AcademyProfileController {
     @RequiresFeature(FeatureKey.ABOUT_US_EDIT)
     public FeaturedTrainerResponse addFeaturedTrainer(@Valid @RequestBody AddFeaturedTrainerRequest request) {
         return academyProfileService.addFeaturedTrainer(TenantContext.currentAcademyId(), request);
+    }
+
+    @PutMapping("/academies/me/featured-trainers/{id}")
+    @RequiresFeature(FeatureKey.ABOUT_US_EDIT)
+    public FeaturedTrainerResponse updateFeaturedTrainer(@PathVariable UUID id, @Valid @RequestBody UpdateFeaturedTrainerRequest request) {
+        return academyProfileService.updateFeaturedTrainer(TenantContext.currentAcademyId(), id, request);
     }
 
     @DeleteMapping("/academies/me/featured-trainers/{id}")

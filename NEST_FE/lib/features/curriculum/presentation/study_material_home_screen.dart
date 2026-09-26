@@ -229,7 +229,10 @@ class _StudyMaterialHomeScreenState extends ConsumerState<StudyMaterialHomeScree
                         color: palette.text),
                     decoration: InputDecoration(
                       isDense: true,
+                      filled: false,
                       border: InputBorder.none,
+                      focusedBorder: InputBorder.none,
+                      enabledBorder: InputBorder.none,
                       contentPadding: EdgeInsets.zero,
                       hintText: 'Search batch or course',
                       hintStyle:

@@ -198,6 +198,10 @@ public class BatchService {
     public void addMember(UUID batchId, UUID membershipId) {
         Batch batch = batchRepository.findById(batchId)
                 .orElseThrow(() -> new ResourceNotFoundException("Batch not found: " + batchId));
+        // Per-course enforcement: the controller's @RequiresFeature only checks the union across
+        // all courses - without this, a Trainer granted BATCH_CREATION on Guitar could enrol
+        // students into a Bharatanatyam batch.
+        courseFeatureGuard.assertCourseFeature(batch.getCourseId(), FeatureKey.BATCH_CREATION);
 
         if (batch.getBatchType() == BatchType.REGULAR && isAlreadyInAnotherRegularBatchForCourse(membershipId, batch)) {
             throw new ConflictException(
@@ -244,6 +248,8 @@ public class BatchService {
     @Transactional
     @Auditable(action = "BATCH_MEMBER_REMOVED", entityType = "batch_member")
     public void removeMember(UUID batchId, UUID membershipId) {
+        Batch batch = findOrThrow(batchId);
+        courseFeatureGuard.assertCourseFeature(batch.getCourseId(), FeatureKey.BATCH_CREATION);
         batchMemberRepository.deleteByBatchIdAndMembershipId(batchId, membershipId);
     }
 
@@ -261,6 +267,7 @@ public class BatchService {
     public void delete(UUID batchId) {
         Batch batch = batchRepository.findById(batchId)
                 .orElseThrow(() -> new ResourceNotFoundException("Batch not found: " + batchId));
+        courseFeatureGuard.assertCourseFeature(batch.getCourseId(), FeatureKey.BATCH_CREATION);
 
         if (!batchMemberRepository.findByBatchId(batchId).isEmpty()) {
             throw new ConflictException("Please de-link the students from this batch first.");
