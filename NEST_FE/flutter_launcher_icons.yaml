@@ -4,6 +4,14 @@ flutter_launcher_icons:
   image_path: "assets/brand/owl_icon.png"
   min_sdk_android: 21
   remove_alpha_ios: true
+  # Without these two, flutter_launcher_icons only writes the legacy flat mipmap/ic_launcher.png -
+  # modern (Android 8+) launchers then apply their OWN mask to that flat square, and pad the
+  # leftover space with a default WHITE circle rather than anything from this app. Declaring an
+  # adaptive icon fixes that: this dark background matches the in-app theme's own bg
+  # (AppPalette.dark.bg, 0xFF0A0F1C) - the same backdrop the nav bar's owl button sits on - so the
+  # icon reads as one continuous dark tile instead of a white ring around it.
+  adaptive_icon_background: "#0A0F1C"
+  adaptive_icon_foreground: "assets/brand/owl_icon.png"
   web:
     generate: true
     image_path: "assets/brand/owl_icon.png"
