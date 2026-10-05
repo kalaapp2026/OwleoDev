@@ -13,6 +13,9 @@ Future<bool> showAppConfirmDialog({
   required String message,
   String confirmLabel = 'Yes',
   String cancelLabel = 'No',
+  /// Red confirm button. Pass false for a non-destructive confirmation (Publish), which uses the
+  /// primary accent instead.
+  bool destructive = true,
 }) async {
   final result = await showDialog<bool>(
     context: context,
@@ -68,8 +71,8 @@ Future<bool> showAppConfirmDialog({
                     child: _DialogButton(
                       label: confirmLabel,
                       onTap: () => Navigator.of(dialogContext).pop(true),
-                      background: palette.notPaid,
-                      foreground: Colors.white,
+                      background: destructive ? palette.notPaid : palette.primary,
+                      foreground: destructive ? Colors.white : palette.onPrimary,
                     ),
                   ),
                 ],

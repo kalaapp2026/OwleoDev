@@ -15,41 +15,11 @@ class AcademyProfileApi {
     );
   }
 
-  Future<AcademyProfile> updateProfile({
-    String? tagline,
-    String? description,
-    String? establishedBy,
-    String? ownerName,
-    String? additionalInfo,
-    String? address,
-    String? contactNumber,
-    String? email,
-    String? instagramUrl,
-    String? xUrl,
-    String? facebookUrl,
-    String? youtubeUrl,
-    String? whatsapp,
-    String? websiteUrl,
-    String? mapsUrl,
-  }) {
+  /// Publish: the whole draft in one write. [body] is built by the profile draft - see the
+  /// backend's UpdateAcademyProfileRequest for the field list and which nulls leave a value alone.
+  Future<AcademyProfile> publishProfile(Map<String, dynamic> body) {
     return _client.call(
-      (dio) => dio.put('/academies/me', data: {
-        'tagline': tagline,
-        'description': description,
-        'establishedBy': establishedBy,
-        'ownerName': ownerName,
-        'additionalInfo': additionalInfo,
-        'address': address,
-        'contactNumber': contactNumber,
-        'email': email,
-        'instagramUrl': instagramUrl,
-        'xUrl': xUrl,
-        'facebookUrl': facebookUrl,
-        'youtubeUrl': youtubeUrl,
-        'whatsapp': whatsapp,
-        'websiteUrl': websiteUrl,
-        'mapsUrl': mapsUrl,
-      }),
+      (dio) => dio.put('/academies/me', data: body),
       (data) => AcademyProfile.fromJson(data as Map<String, dynamic>),
     );
   }

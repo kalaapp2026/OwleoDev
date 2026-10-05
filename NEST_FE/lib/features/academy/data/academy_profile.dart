@@ -79,6 +79,10 @@ class TrainerCard {
   final String? email;
   final String? joiningDate;
 
+  /// TRAINER or ACADEMY_ADMIN.
+  final String? role;
+  final List<String> courseNames;
+
   const TrainerCard({
     required this.membershipId,
     required this.fullName,
@@ -87,6 +91,8 @@ class TrainerCard {
     required this.phone,
     required this.email,
     required this.joiningDate,
+    this.role,
+    this.courseNames = const [],
   });
 
   factory TrainerCard.fromJson(Map<String, dynamic> json) => TrainerCard(
@@ -97,6 +103,8 @@ class TrainerCard {
         phone: json['phone'] as String?,
         email: json['email'] as String?,
         joiningDate: json['joiningDate'] as String?,
+        role: json['role'] as String?,
+        courseNames: List<String>.from(json['courseNames'] as List? ?? const []),
       );
 }
 
@@ -126,8 +134,10 @@ class AcademyProfile {
   final String? ownerName;
   final String? additionalInfo;
   final String? address;
+  final String? area;
   final String? city;
   final String? state;
+  final String? pinCode;
   final String? contactNumber;
   final String? email;
   final String? instagramUrl;
@@ -138,6 +148,16 @@ class AcademyProfile {
   final String? websiteUrl;
   final String? mapsUrl;
   final String? coverImageUrl;
+
+  /// Preset banner key shown when there's no cover photo - see `coverPresets`.
+  final String? coverStyle;
+
+  /// Palette key for the initials tile shown when there's no logo photo.
+  final String? logoColor;
+
+  /// Social/maps link keys the Admin switched off. The URL is kept so turning one back on
+  /// restores it.
+  final Set<String> hiddenLinks;
   final List<AcademyHighlight> highlights;
   final List<FeaturedTrainer> featuredTrainers;
   final List<AcademyBranchInfo> branches;
@@ -152,8 +172,10 @@ class AcademyProfile {
     required this.ownerName,
     required this.additionalInfo,
     required this.address,
+    this.area,
     required this.city,
     required this.state,
+    this.pinCode,
     required this.contactNumber,
     required this.email,
     required this.instagramUrl,
@@ -164,6 +186,9 @@ class AcademyProfile {
     required this.websiteUrl,
     required this.mapsUrl,
     required this.coverImageUrl,
+    this.coverStyle,
+    this.logoColor,
+    this.hiddenLinks = const {},
     required this.highlights,
     required this.featuredTrainers,
     required this.branches,
@@ -179,8 +204,10 @@ class AcademyProfile {
         ownerName: json['ownerName'] as String?,
         additionalInfo: json['additionalInfo'] as String?,
         address: json['address'] as String?,
+        area: json['area'] as String?,
         city: json['city'] as String?,
         state: json['state'] as String?,
+        pinCode: json['pinCode'] as String?,
         contactNumber: json['contactNumber'] as String?,
         email: json['email'] as String?,
         instagramUrl: json['instagramUrl'] as String?,
@@ -191,6 +218,9 @@ class AcademyProfile {
         websiteUrl: json['websiteUrl'] as String?,
         mapsUrl: json['mapsUrl'] as String?,
         coverImageUrl: json['coverImageUrl'] as String?,
+        coverStyle: json['coverStyle'] as String?,
+        logoColor: json['logoColor'] as String?,
+        hiddenLinks: Set<String>.from(json['hiddenLinks'] as List? ?? const []),
         highlights: (json['highlights'] as List? ?? []).map((e) => AcademyHighlight.fromJson(e as Map<String, dynamic>)).toList(),
         featuredTrainers: (json['featuredTrainers'] as List? ?? []).map((e) => FeaturedTrainer.fromJson(e as Map<String, dynamic>)).toList(),
         branches: (json['branches'] as List? ?? []).map((e) => AcademyBranchInfo.fromJson(e as Map<String, dynamic>)).toList(),
@@ -202,12 +232,19 @@ class TrainerCandidate {
   final String membershipId;
   final String fullName;
   final String? profileImageUrl;
+  final List<String> courseNames;
 
-  const TrainerCandidate({required this.membershipId, required this.fullName, required this.profileImageUrl});
+  const TrainerCandidate({
+    required this.membershipId,
+    required this.fullName,
+    required this.profileImageUrl,
+    this.courseNames = const [],
+  });
 
   factory TrainerCandidate.fromJson(Map<String, dynamic> json) => TrainerCandidate(
         membershipId: json['membershipId'] as String,
         fullName: json['fullName'] as String,
         profileImageUrl: json['profileImageUrl'] as String?,
+        courseNames: List<String>.from(json['courseNames'] as List? ?? const []),
       );
 }

@@ -1,6 +1,7 @@
 package com.nest.app.enrolment.dto;
 
 import java.time.LocalDate;
+import java.util.List;
 import java.util.UUID;
 
 /** The public-safe subset of a trainer's profile - what the Academy Profile page's featured-
@@ -16,6 +17,9 @@ public record TrainerCardResponse(
         String qualification,
         String phone,
         String email,
-        LocalDate joiningDate
+        LocalDate joiningDate,
+        /** TRAINER or ACADEMY_ADMIN - an Admin who teaches can be featured too. */
+        String role,
+        List<String> courseNames
 ) {
 }

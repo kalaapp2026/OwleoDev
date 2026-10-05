@@ -10,6 +10,8 @@ import java.util.UUID;
 public interface AcademyRepository extends JpaRepository<Academy, UUID> {
     boolean existsByNameIgnoreCaseAndCityIgnoreCase(String name, String city);
 
+    boolean existsByNameIgnoreCaseAndCityIgnoreCaseAndIdNot(String name, String city, UUID id);
+
     // ---- Super Admin platform metrics ----
 
     long countByStatus(AcademyStatus status);

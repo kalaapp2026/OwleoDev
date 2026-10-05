@@ -110,8 +110,17 @@ public class TrainerRegistrationService {
         User user = userRepository.findById(membership.getUserId())
                 .orElseThrow(() -> new ResourceNotFoundException("No account for this membership"));
         var details = identityRegistrationService.personDetailsOf(user, membership);
+        List<UUID> courseIds = courseMapRepository.findByMembershipId(membershipId).stream()
+                .filter(CourseMap::isActive)
+                .map(CourseMap::getCourseId)
+                .collect(Collectors.toList());
+        List<String> courseNames = courseRepository.findAllById(courseIds).stream()
+                .map(com.nest.app.curriculum.entity.Course::getName)
+                .sorted()
+                .collect(Collectors.toList());
         return new TrainerCardResponse(membership.getId(), user.getFullName(), user.getProfileImageUrl(),
-                details.qualification(), user.getPhone(), user.getEmail(), details.joiningDate());
+                details.qualification(), user.getPhone(), user.getEmail(), details.joiningDate(),
+                membership.getRoleType().name(), courseNames);
     }
 
     @Transactional

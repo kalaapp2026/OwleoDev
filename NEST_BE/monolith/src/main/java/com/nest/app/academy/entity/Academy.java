@@ -100,6 +100,23 @@ public class Academy {
     @Column(name = "cover_image_url")
     private String coverImageUrl;
 
+    private String area;
+
+    @Column(name = "pin_code")
+    private String pinCode;
+
+    /** Preset banner key (teal, gold, violet, coral, magenta, navy) shown when no cover photo. */
+    @Column(name = "cover_style")
+    private String coverStyle;
+
+    /** Palette key for the initials tile shown when no logo photo. */
+    @Column(name = "logo_color")
+    private String logoColor;
+
+    /** Comma-separated link keys switched off on the public page - see V38. */
+    @Column(name = "hidden_links")
+    private String hiddenLinks;
+
     @Column(nullable = false)
     @Builder.Default
     private String plan = "STANDARD";

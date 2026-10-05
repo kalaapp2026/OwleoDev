@@ -22,20 +22,26 @@ import com.nest.app.academy.repository.AcademyFeaturedTrainerRepository;
 import com.nest.app.academy.repository.AcademyHighlightImageRepository;
 import com.nest.app.academy.repository.AcademyHighlightRepository;
 import com.nest.app.academy.repository.AcademyRepository;
+import com.nest.app.curriculum.entity.Course;
+import com.nest.app.curriculum.repository.CourseRepository;
 import com.nest.app.identity.entity.AcademyMembership;
+import com.nest.app.identity.entity.CourseMap;
 import com.nest.app.identity.entity.MembershipStatus;
 import com.nest.app.identity.entity.User;
 import com.nest.app.identity.repository.AcademyMembershipRepository;
+import com.nest.app.identity.repository.CourseMapRepository;
 import com.nest.app.identity.repository.UserRepository;
 import com.nest.app.storage.FileStorageService;
 import com.nest.common.audit.Auditable;
 import com.nest.common.exception.BadRequestException;
+import com.nest.common.exception.ConflictException;
 import com.nest.common.exception.ResourceNotFoundException;
 import com.nest.common.security.Role;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -52,6 +58,7 @@ public class AcademyProfileService {
 
     private static final Set<String> IMAGE_CONTENT_TYPES = Set.of("image/jpeg", "image/png", "image/webp");
     private static final long IMAGE_MAX_BYTES = 5L * 1024 * 1024;
+    private static final Set<String> HIDEABLE_LINKS = Set.of("instagram", "x", "facebook", "youtube", "website", "maps");
 
     private final AcademyRepository academyRepository;
     private final AcademyHighlightRepository highlightRepository;
@@ -61,12 +68,17 @@ public class AcademyProfileService {
     private final AcademyMembershipRepository membershipRepository;
     private final UserRepository userRepository;
     private final FileStorageService fileStorageService;
+    private final CourseMapRepository courseMapRepository;
+    private final CourseRepository courseRepository;
 
     public AcademyProfileService(AcademyRepository academyRepository, AcademyHighlightRepository highlightRepository,
                                   AcademyHighlightImageRepository highlightImageRepository,
                                   AcademyFeaturedTrainerRepository featuredTrainerRepository, AcademyBranchRepository branchRepository,
                                   AcademyMembershipRepository membershipRepository, UserRepository userRepository,
-                                  FileStorageService fileStorageService) {
+                                  FileStorageService fileStorageService, CourseMapRepository courseMapRepository,
+                                  CourseRepository courseRepository) {
+        this.courseMapRepository = courseMapRepository;
+        this.courseRepository = courseRepository;
         this.academyRepository = academyRepository;
         this.highlightRepository = highlightRepository;
         this.highlightImageRepository = highlightImageRepository;
@@ -96,10 +108,52 @@ public class AcademyProfileService {
         return toResponse(academy, highlights, featuredTrainers, branches);
     }
 
+    /** Publish: the frontend's whole draft in one write. See {@link UpdateAcademyProfileRequest}
+     * for which fields a null leaves untouched. */
     @Transactional
     @Auditable(action = "ACADEMY_PROFILE_UPDATED", entityType = "academy")
     public AcademyProfileResponse updateProfile(UUID academyId, UpdateAcademyProfileRequest request) {
         Academy academy = findOrThrow(academyId);
+        String name = trimToNull(request.name()) != null ? request.name().trim() : academy.getName();
+        String city = trimToNull(request.city()) != null ? request.city().trim() : academy.getCity();
+        if ((!name.equalsIgnoreCase(academy.getName()) || !city.equalsIgnoreCase(academy.getCity()))
+                && academyRepository.existsByNameIgnoreCaseAndCityIgnoreCaseAndIdNot(name, city, academyId)) {
+            throw new ConflictException("Another academy called \"" + name + "\" is already registered in " + city);
+        }
+        academy.setName(name);
+        academy.setCity(city);
+        if (trimToNull(request.state()) != null) {
+            academy.setState(request.state().trim());
+        }
+        if (request.area() != null) {
+            academy.setArea(trimToNull(request.area()));
+        }
+        if (request.pinCode() != null) {
+            academy.setPinCode(trimToNull(request.pinCode()));
+        }
+        if (request.coverStyle() != null) {
+            academy.setCoverStyle(trimToNull(request.coverStyle()));
+        }
+        if (request.logoColor() != null) {
+            academy.setLogoColor(trimToNull(request.logoColor()));
+        }
+        if (request.hiddenLinks() != null) {
+            String hidden = request.hiddenLinks().stream()
+                    .map(String::trim)
+                    .filter(HIDEABLE_LINKS::contains)
+                    .distinct()
+                    .collect(Collectors.joining(","));
+            academy.setHiddenLinks(hidden.isEmpty() ? null : hidden);
+        }
+        if (Boolean.TRUE.equals(request.removeLogo())) {
+            academy.setLogoUrl(null);
+        }
+        if (Boolean.TRUE.equals(request.removeCover())) {
+            academy.setCoverImageUrl(null);
+        }
+        if (request.featuredTrainers() != null) {
+            replaceFeaturedTrainers(academyId, request.featuredTrainers());
+        }
         academy.setTagline(blankToNull(request.tagline()));
         academy.setDescription(blankToNull(request.description()));
         academy.setEstablishedBy(blankToNull(request.establishedBy()));
@@ -225,11 +279,26 @@ public class AcademyProfileService {
                 membershipsById.values().stream().map(AcademyMembership::getUserId).collect(Collectors.toSet())
         ).stream().collect(Collectors.toMap(User::getId, u -> u));
 
+        Map<UUID, List<UUID>> courseIdsByMembership = membershipsById.keySet().stream()
+                .collect(Collectors.toMap(id -> id, id -> courseMapRepository.findByMembershipId(id).stream()
+                        .filter(CourseMap::isActive)
+                        .map(CourseMap::getCourseId)
+                        .collect(Collectors.toList())));
+        Map<UUID, String> courseNames = courseRepository.findAllById(
+                courseIdsByMembership.values().stream().flatMap(List::stream).collect(Collectors.toSet())
+        ).stream().collect(Collectors.toMap(Course::getId, Course::getName));
+
         return membershipsById.values().stream()
                 .map(m -> {
                     User u = usersById.get(m.getUserId());
-                    return new TrainerCandidateResponse(m.getId(), u.getFullName(), u.getProfileImageUrl());
+                    List<String> names = courseIdsByMembership.get(m.getId()).stream()
+                            .map(courseNames::get)
+                            .filter(n -> n != null)
+                            .sorted()
+                            .collect(Collectors.toList());
+                    return new TrainerCandidateResponse(m.getId(), u.getFullName(), u.getProfileImageUrl(), names);
                 })
+                .sorted(Comparator.comparing(TrainerCandidateResponse::fullName, String.CASE_INSENSITIVE_ORDER))
                 .collect(Collectors.toList());
     }
 
@@ -249,6 +318,35 @@ public class AcademyProfileService {
                 .build();
         featured = featuredTrainerRepository.save(featured);
         return resolveFeaturedTrainers(List.of(featured)).get(0);
+    }
+
+    /** Swaps the whole featured list for [entries], in order - how Publish saves the draft's list.
+     * Every entry is validated before anything is deleted, so a bad id leaves the old list intact. */
+    private void replaceFeaturedTrainers(UUID academyId, List<UpdateAcademyProfileRequest.FeaturedTrainerEntry> entries) {
+        Set<UUID> seen = new HashSet<>();
+        List<UpdateAcademyProfileRequest.FeaturedTrainerEntry> unique = entries.stream()
+                .filter(e -> seen.add(e.trainerMembershipId()))
+                .collect(Collectors.toList());
+        Map<UUID, AcademyMembership> memberships = membershipRepository.findAllById(seen).stream()
+                .collect(Collectors.toMap(AcademyMembership::getId, m -> m));
+        for (var entry : unique) {
+            AcademyMembership m = memberships.get(entry.trainerMembershipId());
+            if (m == null || !m.getAcademyId().equals(academyId)
+                    || (m.getRoleType() != Role.TRAINER && m.getRoleType() != Role.ACADEMY_ADMIN)) {
+                throw new BadRequestException("That membership is not an active Trainer/Admin at this academy");
+            }
+        }
+        featuredTrainerRepository.deleteAll(featuredTrainerRepository.findByAcademyIdOrderByOrderIndex(academyId));
+        featuredTrainerRepository.flush();
+        for (int i = 0; i < unique.size(); i++) {
+            var entry = unique.get(i);
+            featuredTrainerRepository.save(AcademyFeaturedTrainer.builder()
+                    .academyId(academyId)
+                    .trainerMembershipId(entry.trainerMembershipId())
+                    .designation(trimToNull(entry.designation()))
+                    .orderIndex(i)
+                    .build());
+        }
     }
 
     @Transactional
@@ -369,12 +467,18 @@ public class AcademyProfileService {
         return value != null && value.isBlank() ? null : value;
     }
 
+    private String trimToNull(String value) {
+        return value == null || value.isBlank() ? null : value.trim();
+    }
+
     private AcademyProfileResponse toResponse(Academy a, List<HighlightResponse> highlights,
                                                List<FeaturedTrainerResponse> featuredTrainers, List<BranchResponse> branches) {
+        List<String> hiddenLinks = a.getHiddenLinks() == null ? List.of() : List.of(a.getHiddenLinks().split(","));
         return new AcademyProfileResponse(a.getId(), a.getName(), a.getTagline(), a.getLogoUrl(), a.getDescription(),
-                a.getEstablishedBy(), a.getOwnerName(), a.getAdditionalInfo(), a.getAddress(), a.getCity(), a.getState(),
-                a.getContactNumber(), a.getEmail(), a.getInstagramUrl(), a.getXUrl(), a.getFacebookUrl(), a.getYoutubeUrl(),
-                a.getWhatsapp(), a.getWebsiteUrl(), a.getMapsUrl(), a.getCoverImageUrl(),
+                a.getEstablishedBy(), a.getOwnerName(), a.getAdditionalInfo(), a.getAddress(), a.getArea(), a.getCity(),
+                a.getState(), a.getPinCode(), a.getContactNumber(), a.getEmail(), a.getInstagramUrl(), a.getXUrl(),
+                a.getFacebookUrl(), a.getYoutubeUrl(), a.getWhatsapp(), a.getWebsiteUrl(), a.getMapsUrl(),
+                a.getCoverImageUrl(), a.getCoverStyle(), a.getLogoColor(), hiddenLinks,
                 highlights, featuredTrainers, branches);
     }
 }
