@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:nest_fe/features/profile/presentation/my_profile_screen.dart';
 import 'package:nest_fe/features/profile/presentation/user_settings_screen.dart';
 import 'package:nest_fe/l10n/app_localizations.dart';
 import 'package:nest_fe/core/auth/session_controller.dart';
@@ -45,7 +46,20 @@ class ProfileScreen extends ConsumerWidget {
             visualDensity: VisualDensity.compact,
           ),
         ),
-        const SizedBox(height: 28),
+        const SizedBox(height: 20),
+
+        Card(
+          child: ListTile(
+            leading: const Icon(Icons.badge_outlined),
+            title: const Text('My Profile'),
+            subtitle: const Text('Details, enrollment, performance log and achievements'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const MyProfileScreen()),
+            ),
+          ),
+        ),
+        const SizedBox(height: 20),
 
         if (user.isSuperAdmin) ...[
           _SectionLabel(t.profileSuperAdmin),

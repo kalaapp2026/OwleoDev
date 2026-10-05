@@ -44,8 +44,15 @@ deployed" (404).
 **Frontend** — from `d:\NEST\NEST_FE`:
 
 ```bash
-flutter run -d web-server --web-hostname 0.0.0.0 --web-port 5000
+flutter run -d web-server --release --web-hostname 0.0.0.0 --web-port 5000
 ```
+
+**Use `--release`.** The debug web-server only starts the app for the *first* browser that
+connects; every later page load fetches all ~1030 DDC modules (all 200) and then stays a blank
+white page forever, with no console error. Any test browser opened first "steals" it. Release serves
+one `main.dart.js` (~5 MB) that renders in ~3 s on every load. Nothing is lost: a detached
+`flutter run` can't hot-reload anyway. Verify with `curl .../main.dart.js` (~5 MB), not the DDC
+`main_module.bootstrap.js` check below, which only applies to debug builds.
 
 **Database** — `psql` is not on PATH:
 

@@ -3,20 +3,30 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:nest_fe/app/theme/app_tokens.dart';
 import 'package:nest_fe/app/theme/app_typography.dart';
 import 'package:nest_fe/core/auth/feature_keys.dart';
-import 'package:nest_fe/core/design/attached_select.dart';
+import 'package:nest_fe/core/auth/session_controller.dart';
+import 'package:nest_fe/core/design/app_top_bar.dart';
 import 'package:nest_fe/core/design/avatar.dart';
 import 'package:nest_fe/core/design/category_meta.dart';
 import 'package:nest_fe/core/design/pressable.dart';
-import 'package:nest_fe/core/widgets/async_value_view.dart';
+import 'package:nest_fe/core/error/api_exception.dart';
 import 'package:nest_fe/features/curriculum/data/course.dart';
 import 'package:nest_fe/features/curriculum/data/curriculum_api.dart';
 import 'package:nest_fe/features/enrolment/data/enrolment_api.dart';
 import 'package:nest_fe/features/enrolment/presentation/student_dashboard_screen.dart';
 
-/// Course-scoped student search: pick a course, then find someone in its roster to open their
-/// profile. Course-scoped rather than academy-wide by design - like every other roster picker in
-/// this app, a Trainer's list is what [coursesForFeatureProvider] already narrows it to, so this
-/// screen can never surface a student outside the courses that Trainer actually manages.
+/// One student with every course of theirs this user can see.
+class _Entry {
+  _Entry(this.student);
+  final StudentSummary student;
+  final List<Course> courses = [];
+}
+
+/// Student Profiles: one flat, searchable list of students, each labelled with their course.
+///
+/// Still built from the per-course rosters rather than an academy-wide query, deliberately - like
+/// every other roster picker here, a Trainer's courses are what [coursesForFeatureProvider]
+/// already narrows to, so this list can never surface a student outside the courses that Trainer
+/// actually manages.
 class StudentSearchScreen extends ConsumerStatefulWidget {
   const StudentSearchScreen({super.key});
 
@@ -25,7 +35,6 @@ class StudentSearchScreen extends ConsumerStatefulWidget {
 }
 
 class _StudentSearchScreenState extends ConsumerState<StudentSearchScreen> {
-  String? _courseId;
   String _query = '';
   final _searchController = TextEditingController();
 
@@ -35,168 +44,171 @@ class _StudentSearchScreenState extends ConsumerState<StudentSearchScreen> {
     super.dispose();
   }
 
+  /// Merges the rosters of every course into one entry per student. Null while any is loading.
+  /// Throws the first roster error so the caller can show one message.
+  List<_Entry>? _merge(List<Course> courses) {
+    final byMembership = <String, _Entry>{};
+    var loading = false;
+    Object? error;
+    for (final course in courses) {
+      final roster = ref.watch(studentsForCourseProvider(course.id));
+      roster.when(
+        data: (students) {
+          for (final s in students) {
+            byMembership.putIfAbsent(s.membershipId, () => _Entry(s)).courses.add(course);
+          }
+        },
+        loading: () => loading = true,
+        error: (e, _) => error ??= e,
+      );
+    }
+    if (error != null) throw error!;
+    if (loading) return null;
+    return byMembership.values.toList()
+      ..sort((a, b) => a.student.fullName.toLowerCase().compareTo(b.student.fullName.toLowerCase()));
+  }
+
   @override
   Widget build(BuildContext context) {
     final palette = context.palette;
+    final academyName = ref.watch(sessionControllerProvider).user?.activeMembership?.academyName;
     // BATCH_CREATION, not STUDENT_REGISTRATION: that's what /courses/{id}/students is actually
-    // gated on server-side, so this is the picker that never offers a course the call would 403 on.
+    // gated on server-side, so this never asks for a course the call would 403 on.
     final coursesAsync = ref.watch(coursesForFeatureProvider(FeatureKeys.batchCreation));
 
     return Scaffold(
       backgroundColor: palette.bg,
-      appBar: AppBar(title: const Text('Students')),
-      body: coursesAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Text('Could not load courses.', style: TextStyle(color: palette.textMuted)),
-          ),
+      body: SafeArea(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            AppTopBar(title: 'Student Profiles', subtitle: academyName, actions: const [ThemeModeButton()]),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(AppSpacing.x4l, AppSpacing.xxl, AppSpacing.x4l, AppSpacing.md),
+              child: _searchField(palette),
+            ),
+            Expanded(
+              child: coursesAsync.when(
+                loading: () => const Center(child: CircularProgressIndicator()),
+                error: (e, _) => _message('Could not load courses.'),
+                data: (courses) {
+                  if (courses.isEmpty) return _message('No courses available to you yet.');
+                  final List<_Entry>? entries;
+                  try {
+                    entries = _merge(courses);
+                  } catch (e) {
+                    return _message(e is ApiException ? e.message : 'Could not load students.');
+                  }
+                  if (entries == null) return const Center(child: CircularProgressIndicator());
+                  return _list(entries);
+                },
+              ),
+            ),
+          ],
         ),
-        data: (courses) {
-          if (courses.isEmpty) {
-            return Center(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Text('No courses available to you yet.', style: TextStyle(color: palette.textMuted)),
-              ),
-            );
-          }
-          _courseId ??= courses.first.id;
-          final course = courses.firstWhere((c) => c.id == _courseId, orElse: () => courses.first);
-
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(AppSpacing.page, AppSpacing.xl, AppSpacing.page, 0),
-                child: Column(
-                  children: [
-                    _coursePicker(palette, courses, course),
-                    const SizedBox(height: AppSpacing.lg),
-                    _searchField(palette),
-                    const SizedBox(height: AppSpacing.lg),
-                  ],
-                ),
-              ),
-              Expanded(child: _roster(course.id)),
-            ],
-          );
-        },
       ),
     );
   }
 
-  Widget _coursePicker(AppPalette palette, List<Course> courses, Course course) {
-    return AttachedSelect<Course>(
-      label: 'Course',
-      options: courses,
-      labelOf: (c) => c.name,
-      value: course,
-      searchable: true,
-      searchHint: 'Search course',
-      onSelected: (c) => setState(() => _courseId = c.id),
-      optionBuilder: (context, option, _) {
-        final meta = option.category.meta(palette);
-        final selected = option.id == _courseId;
-        return Row(
-          children: [
-            Container(height: 9, width: 9, decoration: BoxDecoration(color: meta.color, shape: BoxShape.circle)),
-            const SizedBox(width: AppSpacing.md),
-            Expanded(
-              child: Text(option.name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: AppType.xl,
-                    fontWeight: selected ? AppType.bold : AppType.regular,
-                    color: selected ? meta.color : palette.text,
-                  )),
-            ),
-          ],
-        );
-      },
-    );
-  }
+  Widget _message(String text) => Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Text(text, textAlign: TextAlign.center, style: TextStyle(color: context.palette.textMuted)),
+        ),
+      );
 
   Widget _searchField(AppPalette palette) {
+    OutlineInputBorder border(Color c) =>
+        OutlineInputBorder(borderRadius: AppRadii.all(AppRadii.xl), borderSide: BorderSide(color: c));
     return TextField(
       controller: _searchController,
       onChanged: (v) => setState(() => _query = v.trim().toLowerCase()),
+      style: TextStyle(color: palette.text, fontSize: AppType.xl),
       decoration: InputDecoration(
-        hintText: 'Search by name',
-        prefixIcon: const Icon(Icons.search),
+        hintText: 'Search students by name or username',
+        hintStyle: TextStyle(color: palette.textFaint, fontSize: AppType.xl),
+        prefixIcon: Icon(Icons.search, size: 18, color: palette.textFaint),
         filled: true,
-        fillColor: palette.surface,
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(AppRadii.lg),
-          borderSide: BorderSide(color: palette.borderSoft),
-        ),
+        fillColor: palette.surfaceRaised,
+        contentPadding: const EdgeInsets.symmetric(vertical: AppSpacing.xl),
+        border: border(palette.border),
+        enabledBorder: border(palette.border),
+        focusedBorder: border(palette.primary),
       ),
     );
   }
 
-  Widget _roster(String courseId) {
+  Widget _list(List<_Entry> all) {
     final palette = context.palette;
-    final studentsAsync = ref.watch(studentsForCourseProvider(courseId));
-    return AsyncValueView<List<StudentSummary>>(
-      value: studentsAsync,
-      onRetry: () => ref.invalidate(studentsForCourseProvider(courseId)),
-      data: (context, students) {
-        final filtered = _query.isEmpty
-            ? students
-            : students.where((s) => s.fullName.toLowerCase().contains(_query)).toList();
-        if (filtered.isEmpty) {
-          return Center(
-            child: Text(
-              students.isEmpty ? 'No students enrolled in this course yet.' : 'No student matches "$_query".',
-              style: TextStyle(color: palette.textMuted),
-            ),
-          );
-        }
-        return ListView.builder(
-          padding: const EdgeInsets.fromLTRB(AppSpacing.page, 0, AppSpacing.page, AppSpacing.listBottom),
-          itemCount: filtered.length,
-          itemBuilder: (context, i) {
-            final student = filtered[i];
-            return Pressable(
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => StudentDashboardScreen(membershipId: student.membershipId)),
-              ),
-              borderRadius: BorderRadius.circular(AppRadii.lg),
-              child: Container(
-                margin: const EdgeInsets.only(bottom: AppSpacing.sm),
-                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl, vertical: AppSpacing.lg),
-                decoration: BoxDecoration(
-                  color: palette.surfaceRaised,
-                  borderRadius: BorderRadius.circular(AppRadii.lg),
-                  border: Border.all(color: palette.borderSoft),
-                ),
-                child: Row(
-                  children: [
-                    PersonAvatar(name: student.fullName, seed: student.membershipId, size: 40),
-                    const SizedBox(width: AppSpacing.lg),
-                    Expanded(
-                      child: Text(student.fullName,
-                          style: TextStyle(fontSize: AppType.xl, fontWeight: AppType.medium, color: palette.text)),
-                    ),
-                    if (!student.active)
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: palette.textFaint.withValues(alpha: 0.13),
-                          borderRadius: BorderRadius.circular(AppRadii.sm),
-                        ),
-                        child: Text('Inactive', style: TextStyle(fontSize: AppType.tiny, color: palette.textMuted)),
+    final entries = _query.isEmpty
+        ? all
+        : all
+            .where((e) =>
+                e.student.fullName.toLowerCase().contains(_query) || e.student.username.toLowerCase().contains(_query))
+            .toList();
+    if (entries.isEmpty) {
+      return _message(all.isEmpty ? 'No students enrolled yet.' : 'No student matches "$_query".');
+    }
+    return ListView.builder(
+      padding: const EdgeInsets.fromLTRB(AppSpacing.xl, 0, AppSpacing.xl, AppSpacing.listBottom),
+      itemCount: entries.length,
+      itemBuilder: (context, i) {
+        final e = entries[i];
+        final course = e.courses.first;
+        final meta = course.category.meta(palette);
+        return Pressable(
+          onTap: () => Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => StudentDashboardScreen(membershipId: e.student.membershipId)),
+          ),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.xl),
+            decoration: BoxDecoration(border: Border(bottom: BorderSide(color: palette.borderSoft))),
+            child: Row(
+              children: [
+                PersonAvatar(name: e.student.fullName, seed: e.student.membershipId, size: 48),
+                const SizedBox(width: AppSpacing.xl),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(e.student.fullName,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(fontSize: AppType.x3l, fontWeight: AppType.bold, color: palette.text)),
+                      const SizedBox(height: 3),
+                      Row(
+                        children: [
+                          Container(width: 7, height: 7, decoration: BoxDecoration(color: meta.color, shape: BoxShape.circle)),
+                          const SizedBox(width: AppSpacing.xs),
+                          Flexible(
+                            child: Text(
+                              e.courses.length > 1 ? '${course.name} +${e.courses.length - 1}' : course.name,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(fontSize: AppType.smd, color: palette.textMuted),
+                            ),
+                          ),
+                          if (!e.student.active) ...[
+                            const SizedBox(width: AppSpacing.md),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: 1),
+                              decoration: BoxDecoration(
+                                color: palette.textFaint.withValues(alpha: 0.13),
+                                borderRadius: AppRadii.all(AppRadii.xs),
+                              ),
+                              child: Text('Inactive', style: TextStyle(fontSize: AppType.tiny, color: palette.textMuted)),
+                            ),
+                          ],
+                        ],
                       ),
-                    const SizedBox(width: AppSpacing.sm),
-                    Icon(Icons.chevron_right, color: palette.textFaint),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
-            );
-          },
+                Icon(Icons.chevron_right, size: 20, color: palette.textFaint),
+              ],
+            ),
+          ),
         );
       },
     );
