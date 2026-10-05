@@ -314,6 +314,9 @@ class _BatchFormScreenState extends ConsumerState<BatchFormScreen> {
       backgroundColor: palette.bg,
       appBar: AppBar(
         backgroundColor: palette.bg,
+        leading: Center(
+          child: AppIconButton(icon: Icons.arrow_back, onTap: () => Navigator.of(context).pop()),
+        ),
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
@@ -409,11 +412,6 @@ class _BatchFormScreenState extends ConsumerState<BatchFormScreen> {
                     : 'Only active courses can take on a new batch.',
                 child: AttachedSelect<Course>(
                   label: 'Course',
-                  // Once picked, the closed trigger reads in the course's own category accent
-                  // with a matching dot - the same colour language the open panel's rows use,
-                  // rather than the value reverting to plain white the moment the panel closes.
-                  valueColor: meta.color,
-                  dotColor: meta.color,
                   options: selectable,
                   labelOf: (c) => c.name,
                   value: course,
@@ -457,6 +455,67 @@ class _BatchFormScreenState extends ConsumerState<BatchFormScreen> {
                       ],
                     );
                   },
+                  // The default trigger (a plain "Select a course" row) doesn't carry the
+                  // course's own icon/category the way the reference's does - built by hand here
+                  // rather than via valueColor/dotColor so the icon and the two-line
+                  // "COURSE" caption + value can sit together on the leading edge, matching it.
+                  triggerBuilder: (context, isOpen, toggle) => Pressable(
+                    onTap: _isEditing ? null : toggle,
+                    child: AnimatedContainer(
+                      duration: AppMotion.fade,
+                      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: AppSpacing.md),
+                      decoration: BoxDecoration(
+                        color: palette.surfaceRaised,
+                        borderRadius: AppRadii.all(AppRadii.lg),
+                        border: Border.all(color: isOpen ? palette.primary : palette.border),
+                      ),
+                      child: Row(
+                        children: [
+                          course == null
+                              ? Icon(Icons.menu_book_outlined, size: 16, color: palette.textMuted)
+                              : CourseIcon.forCourse(
+                                  iconKey: course.iconKey,
+                                  category: course.category,
+                                  color: meta.color,
+                                  size: 16,
+                                ),
+                          const SizedBox(width: AppSpacing.md),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  'COURSE',
+                                  style: AppType.sectionLabel(course == null ? palette.textMuted : meta.color),
+                                ),
+                                Text(
+                                  course?.name ?? 'Select a course',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    fontSize: AppType.lg,
+                                    fontWeight: course == null ? AppType.regular : AppType.semi,
+                                    color: course == null ? palette.textMuted : palette.text,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: AppSpacing.sm),
+                          if (_isEditing)
+                            Icon(Icons.lock_outline, size: 14, color: palette.textMuted)
+                          else
+                            AnimatedRotation(
+                              turns: isOpen ? 0.5 : 0,
+                              duration: AppMotion.chevron,
+                              curve: AppMotion.enter,
+                              child: Icon(Icons.keyboard_arrow_down_rounded, size: 18, color: palette.textMuted),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
                 ),
               ),
               _Field(

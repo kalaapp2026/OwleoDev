@@ -37,6 +37,17 @@ Future<void> showMoreMenu(BuildContext context, WidgetRef ref, AppShellState she
     // The scrim is drawn ourselves below (a blurred, tinted full-screen layer) - the framework's
     // own barrier stays invisible so it doesn't double up with it.
     barrierColor: Colors.transparent,
+    // We are the only way in or out: no drag-to-dismiss, no barrier-tap-to-dismiss racing against
+    // our own close handlers. Every dismissal goes through _MoreSheetBodyState._close, which
+    // reverses the shared animation BEFORE popping - if the framework's own barrier could also
+    // pop the route directly, that sequencing could be bypassed.
+    isDismissible: false,
+    enableDrag: false,
+    // Disables the framework's own slide-up/down transition entirely, in both directions.
+    // _MoreSheetBody drives 100% of the visible motion itself from one shared controller - see
+    // its class doc for why layering our fades under that separate, uncoordinated transition was
+    // the root cause of the open/close bugs this replaced.
+    sheetAnimationStyle: const AnimationStyle(duration: Duration.zero, reverseDuration: Duration.zero),
     builder: (sheetContext) {
       // showModalBottomSheet's Overlay sits above the whole Scaffold, including its
       // bottomNavigationBar - left alone, the sheet would cover the nav pill entirely. Reserving
@@ -48,13 +59,18 @@ Future<void> showMoreMenu(BuildContext context, WidgetRef ref, AppShellState she
   );
 }
 
-/// Layers extra polish on top of `showModalBottomSheet`'s own default slide-up transition (which
-/// stays in effect - see [showMoreMenu]): the scrim fades in, the card fades in, and once the card
-/// has mostly landed the tiles pop in with a stagger (`moreTileIn`, delayed to start once the card
-/// has mostly landed). Deliberately no extra vertical motion on the card itself - the route's own
-/// slide already carries the whole sheet (including the bottom nav bar copy, which should read as
-/// stationary) up from the bottom; a second translate on top of that read as two things rising in
-/// sequence instead of one.
+/// Owns the entire open/close animation itself - showMoreMenu disables the framework's own
+/// slide-up/down transition (see there) precisely so nothing else is moving the sheet's content
+/// underneath us. Backdrop opacity, backdrop blur strength, and the card's own height/opacity are
+/// all driven from the SAME [_reveal] animation, which is why they can't go out of sync with each
+/// other. [_controller] never fights another clock: [_close] reverses it and awaits that reverse
+/// BEFORE popping the route, so nothing is ever torn down while still visible.
+///
+/// The card grows from the bottom rather than sliding or fading in place - [Align.heightFactor]
+/// on the fully-laid-out card reveals it from its own bottom edge upward, so the bottom stays
+/// pinned and the top is what visibly rises, matching the reference. This also means the card's
+/// height never needs to be measured up front: Align lets it lay out at its natural size every
+/// frame regardless of how much of it is currently revealed.
 class _MoreSheetBody extends StatefulWidget {
   const _MoreSheetBody({required this.items, required this.shellState, required this.navBarReserve});
 
@@ -67,36 +83,46 @@ class _MoreSheetBody extends StatefulWidget {
 }
 
 class _MoreSheetBodyState extends State<_MoreSheetBody> with SingleTickerProviderStateMixin {
-  static const _cardDuration = Duration(milliseconds: 320);
-  static const _cardCurve = Cubic(0.16, 1, 0.3, 1);
-  // 320ms * 0.55 - tiles start popping once the card is mostly settled, same offset the reference
-  // uses (`SHEET_ANIM_MS * 0.55`).
-  static const _tileStartDelay = Duration(milliseconds: 176);
+  // The panel's own rise: bottom pinned, top edge growing up to full height, backdrop dimming and
+  // blurring in step with it - all three read off the same [_reveal] value, over the same span.
+  static const _revealDuration = Duration(milliseconds: 140);
+  static const _revealCurve = Curves.easeOut;
+  // Close is a plain, fast fade - no stagger-out, nothing to sequence. A separate reverseCurve
+  // (rather than reusing _revealCurve backwards) is what keeps this starting immediately at
+  // whatever value forward left off, instead of holding at 1.0 through the portion of the curve
+  // _revealCurve's Interval reserved for the tile stagger before it even starts moving.
+  static const _closeDuration = Duration(milliseconds: 130);
+  static const _closeCurve = Curves.easeIn;
+  // Tiles start once the panel has finished revealing, not mid-way through it - the panel itself
+  // is now a short, snappy grow rather than a long fade, so there's no "mostly settled" partway
+  // point left to key off of the way the previous timing did.
+  static const _tileStartDelay = Duration(milliseconds: 140);
   static const _tileStep = Duration(milliseconds: 45);
   static const _tileDuration = Duration(milliseconds: 360);
   static const _tileCurve = Cubic(0.34, 1.56, 0.64, 1);
 
   late final AnimationController _controller;
-  late final Animation<double> _backdropOpacity;
-  late final Animation<double> _cardProgress;
+  late final Animation<double> _reveal;
+  bool _closing = false;
 
   @override
   void initState() {
     super.initState();
     final lastTileEndMs = widget.items.isEmpty
-        ? _cardDuration.inMilliseconds
+        ? _revealDuration.inMilliseconds
         : _tileStartDelay.inMilliseconds +
             _tileStep.inMilliseconds * (widget.items.length - 1) +
             _tileDuration.inMilliseconds;
-    final totalMs = math.max(_cardDuration.inMilliseconds, lastTileEndMs);
-    _controller = AnimationController(vsync: this, duration: Duration(milliseconds: totalMs))..forward();
-    _backdropOpacity = CurvedAnimation(
+    final totalMs = math.max(_revealDuration.inMilliseconds, lastTileEndMs);
+    _controller = AnimationController(
+      vsync: this,
+      duration: Duration(milliseconds: totalMs),
+      reverseDuration: _closeDuration,
+    )..forward();
+    _reveal = CurvedAnimation(
       parent: _controller,
-      curve: Interval(0, (200 / totalMs).clamp(0.0, 1.0), curve: Curves.easeOut),
-    );
-    _cardProgress = CurvedAnimation(
-      parent: _controller,
-      curve: Interval(0, (_cardDuration.inMilliseconds / totalMs).clamp(0.0, 1.0), curve: _cardCurve),
+      curve: Interval(0, (_revealDuration.inMilliseconds / totalMs).clamp(0.0, 1.0), curve: _revealCurve),
+      reverseCurve: _closeCurve,
     );
   }
 
@@ -104,6 +130,20 @@ class _MoreSheetBodyState extends State<_MoreSheetBody> with SingleTickerProvide
   void dispose() {
     _controller.dispose();
     super.dispose();
+  }
+
+  /// The one path every dismissal goes through - the X, the backdrop, and "More" tapped again
+  /// all call this rather than popping directly. Reversing (and awaiting it) before popping means
+  /// the route is only ever removed once it's already invisible, so there's nothing left to tear
+  /// down mid-flight - that abrupt teardown of a still-live, still-blurring backdrop was the
+  /// likeliest source of the colour flash this replaced. [_closing] just guards against two taps
+  /// (say, the backdrop and the X in the same frame) each starting their own reverse and then
+  /// both trying to pop once it finishes.
+  Future<void> _close() async {
+    if (_closing) return;
+    _closing = true;
+    await _controller.reverse();
+    if (mounted) Navigator.of(context).pop();
   }
 
   Animation<double> _tileAnimation(int index) {
@@ -136,35 +176,47 @@ class _MoreSheetBodyState extends State<_MoreSheetBody> with SingleTickerProvide
           // BackdropFilter needs to sit in the widget tree above the content it blurs. Covers the
           // full screen (including where the nav bar sits) rather than stopping short of it: the
           // nav bar copy painted below is on top of this layer in the Stack, so it stays sharp
-          // regardless of what's blurred beneath it.
+          // regardless of what's blurred beneath it. The blur strength itself ramps with [_reveal]
+          // (not just the opacity) - wrapping a constant-strength blur in Opacity alone still
+          // composites at full strength from the first visible frame, which is what read as the
+          // blur "snapping" on rather than easing in.
           Positioned.fill(
             child: AnimatedBuilder(
-              animation: _backdropOpacity,
-              builder: (context, child) => Opacity(opacity: _backdropOpacity.value, child: child),
-              child: GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTap: () => Navigator.of(sheetContext).pop(),
-                child: BackdropFilter(
-                  filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
-                  child: Container(color: Colors.black.withValues(alpha: 0.25)),
-                ),
-              ),
+              animation: _reveal,
+              builder: (context, child) {
+                final t = _reveal.value.clamp(0.0, 1.0);
+                return Opacity(
+                  opacity: t,
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: _close,
+                    child: BackdropFilter(
+                      filter: ImageFilter.blur(sigmaX: 14 * t, sigmaY: 14 * t),
+                      child: Container(color: Colors.black.withValues(alpha: 0.25)),
+                    ),
+                  ),
+                );
+              },
             ),
           ),
           SafeArea(
             bottom: false,
             child: Align(
               alignment: Alignment.bottomCenter,
-              // Fade only, deliberately no translate: the *route itself* already slides this
-              // whole sheet up from the bottom (showModalBottomSheet's own default transition,
-              // still in effect here - see the class doc). Layering a second upward slide on top
-              // of that read as two separate things rising from the bottom in sequence, including
-              // the nav bar copy below, which should only ever look like it's already in place.
+              // Grows from the bottom rather than sliding or fading in place - see the class doc
+              // for why: Align's heightFactor reveals the (fully laid-out, natural-height) card
+              // from its own bottom edge upward, in lockstep with the same [_reveal] value driving
+              // the backdrop above, so the two can never drift apart.
               child: AnimatedBuilder(
-                animation: _cardProgress,
+                animation: _reveal,
                 builder: (context, child) {
-                  final t = _cardProgress.value.clamp(0.0, 1.0);
-                  return Opacity(opacity: t, child: child);
+                  final t = _reveal.value.clamp(0.0, 1.0);
+                  return Opacity(
+                    opacity: t,
+                    child: ClipRect(
+                      child: Align(alignment: Alignment.bottomCenter, heightFactor: t, child: child),
+                    ),
+                  );
                 },
                 child: Container(
                   margin: EdgeInsets.fromLTRB(12, 0, 12, widget.navBarReserve),
@@ -190,7 +242,7 @@ class _MoreSheetBodyState extends State<_MoreSheetBody> with SingleTickerProvide
                               ),
                             ),
                           ),
-                          _CloseButton(onTap: () => Navigator.of(sheetContext).pop()),
+                          _CloseButton(onTap: _close),
                         ],
                       ),
                       const SizedBox(height: AppSpacing.xl),
@@ -234,7 +286,8 @@ class _MoreSheetBodyState extends State<_MoreSheetBody> with SingleTickerProvide
             right: 0,
             bottom: 0,
             child: widget.shellState.buildOverlayBottomNav(
-              onNavigate: () => Navigator.of(sheetContext).pop(),
+              onNavigate: _close,
+              moreActive: true,
             ),
           ),
         ],

@@ -8,6 +8,7 @@ import 'package:nest_fe/core/auth/feature_keys.dart';
 import 'package:nest_fe/core/auth/session_controller.dart';
 import 'package:nest_fe/core/design/avatar.dart';
 import 'package:nest_fe/core/design/buttons.dart';
+import 'package:nest_fe/core/design/app_date_picker.dart';
 import 'package:nest_fe/core/design/calendar_modal.dart';
 import 'package:nest_fe/core/design/category_meta.dart';
 import 'package:nest_fe/core/design/pressable.dart';
@@ -361,16 +362,12 @@ class _UserFormScreenState extends ConsumerState<UserFormScreen> {
   }
 
   Future<void> _pickDob() async {
-    // 12 years back is a reasonable guess for a student's birth year to land on first open, but
-    // it's wrong for a trainer - landing there just makes an adult's DOB entry start with a long
-    // climb back through the year picker. 30 is a closer starting point for an adult.
-    final defaultYearsAgo = _isTrainer ? 30 : 12;
-    final picked = await showAppCalendar(
+    final picked = await showAppDatePicker(
       context: context,
-      month: _dob ?? DateTime(DateTime.now().year - defaultYearsAgo),
-      selectedDay: _dob?.day,
-      earliestMonth: DateTime(DateTime.now().year - 100, 1),
-      latestMonth: DateTime.now(),
+      title: 'Date of birth',
+      value: _dob,
+      minDate: DateTime(DateTime.now().year - 100, 1, 1),
+      maxDate: DateTime.now(),
     );
     if (picked != null) setState(() => _dob = picked);
   }

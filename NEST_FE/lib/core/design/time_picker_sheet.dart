@@ -368,11 +368,7 @@ class _TimePickerSheetState extends State<_TimePickerSheet> {
               height: _clockSize,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                gradient: RadialGradient(
-                  center: const Alignment(0, -0.2),
-                  colors: [accent.withValues(alpha: 0.08), palette.surfaceRaised],
-                  stops: const [0, 0.7],
-                ),
+                color: palette.surfaceRaised,
                 border: Border.all(color: accent.withValues(alpha: 0.33), width: 1.5),
               ),
             ),

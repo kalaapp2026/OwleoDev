@@ -46,6 +46,13 @@ class AppShellState extends ConsumerState<AppShell> {
   int _socialIndex = 0;
   int _erpIndex = 0;
 
+  /// True for exactly as long as the More sheet is up - drives the real nav bar's own "More" tab
+  /// so it reads as active while its sheet is open, the same way any other tab reads as active
+  /// while it's the current one. The sheet's own overlay copy of this bar always reports active
+  /// unconditionally instead (see [buildOverlayBottomNav]): it's only ever rendered while the
+  /// sheet is open in the first place, so there's no "closed" state for it to represent.
+  bool _moreMenuOpen = false;
+
   /// Whether the user has moved the toggle themselves. Until they do, the shell follows the
   /// Super Admin's configured starting side; after they do, it stops overriding them - otherwise
   /// the app would keep yanking them back on every rebuild.
@@ -79,7 +86,14 @@ class AppShellState extends ConsumerState<AppShell> {
   /// (see app_router.dart's _WithNavBar) needs its own override: reusing [onNavigate] there just
   /// pops back to whatever tab AppShell was last on instead of actually opening the menu, which is
   /// the exact bug this parameter exists to let that caller avoid.
-  Widget buildOverlayBottomNav({required VoidCallback onNavigate, VoidCallback? onMoreTap}) {
+  /// [moreActive] highlights the "More" tab - true for the More sheet's own copy of this bar
+  /// (there's no "closed" state for it to represent: it only ever renders while the sheet is
+  /// open), false for a pushed "More"-destination screen's copy, where no sheet is open over it.
+  Widget buildOverlayBottomNav({
+    required VoidCallback onNavigate,
+    VoidCallback? onMoreTap,
+    bool moreActive = false,
+  }) {
     final user = ref.watch(sessionControllerProvider).user;
     final isSuperAdmin = user?.isSuperAdmin ?? false;
     final settings = ref.watch(platformSettingsProvider).valueOrNull ?? PlatformSettings.fallback;
@@ -93,6 +107,7 @@ class AppShellState extends ConsumerState<AppShell> {
       erpIndex: _erpIndex,
       canToggleErp: canToggle,
       isSuperAdmin: isSuperAdmin,
+      moreActive: moreActive,
       onSocialTap: (i) {
         onNavigate();
         setState(() => _socialIndex = i);
@@ -321,9 +336,14 @@ class AppShellState extends ConsumerState<AppShell> {
         erpIndex: _erpIndex,
         canToggleErp: canToggle,
         isSuperAdmin: isSuperAdmin,
+        moreActive: _moreMenuOpen,
         onSocialTap: (i) => setState(() => _socialIndex = i),
         onErpTap: (i) => setState(() => _erpIndex = i),
-        onMoreTap: () => showMoreMenu(context, ref, this),
+        onMoreTap: () async {
+          setState(() => _moreMenuOpen = true);
+          await showMoreMenu(context, ref, this);
+          if (mounted) setState(() => _moreMenuOpen = false);
+        },
         onSearchTap: () => Navigator.of(context).push(
           MaterialPageRoute(builder: (_) => const SearchProfilesScreen()),
         ),
@@ -349,6 +369,7 @@ class BottomNavBar extends StatefulWidget {
     required this.erpIndex,
     required this.canToggleErp,
     required this.isSuperAdmin,
+    this.moreActive = false,
     required this.onSocialTap,
     required this.onErpTap,
     required this.onMoreTap,
@@ -361,6 +382,11 @@ class BottomNavBar extends StatefulWidget {
   final int erpIndex;
   final bool canToggleErp;
   final bool isSuperAdmin;
+
+  /// Highlights the "More" tab. Meaningless in Social mode - that slot is Search there, which
+  /// (like the ERP More slot itself) never has a "selected" state of its own.
+  final bool moreActive;
+
   final ValueChanged<int> onSocialTap;
   final ValueChanged<int> onErpTap;
   final VoidCallback onMoreTap;
@@ -480,10 +506,11 @@ class _BottomNavBarState extends State<BottomNavBar> with SingleTickerProviderSt
     }
 
     // Unlike the other four slots, this one triggers an action (ERP: opens the More sheet; Social:
-    // pushes Search) rather than switching to a tab - it never has a "selected" state of its own,
-    // so it always renders in the neutral colour.
-    Widget actionItem(IconData icon, String label, VoidCallback onTap, int slot) {
-      final color = colorScheme.onSurface.withValues(alpha: 0.45);
+    // pushes Search) rather than switching to a tab. Search never has a "selected" state of its
+    // own; More does, for exactly as long as its sheet is open - [selected] carries that in,
+    // rather than deriving it from [currentIndex] the way the other four slots do.
+    Widget actionItem(IconData icon, String label, VoidCallback onTap, int slot, {bool selected = false}) {
+      final color = selected ? colorScheme.primary : colorScheme.onSurface.withValues(alpha: 0.45);
       return Expanded(
         child: InkWell(
           onTap: onTap,
@@ -535,7 +562,13 @@ class _BottomNavBarState extends State<BottomNavBar> with SingleTickerProviderSt
               ),
             ),
             navItem(rightIcons[0].$1, rightIcons[0].$2, 3, isSocial ? widget.onSocialTap : widget.onErpTap, 2),
-            actionItem(rightIcons[1].$1, rightIcons[1].$2, isSocial ? widget.onSearchTap : widget.onMoreTap, 3),
+            actionItem(
+              rightIcons[1].$1,
+              rightIcons[1].$2,
+              isSocial ? widget.onSearchTap : widget.onMoreTap,
+              3,
+              selected: !isSocial && widget.moreActive,
+            ),
           ],
         ),
       ),
