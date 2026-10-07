@@ -128,6 +128,64 @@ class FeesApi {
     );
   }
 
+  /// The caller's OWN statement / Other fees - the student-facing screens. Separate routes rather
+  /// than the per-membership ones, which are FEES_ENTRY-gated and meant for staff.
+  Future<StudentStatement> myStatement({FeeCategory? category}) {
+    return _client.call(
+      (dio) => dio.get('/me/fees/statement', queryParameters: {'category': ?category?.wire}),
+      (data) => StudentStatement.fromJson(data as Map<String, dynamic>),
+    );
+  }
+
+  /// The caller's statement as CSV - the student-facing download.
+  Future<List<int>> downloadMyStatement({FeeCategory? category}) {
+    return _client.call(
+      (dio) => dio.get(
+        '/me/fees/statement/report',
+        queryParameters: {'category': ?category?.wire},
+        options: Options(responseType: ResponseType.bytes),
+      ),
+      (data) => data as List<int>,
+    );
+  }
+
+  /// Whether the server has online payment switched on.
+  Future<bool> paymentsEnabled() {
+    return _client.call(
+      (dio) => dio.get('/me/fees/payment-config'),
+      (data) => (data as Map<String, dynamic>)['enabled'] as bool? ?? false,
+    );
+  }
+
+  /// Pay one of my own fees in full. No amount is sent - the server works out what is owed.
+  Future<String> payMyFee({
+    required FeeCategory category,
+    String? courseId,
+    String? period,
+    String? feeTypeId,
+    String? studentFeeId,
+    required String method,
+  }) {
+    return _client.call(
+      (dio) => dio.post('/me/fees/pay', data: {
+        'category': category.wire,
+        'courseId': courseId,
+        'period': period,
+        'feeTypeId': feeTypeId,
+        'studentFeeId': studentFeeId,
+        'method': method,
+      }),
+      (data) => (data as Map<String, dynamic>)['gatewayRef'] as String? ?? '',
+    );
+  }
+
+  Future<StudentOtherFees> myOtherFees() {
+    return _client.call(
+      (dio) => dio.get('/me/fees/other'),
+      (data) => StudentOtherFees.fromJson(data as Map<String, dynamic>),
+    );
+  }
+
   /// Every payment the academy took between two dates. Totals come back matching the filters.
   Future<TransactionLedger> transactions({
     required DateTime from,

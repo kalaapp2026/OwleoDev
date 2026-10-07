@@ -10,6 +10,7 @@ import 'package:nest_fe/core/format/money.dart';
 import 'package:nest_fe/core/network/api_config.dart';
 import 'package:nest_fe/features/curriculum/data/study_material.dart';
 import 'package:nest_fe/features/curriculum/presentation/widgets/audio_player_panel.dart';
+import 'package:nest_fe/features/curriculum/presentation/widgets/markup_overlay.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 /// How the viewer was reached, which decides whether Prev/Next appear.
@@ -58,6 +59,9 @@ class _FileViewerScreenState extends ConsumerState<FileViewerScreen> {
   /// enlarge, and its controls are the point.
   bool _fullscreen = false;
 
+  /// While a pen/highlighter is active, pan and zoom are off so a stroke does not also drag the page.
+  bool _drawing = false;
+
   StudyMaterial get material => widget.material;
 
   Future<void> _download() async {
@@ -85,9 +89,14 @@ class _FileViewerScreenState extends ConsumerState<FileViewerScreen> {
           child: Stack(
             children: [
               Positioned.fill(
-                child: InteractiveViewer(
-                  maxScale: 5,
-                  child: Center(child: _preview(palette, accent, fullscreen: true)),
+                child: MarkupOverlay(
+                  onToolChanged: (t) => setState(() => _drawing = t != null),
+                  child: InteractiveViewer(
+                    maxScale: 5,
+                    panEnabled: !_drawing,
+                    scaleEnabled: !_drawing,
+                    child: Center(child: _preview(palette, accent, fullscreen: true)),
+                  ),
                 ),
               ),
               Positioned(

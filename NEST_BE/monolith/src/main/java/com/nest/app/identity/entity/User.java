@@ -62,6 +62,19 @@ public class User {
      * membership-confirmation flow instead of creating a second account. */
     private String email;
 
+    /** Per-user notification preferences (Settings > Notifications). */
+    @Column(name = "notify_attendance", nullable = false)
+    @Builder.Default
+    private boolean notifyAttendance = true;
+
+    @Column(name = "notify_events", nullable = false)
+    @Builder.Default
+    private boolean notifyEvents = true;
+
+    @Column(name = "notify_study", nullable = false)
+    @Builder.Default
+    private boolean notifyStudy = false;
+
     @Convert(converter = EncryptedStringConverter.class)
     @Column(name = "dob", length = 512)
     private String dobEncrypted;

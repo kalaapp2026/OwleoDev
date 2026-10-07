@@ -73,6 +73,20 @@ class CurriculumApi {
     );
   }
 
+  /// Active courses at the academy the caller is not enrolled in.
+  Future<List<ExploreCourse>> exploreCourses() {
+    return _client.call(
+      (dio) => dio.get('/me/courses/explore'),
+      (data) => (data as List).map((e) => ExploreCourse.fromJson(e as Map<String, dynamic>)).toList(),
+    );
+  }
+
+  Future<void> setCourseInterest(String courseId, bool interested) {
+    return _client.callVoid((dio) => interested
+        ? dio.post('/me/courses/$courseId/interest')
+        : dio.delete('/me/courses/$courseId/interest'));
+  }
+
   Future<Course> getCourse(String id) {
     return _client.call(
       (dio) => dio.get('/courses/$id'),

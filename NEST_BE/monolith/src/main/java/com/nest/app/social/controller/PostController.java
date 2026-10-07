@@ -61,6 +61,12 @@ public class PostController {
         return ResponseEntity.noContent().build();
     }
 
+    @DeleteMapping("/interests/events/{eventId}")
+    public ResponseEntity<Void> removeEventInterest(@PathVariable java.util.UUID eventId) {
+        interestService.removeEventInterest(eventId);
+        return ResponseEntity.noContent().build();
+    }
+
     @PostMapping("/interests")
     public void markInterest(@Valid @RequestBody MarkInterestRequest request) {
         interestService.markInterest(request);

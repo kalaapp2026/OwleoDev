@@ -162,3 +162,35 @@ class Course {
         iconKey: json['iconKey'] as String?,
       );
 }
+
+/// A course the student could join (they are not enrolled), and whether they have already said
+/// they are interested.
+class ExploreCourse {
+  const ExploreCourse({
+    required this.id,
+    required this.name,
+    required this.category,
+    required this.description,
+    required this.durationLevel,
+    required this.iconKey,
+    required this.interested,
+  });
+
+  final String id;
+  final String name;
+  final CourseCategory category;
+  final String? description;
+  final String? durationLevel;
+  final String? iconKey;
+  final bool interested;
+
+  factory ExploreCourse.fromJson(Map<String, dynamic> json) => ExploreCourse(
+        id: json['id'] as String,
+        name: json['name'] as String,
+        category: CourseCategory.fromWire(json['category'] as String?),
+        description: json['description'] as String?,
+        durationLevel: json['durationLevel'] as String?,
+        iconKey: json['iconKey'] as String?,
+        interested: json['interested'] as bool? ?? false,
+      );
+}

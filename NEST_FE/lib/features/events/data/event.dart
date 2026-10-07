@@ -30,6 +30,9 @@ class Event {
   /// `POST /interests`).
   final int interestedCount;
 
+  /// Whether the caller has marked interest - what the student Events screen toggles.
+  final bool interestedByMe;
+
   const Event({
     required this.id,
     required this.academyId,
@@ -50,6 +53,7 @@ class Event {
     required this.individualIds,
     required this.invitedCount,
     required this.interestedCount,
+    this.interestedByMe = false,
   });
 
   bool get isCancelled => status == 'CANCELLED';
@@ -79,6 +83,7 @@ class Event {
         individualIds: Set<String>.from(json['individualIds'] as List? ?? const []),
         invitedCount: json['invitedCount'] as int? ?? 0,
         interestedCount: json['interestedCount'] as int? ?? 0,
+        interestedByMe: json['interestedByMe'] as bool? ?? false,
       );
 }
 

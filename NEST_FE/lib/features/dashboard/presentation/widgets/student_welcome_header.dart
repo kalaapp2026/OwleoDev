@@ -7,6 +7,8 @@ import 'package:nest_fe/core/auth/membership_summary.dart';
 import 'package:nest_fe/core/auth/user_profile.dart';
 import 'package:nest_fe/core/design/pressable.dart';
 import 'package:nest_fe/features/academy/presentation/academy_profile_shared.dart' show AcademyCover, academyProfileProvider;
+import 'package:nest_fe/features/profile/data/self_profile_api.dart' show selfProfileProvider;
+import 'package:nest_fe/features/profile/presentation/profile_widgets.dart' show PhotoAvatar;
 
 /// The dashboard hero's background for every role: the active academy's cover photo, else the
 /// preset style the Admin picked on the Academy Profile (teal by default, which is the hero's
@@ -68,54 +70,69 @@ class StudentWelcomeHeader extends ConsumerWidget {
     final academyName = membership?.academyName;
     final profile = ref.watch(academyProfileProvider).valueOrNull;
 
-    return Stack(
+    // Same cover treatment as the Admin/Trainer dashboard (photo, else the academy's preset,
+    // running up behind the transparent app bar, with the academy logo overlapping its bottom
+    // edge) - the greeting and academy switcher then sit below it on the page background.
+    final palette = context.palette;
+    const coverHeight = 150.0;
+    const logoSize = 64.0;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Positioned.fill(
-          child: DashboardCoverBackdrop(
-            imageUrl: profile?.coverImageUrl,
-            styleKey: profile?.coverStyle,
-            height: double.infinity,
-            fullScrim: true,
+        SizedBox(
+          height: coverHeight + logoSize / 2,
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              DashboardCoverBackdrop(
+                  imageUrl: profile?.coverImageUrl, styleKey: profile?.coverStyle, height: coverHeight),
+              Positioned(
+                left: 20,
+                top: coverHeight - logoSize / 2,
+                // The student's own photo (initials until they add one) - not the academy's logo.
+                child: Container(
+                  decoration: BoxDecoration(
+                    borderRadius: AppRadii.all(logoSize * 0.3 + 3),
+                    border: Border.all(color: palette.bg, width: 3),
+                  ),
+                  child: PhotoAvatar(
+                    name: user.fullName,
+                    url: ref.watch(selfProfileProvider).valueOrNull?.profileImageUrl,
+                    size: logoSize,
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
-        _content(firstName, academyName),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, AppSpacing.xxl),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Welcome back',
+                  style: TextStyle(fontSize: AppType.sm, fontWeight: AppType.semi, color: palette.textMuted)),
+              const SizedBox(height: 2),
+              Text(
+                '$firstName 👋',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: AppType.x3l,
+                  fontWeight: AppType.heavy,
+                  letterSpacing: AppType.titleTracking,
+                  color: palette.text,
+                ),
+              ),
+              if (academyName != null) ...[
+                const SizedBox(height: AppSpacing.md),
+                _AcademyChip(user: user, membership: membership!, academyName: academyName),
+              ],
+            ],
+          ),
+        ),
       ],
-    );
-  }
-
-  Widget _content(String firstName, String? academyName) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(20, 4, 20, AppSpacing.xxl),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Welcome back',
-            style: TextStyle(
-              fontSize: AppType.sm,
-              fontWeight: AppType.semi,
-              color: Colors.white.withValues(alpha: 0.82),
-            ),
-          ),
-          const SizedBox(height: 2),
-          Text(
-            '$firstName \u{1F44B}',
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontSize: AppType.x3l,
-              fontWeight: AppType.heavy,
-              letterSpacing: AppType.titleTracking,
-              color: Colors.white,
-            ),
-          ),
-          if (academyName != null) ...[
-            const SizedBox(height: AppSpacing.md),
-            _AcademyChip(user: user, membership: membership!, academyName: academyName),
-          ],
-        ],
-      ),
     );
   }
 }

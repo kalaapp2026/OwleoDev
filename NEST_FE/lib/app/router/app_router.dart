@@ -12,13 +12,17 @@ import 'package:nest_fe/features/auth/presentation/become_artist_screen.dart';
 import 'package:nest_fe/features/auth/presentation/login_screen.dart';
 import 'package:nest_fe/features/curriculum/presentation/course_list_screen.dart';
 import 'package:nest_fe/features/curriculum/presentation/study_material_home_screen.dart';
+import 'package:nest_fe/features/curriculum/presentation/my_courses_screen.dart';
+import 'package:nest_fe/features/events/presentation/student_events_screen.dart';
 import 'package:nest_fe/features/enrolment/presentation/batch_list_screen.dart';
 import 'package:nest_fe/features/enrolment/presentation/student_search_screen.dart';
 import 'package:nest_fe/features/enrolment/presentation/user_list_screen.dart';
 import 'package:nest_fe/features/messages/presentation/messages_home_screen.dart';
 import 'package:nest_fe/features/events/presentation/event_form_screen.dart';
 import 'package:nest_fe/features/events/presentation/event_list_screen.dart';
+import 'package:nest_fe/features/profile/presentation/my_profile_screen.dart';
 import 'package:nest_fe/features/profile/presentation/profile_screen.dart';
+import 'package:nest_fe/features/profile/presentation/user_settings_screen.dart';
 import 'package:nest_fe/features/scheduling/presentation/calendar_screen.dart';
 import 'package:nest_fe/features/scheduling/presentation/schedule_screen.dart';
 import 'package:nest_fe/features/shell/presentation/app_shell.dart';
@@ -93,7 +97,19 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/erp/students', builder: (context, state) => const _WithNavBar(child: StudentSearchScreen())),
       GoRoute(path: '/erp/messages', builder: (context, state) => const _WithNavBar(child: MessagesHomeScreen())),
       GoRoute(path: '/erp/courses', builder: (context, state) => const _WithNavBar(child: CourseListScreen())),
-      GoRoute(path: '/erp/events', builder: (context, state) => const _WithNavBar(child: EventListScreen())),
+      GoRoute(
+        path: '/erp/events',
+        builder: (context, state) => _WithNavBar(
+          // A student gets their own audience-filtered list, never the staff event manager.
+          child: Consumer(
+            builder: (context, ref, _) =>
+                ref.watch(sessionControllerProvider).user?.activeMembership?.roleType == 'STUDENT'
+                    ? const StudentEventsScreen()
+                    : const EventListScreen(),
+          ),
+        ),
+      ),
+      GoRoute(path: '/erp/my-courses', builder: (context, state) => const _WithNavBar(child: MyCoursesScreen())),
       GoRoute(path: '/erp/events/new', builder: (context, state) => const EventFormScreen()),
       // Study Material is separate from Syllabus: one is a file drop for a batch, the other is
       // the course's curriculum structure.
@@ -105,6 +121,8 @@ final routerProvider = Provider<GoRouter>((ref) {
       // the class it applies to rather than from a screen that then asks which class you meant.
       GoRoute(path: '/erp/scheduling', builder: (context, state) => const _WithNavBar(child: ScheduleScreen())),
       GoRoute(path: '/erp/attendance', builder: (context, state) => const _WithNavBar(child: AttendanceHomeScreen())),
+      GoRoute(path: '/erp/my-profile', builder: (context, state) => const _WithNavBar(child: MyProfileScreen())),
+      GoRoute(path: '/erp/my-settings', builder: (context, state) => const _WithNavBar(child: UserSettingsScreen())),
       GoRoute(path: '/erp/calendar', builder: (context, state) => const CalendarScreen()),
       // Batches moved off the bottom tab bar (that slot is now Attendance, matching the
       // reference nav bar) - reachable from the More grid and the Dashboard's own Batches stat.

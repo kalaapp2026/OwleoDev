@@ -2,7 +2,9 @@ package com.nest.app.identity.controller;
 
 import com.nest.common.security.TenantContext;
 import com.nest.app.identity.dto.PasswordResetResponse;
+import com.nest.app.identity.dto.EmailChangeRequest;
 import com.nest.app.identity.dto.LanguageUpdateRequest;
+import com.nest.app.identity.dto.NotificationPrefsDto;
 import com.nest.app.identity.dto.ThemeUpdateRequest;
 import com.nest.app.identity.dto.UserProfileResponse;
 import com.nest.app.identity.dto.UserSearchResult;
@@ -50,6 +52,28 @@ public class UserController {
     @PatchMapping("/users/me/theme")
     public ResponseEntity<Void> updateTheme(@Valid @RequestBody ThemeUpdateRequest request) {
         userService.updateThemePreference(TenantContext.currentUserId(), request.themePreference());
+        return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/users/me/notification-prefs")
+    public NotificationPrefsDto notificationPrefs() {
+        return userService.notificationPrefs(TenantContext.currentUserId());
+    }
+
+    @PatchMapping("/users/me/notification-prefs")
+    public NotificationPrefsDto updateNotificationPrefs(@RequestBody NotificationPrefsDto prefs) {
+        return userService.updateNotificationPrefs(TenantContext.currentUserId(), prefs);
+    }
+
+    @PostMapping("/users/me/email/code")
+    public ResponseEntity<Void> requestEmailCode(@Valid @RequestBody EmailChangeRequest request) {
+        userService.requestEmailChange(TenantContext.currentUserId(), request.newEmail());
+        return ResponseEntity.accepted().build();
+    }
+
+    @PostMapping("/users/me/email")
+    public ResponseEntity<Void> confirmEmail(@Valid @RequestBody EmailChangeRequest request) {
+        userService.confirmEmailChange(TenantContext.currentUserId(), request.newEmail(), request.code());
         return ResponseEntity.noContent().build();
     }
 

@@ -25,6 +25,7 @@ class StatementRow {
     required this.status,
     this.paidOn,
     this.mode,
+    this.courseId,
   });
 
   /// The period ("2026-08") for a regular fee, or the fee's name for an Other one.
@@ -40,6 +41,9 @@ class StatementRow {
   final DateTime? paidOn;
   final String? mode;
 
+  /// Null for an Other fee. Identifies the row when paying it online.
+  final String? courseId;
+
   num get balance => fee - paid;
 
   factory StatementRow.fromJson(Map<String, dynamic> json) => StatementRow(
@@ -51,6 +55,7 @@ class StatementRow {
         status: PaymentStatus.fromWire(json['status'] as String?),
         paidOn: DateTime.tryParse(json['paidOn'] as String? ?? ''),
         mode: json['mode'] as String?,
+        courseId: json['courseId'] as String?,
       );
 }
 

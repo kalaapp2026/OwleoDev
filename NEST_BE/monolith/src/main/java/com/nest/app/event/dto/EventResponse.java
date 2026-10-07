@@ -19,6 +19,8 @@ public record EventResponse(
         /** Computed from real roster data for the current audienceType, never stored. */
         int invitedCount,
         /** Computed from the Interest table, never stored. */
-        int interestedCount
+        int interestedCount,
+        /** Whether the CALLER has marked interest - what the student Events screen toggles. */
+        boolean interestedByMe
 ) {
 }

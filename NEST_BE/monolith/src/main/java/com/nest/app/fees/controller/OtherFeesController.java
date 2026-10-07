@@ -84,6 +84,12 @@ public class OtherFeesController {
         return otherFeesService.studentOtherFees(membershipId);
     }
 
+    /** The caller's own Other fees - no feature needed, since it can only ever be their own. */
+    @GetMapping("/me/fees/other")
+    public StudentOtherFeesResponse myOtherFees() {
+        return otherFeesService.studentOtherFees(com.nest.common.security.TenantContext.currentMembershipId());
+    }
+
     @PostMapping("/fees/other/entries")
     @RequiresFeature(FeatureKey.FEES_ENTRY)
     public Map<String, UUID> recordPayment(@Valid @RequestBody RecordOtherFeeRequest request) {

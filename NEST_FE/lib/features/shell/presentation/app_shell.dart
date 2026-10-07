@@ -1,14 +1,20 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:nest_fe/core/network/api_config.dart';
+import 'package:nest_fe/features/profile/data/self_profile_api.dart' show selfProfileProvider;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:nest_fe/app/theme/app_tokens.dart';
+import 'package:nest_fe/app/theme/app_typography.dart';
 import 'package:nest_fe/app/theme/theme_controller.dart';
 import 'package:nest_fe/core/auth/session_controller.dart';
+import 'package:nest_fe/core/design/app_top_bar.dart' show ThemeModeButton;
 import 'package:nest_fe/core/design/avatar.dart';
 import 'package:nest_fe/l10n/app_localizations.dart';
 import 'package:nest_fe/core/widgets/owleo_wordmark.dart';
 import 'package:nest_fe/features/attendance/presentation/attendance_home_screen.dart';
+import 'package:nest_fe/features/attendance/presentation/student_attendance_home_screen.dart';
+import 'package:nest_fe/features/fees/presentation/student_fees_screen.dart';
 import 'package:nest_fe/features/dashboard/presentation/dashboard_screen.dart';
 import 'package:nest_fe/features/fees/presentation/fees_landing_screen.dart';
 import 'package:nest_fe/features/notification/data/notification_api.dart';
@@ -170,6 +176,7 @@ class AppShellState extends ConsumerState<AppShell> {
     final user = session.user;
     final hasErpAccess = user?.hasErpAccess ?? false;
     final isSuperAdmin = user?.isSuperAdmin ?? false;
+    final isStudent = user?.activeMembership?.roleType == 'STUDENT';
 
     // Platform-wide rollout setting (Super Admin). Falls back to "both sides, ERP first" while it
     // loads or if the call fails - briefly showing a toggle that then disappears is better than
@@ -206,6 +213,8 @@ class AppShellState extends ConsumerState<AppShell> {
     // still has the switcher on every other ERP tab).
     final isDashboardHero = _mode == AppMode.erp && _erpIndex == 0 && !isSuperAdmin;
 
+    final studentHeader = isStudent && _mode == AppMode.erp && !isDashboardHero && user != null;
+
     return Scaffold(
       // Truly transparent rather than colour-matched to the gradient's start: matching a solid
       // colour to a gradient still leaves a seam the moment the gradient's own stops shift, which
@@ -217,9 +226,56 @@ class AppShellState extends ConsumerState<AppShell> {
         backgroundColor: isDashboardHero ? Colors.transparent : null,
         elevation: isDashboardHero ? 0 : null,
         foregroundColor: isDashboardHero ? Colors.white : null,
-        title: isDashboardHero ? null : (title.isEmpty ? const OwleoWordmark() : Text(title)),
+        // A student's tabs carry the reference's header: title over the student's name, a hairline
+        // under it, and the theme toggle beside the bell.
+        // Tabs have no route to pop, so Back returns to the Dashboard tab.
+        automaticallyImplyLeading: false,
+        leadingWidth: studentHeader ? AppSpacing.x4l + 36 + AppSpacing.lg : null,
+        leading: studentHeader
+            ? Padding(
+                padding: const EdgeInsets.only(left: AppSpacing.x4l, right: AppSpacing.lg),
+                child: Center(
+                  child: GestureDetector(
+                    onTap: () => setState(() => _erpIndex = 0),
+                    child: Container(
+                      width: 36,
+                      height: 36,
+                      decoration: BoxDecoration(
+                        color: context.palette.surfaceRaised,
+                        borderRadius: AppRadii.all(AppRadii.lg),
+                        border: Border.all(color: context.palette.border),
+                      ),
+                      child: Icon(Icons.arrow_back, size: 18, color: context.palette.text),
+                    ),
+                  ),
+                ),
+              )
+            : null,
+        titleSpacing: studentHeader ? 0 : null,
+        title: isDashboardHero
+            ? null
+            : studentHeader
+                ? Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(title),
+                      Text(user.fullName,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(fontSize: AppType.smd, color: context.palette.textMuted)),
+                    ],
+                  )
+                : (title.isEmpty ? const OwleoWordmark() : Text(title)),
+        bottom: studentHeader
+            ? PreferredSize(
+                preferredSize: const Size.fromHeight(1),
+                child: Divider(height: 1, thickness: 1, color: context.palette.borderSoft),
+              )
+            : null,
         actions: [
           if (isDashboardHero) const _ThemeToggleButton(),
+          if (studentHeader) const Padding(padding: EdgeInsets.only(right: 4), child: ThemeModeButton()),
           // Platform settings live in the app bar, not just on the Platform dashboard: a gear icon
           // is where anyone looks for settings first, and on the dashboard it sat below the charts
           // where it was easy to miss entirely.
@@ -247,7 +303,15 @@ class AppShellState extends ConsumerState<AppShell> {
                     shape: BoxShape.circle,
                     border: Border.all(color: Colors.white.withValues(alpha: 0.35), width: 2),
                   ),
-                  child: PersonAvatar(name: user.fullName, seed: user.id, size: 30),
+                  child: Builder(builder: (context) {
+                    final fallback = PersonAvatar(name: user.fullName, seed: user.id, size: 30);
+                    final photo = ApiConfig.resolveMediaUrl(ref.watch(selfProfileProvider).valueOrNull?.profileImageUrl);
+                    if (photo == null) return fallback;
+                    return ClipOval(
+                      child: Image.network(photo,
+                          width: 30, height: 30, fit: BoxFit.cover, errorBuilder: (_, _, _) => fallback),
+                    );
+                  }),
                 ),
               ),
             )
@@ -298,6 +362,8 @@ class AppShellState extends ConsumerState<AppShell> {
                     .toList(),
               ),
           ],
+          // Mirror the title's 20px left inset on the right (an IconButton's glyph sits 12px in).
+          if (studentHeader) const SizedBox(width: 8),
         ],
       ),
       body: IndexedStack(
@@ -320,12 +386,13 @@ class AppShellState extends ConsumerState<AppShell> {
                     BillingScreen(embedded: true),
                     ProfileScreen(),
                   ]
-                : const [
-                    DashboardScreen(),
-                    AttendanceHomeScreen(embedded: true),
-                    SizedBox.shrink(),
-                    FeesLandingScreen(),
-                    ProfileScreen(),
+                : [
+                    const DashboardScreen(),
+                    // A student's own attendance/fees, never the staff marking/collection screens.
+                    isStudent ? const StudentAttendanceHomeScreen() : const AttendanceHomeScreen(embedded: true),
+                    const SizedBox.shrink(),
+                    isStudent ? const StudentFeesScreen() : const FeesLandingScreen(),
+                    const ProfileScreen(),
                   ],
           ),
         ],

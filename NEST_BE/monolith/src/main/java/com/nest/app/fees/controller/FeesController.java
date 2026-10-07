@@ -11,9 +11,11 @@ import com.nest.app.fees.dto.FeeSlipResponse;
 import com.nest.app.fees.dto.FeeTransactionResponse;
 import com.nest.app.fees.dto.RecordFeeEntryRequest;
 import com.nest.app.fees.service.FeeSlipService;
+import com.nest.app.fees.service.StudentPaymentService;
 import com.nest.app.fees.service.FeesService;
 import com.nest.common.security.FeatureKey;
 import com.nest.common.security.RequiresFeature;
+import com.nest.common.security.TenantContext;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpHeaders;
@@ -37,10 +39,13 @@ public class FeesController {
 
     private final FeesService feesService;
     private final FeeSlipService feeSlipService;
+    private final StudentPaymentService studentPaymentService;
 
-    public FeesController(FeesService feesService, FeeSlipService feeSlipService) {
+    public FeesController(FeesService feesService, FeeSlipService feeSlipService,
+                          StudentPaymentService studentPaymentService) {
         this.feesService = feesService;
         this.feeSlipService = feeSlipService;
+        this.studentPaymentService = studentPaymentService;
     }
 
     @PostMapping("/fees/entries")
@@ -113,6 +118,35 @@ public class FeesController {
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=fee-statement.csv")
                 .contentType(MediaType.parseMediaType("text/csv"))
                 .body(csv);
+    }
+
+    /** The caller's own statement - no feature needed, since it can only ever be their own. */
+    @GetMapping("/me/fees/statement")
+    public StudentStatementResponse myStatement(@RequestParam(required = false) FeeCategory category) {
+        return feesService.statement(TenantContext.currentMembershipId(), category);
+    }
+
+    @GetMapping("/me/fees/statement/report")
+    public ResponseEntity<byte[]> myStatementReport(@RequestParam(required = false) FeeCategory category) {
+        byte[] csv = feesService.generateStatementCsv(TenantContext.currentMembershipId(), category)
+                .getBytes(StandardCharsets.UTF_8);
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=fee-statement.csv")
+                .contentType(MediaType.parseMediaType("text/csv"))
+                .body(csv);
+    }
+
+    /** Whether online payment is switched on - the app hides "Pay now" when it is not. */
+    @GetMapping("/me/fees/payment-config")
+    public java.util.Map<String, Object> paymentConfig() {
+        return java.util.Map.of("enabled", studentPaymentService.enabled());
+    }
+
+    /** The caller paying their own fee. No feature gate: it can only ever settle their own rows. */
+    @PostMapping("/me/fees/pay")
+    public com.nest.app.fees.dto.PayFeeResponse payOwnFee(
+            @Valid @RequestBody com.nest.app.fees.dto.PayFeeRequest request) {
+        return studentPaymentService.pay(request);
     }
 
     @GetMapping("/fees/balance")

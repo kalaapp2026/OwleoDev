@@ -8,6 +8,8 @@ import com.nest.app.identity.repository.RefreshTokenRepository;
 import com.nest.app.identity.repository.UserRepository;
 import com.nest.app.storage.FileStorageService;
 import com.nest.common.audit.Auditable;
+import com.nest.app.identity.dto.NotificationPrefsDto;
+import com.nest.app.identity.entity.OtpPurpose;
 import com.nest.common.exception.BadRequestException;
 import com.nest.common.exception.ResourceNotFoundException;
 import com.nest.common.security.TenantContext;
@@ -31,10 +33,12 @@ public class UserService {
     private final TempPasswordGenerator tempPasswordGenerator;
     private final RefreshTokenRepository refreshTokenRepository;
     private final FileStorageService fileStorageService;
+    private final OtpService otpService;
 
     public UserService(UserRepository userRepository, PrincipalAssembler principalAssembler, PasswordEncoder passwordEncoder,
                         TempPasswordGenerator tempPasswordGenerator, RefreshTokenRepository refreshTokenRepository,
-                        FileStorageService fileStorageService) {
+                        FileStorageService fileStorageService, OtpService otpService) {
+        this.otpService = otpService;
         this.userRepository = userRepository;
         this.principalAssembler = principalAssembler;
         this.passwordEncoder = passwordEncoder;
@@ -89,6 +93,46 @@ public class UserService {
         User user = userRepository.findById(userId).orElseThrow(() -> new ResourceNotFoundException("User not found"));
         user.setThemePreference(preference);
         userRepository.save(user);
+    }
+
+    @Transactional(readOnly = true)
+    public NotificationPrefsDto notificationPrefs(UUID userId) {
+        User u = userRepository.findById(userId).orElseThrow(() -> new ResourceNotFoundException("User not found"));
+        return new NotificationPrefsDto(u.isNotifyAttendance(), u.isNotifyEvents(), u.isNotifyStudy());
+    }
+
+    @Transactional
+    public NotificationPrefsDto updateNotificationPrefs(UUID userId, NotificationPrefsDto prefs) {
+        User u = userRepository.findById(userId).orElseThrow(() -> new ResourceNotFoundException("User not found"));
+        u.setNotifyAttendance(prefs.attendance());
+        u.setNotifyEvents(prefs.events());
+        u.setNotifyStudy(prefs.study());
+        userRepository.save(u);
+        return prefs;
+    }
+
+    /** Step 1 of changing the login email: send a code to the NEW address. The address must not
+     * already belong to someone else. */
+    @Transactional
+    public void requestEmailChange(UUID userId, String newEmail) {
+        String email = newEmail.trim();
+        userRepository.findByEmailIgnoreCase(email).filter(o -> !o.getId().equals(userId)).ifPresent(o -> {
+            throw new BadRequestException("That email is already used by another account");
+        });
+        otpService.requestOtpForEmail(email, OtpPurpose.EMAIL_CHANGE, userId);
+    }
+
+    /** Step 2: the code proves the caller can read mail at the new address; only then is it saved. */
+    @Transactional
+    public void confirmEmailChange(UUID userId, String newEmail, String code) {
+        String email = newEmail.trim();
+        UUID ctx = otpService.verifyOtpForEmail(email, code, OtpPurpose.EMAIL_CHANGE);
+        if (!userId.equals(ctx)) {
+            throw new BadRequestException("That code was not issued for this account");
+        }
+        User u = userRepository.findById(userId).orElseThrow(() -> new ResourceNotFoundException("User not found"));
+        u.setEmail(email);
+        userRepository.save(u);
     }
 
     @Transactional

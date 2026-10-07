@@ -8,6 +8,7 @@ import 'package:nest_fe/l10n/app_localizations.dart';
 import 'package:nest_fe/app/theme/app_theme.dart';
 import 'package:nest_fe/app/theme/theme_controller.dart';
 import 'package:nest_fe/core/providers/core_providers.dart';
+import 'package:nest_fe/core/security/app_lock.dart';
 import 'package:nest_fe/core/widgets/app_notice.dart';
 import 'package:nest_fe/features/platform/data/device_install_service.dart';
 import 'package:nest_fe/features/platform/data/platform_api.dart';
@@ -59,6 +60,8 @@ class _OwleoNestAppState extends ConsumerState<OwleoNestApp> {
       // Arabic flips the whole layout to RTL from here automatically - Flutter derives text
       // direction from the locale, so nothing downstream needs to special-case it.
       routerConfig: router,
+      // The PIN screen sits over everything, including routes pushed on top of the shell.
+      builder: (context, child) => AppLockGate(child: child),
     );
   }
 }

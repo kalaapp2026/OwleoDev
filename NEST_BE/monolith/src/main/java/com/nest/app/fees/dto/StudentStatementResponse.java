@@ -38,7 +38,9 @@ public record StudentStatementResponse(
             BigDecimal paid,
             PaymentStatus status,
             LocalDate paidOn,
-            FeeMode mode
+            FeeMode mode,
+            /** Null for an Other fee. Lets the caller pay exactly this row. */
+            java.util.UUID courseId
     ) {
     }
 }

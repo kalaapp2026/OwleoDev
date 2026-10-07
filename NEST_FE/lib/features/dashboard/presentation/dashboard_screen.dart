@@ -8,6 +8,7 @@ import 'package:nest_fe/features/curriculum/data/curriculum_api.dart';
 import 'package:nest_fe/features/dashboard/presentation/widgets/admin_welcome_header.dart';
 import 'package:nest_fe/features/dashboard/presentation/widgets/revenue_dues_card.dart';
 import 'package:nest_fe/features/dashboard/presentation/widgets/stats_row.dart';
+import 'package:nest_fe/features/dashboard/presentation/widgets/student_material_strip.dart';
 import 'package:nest_fe/features/dashboard/presentation/widgets/student_summary.dart';
 import 'package:nest_fe/features/dashboard/presentation/widgets/student_welcome_header.dart';
 import 'package:nest_fe/features/dashboard/presentation/widgets/todays_schedule_card.dart';
@@ -81,6 +82,8 @@ class _StudentDashboardBody extends ConsumerWidget {
                   const SizedBox(height: AppSpacing.xxl),
                   UpcomingEventsCard(academyId: academyId),
                 ],
+                const SizedBox(height: AppSpacing.xxl),
+                const StudentMaterialStrip(),
               ],
             ),
           ),

@@ -13,11 +13,16 @@ import 'package:nest_fe/features/profile/presentation/edit_my_profile_screen.dar
 import 'package:nest_fe/features/profile/presentation/profile_sections.dart';
 import 'package:nest_fe/features/profile/presentation/profile_widgets.dart';
 import 'package:nest_fe/features/profile/presentation/record_screens.dart';
+import 'package:nest_fe/features/profile/presentation/user_settings_screen.dart';
 
 /// The signed-in person's own profile: identity, the academies they belong to and what they are
 /// enrolled in there, personal details, and their self-logged performance and achievements.
 class MyProfileScreen extends ConsumerStatefulWidget {
-  const MyProfileScreen({super.key});
+  const MyProfileScreen({super.key, this.embedded = false});
+
+  /// True when it IS the Profile tab: no back button of its own, and Settings sits beside Edit
+  /// (the reference's profile header carries both).
+  final bool embedded;
 
   @override
   ConsumerState<MyProfileScreen> createState() => _MyProfileScreenState();
@@ -51,17 +56,21 @@ class _MyProfileScreenState extends ConsumerState<MyProfileScreen> {
     final profileAsync = ref.watch(selfProfileProvider);
     return Scaffold(
       backgroundColor: palette.bg,
-      appBar: AppBar(
-        title: const Text('My Profile'),
-        actions: [
-          if (profileAsync.hasValue)
-            TextButton.icon(
-              onPressed: () => _push(EditMyProfileScreen(profile: profileAsync.requireValue)),
-              icon: const Icon(Icons.edit_outlined, size: 14),
-              label: const Text('Edit'),
+      // Embedded as the Profile tab, the shell already provides the app bar - a second one here
+      // would stack two. Edit and Settings move into the page itself instead.
+      appBar: widget.embedded
+          ? null
+          : AppBar(
+              title: const Text('My Profile'),
+              actions: [
+                if (profileAsync.hasValue)
+                  TextButton.icon(
+                    onPressed: () => _push(EditMyProfileScreen(profile: profileAsync.requireValue)),
+                    icon: const Icon(Icons.edit_outlined, size: 14),
+                    label: const Text('Edit'),
+                  ),
+              ],
             ),
-        ],
-      ),
       body: AsyncValueView(
         value: profileAsync,
         onRetry: () => ref.invalidate(selfProfileProvider),
@@ -96,6 +105,22 @@ class _MyProfileScreenState extends ConsumerState<MyProfileScreen> {
       child: ListView(
         padding: const EdgeInsets.fromLTRB(AppSpacing.xxl, AppSpacing.xxl, AppSpacing.xxl, AppSpacing.x6l),
         children: [
+          if (widget.embedded)
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                IconButton(
+                  tooltip: 'Settings',
+                  icon: const Icon(Icons.settings_outlined, size: 20),
+                  onPressed: () => _push(const UserSettingsScreen()),
+                ),
+                TextButton.icon(
+                  onPressed: () => _push(EditMyProfileScreen(profile: p)),
+                  icon: const Icon(Icons.edit_outlined, size: 14),
+                  label: const Text('Edit'),
+                ),
+              ],
+            ),
           // Hero
           ProfileHero(
             profile: p,

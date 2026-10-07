@@ -353,9 +353,11 @@ public class FeesService {
             throw new ResourceNotFoundException("Student not found: " + membershipId);
         }
 
+        // A student reading their OWN statement is never course-scoped; only someone else's is.
+        boolean isSelf = membershipId.equals(TenantContext.currentMembershipId());
         Map<UUID, BigDecimal> agreedFeeByCourse = courseMapRepository.findByMembershipId(membershipId).stream()
                 .filter(cm -> cm.getAgreedFee() != null)
-                .filter(cm -> courseFeatureGuard.hasCourseFeature(cm.getCourseId(), FeatureKey.FEES_ENTRY))
+                .filter(cm -> isSelf || courseFeatureGuard.hasCourseFeature(cm.getCourseId(), FeatureKey.FEES_ENTRY))
                 .collect(Collectors.toMap(CourseMap::getCourseId, CourseMap::getAgreedFee, (a, b) -> a));
 
         Map<UUID, String> courseNames = courseRepository.findAllById(agreedFeeByCourse.keySet()).stream()
@@ -417,7 +419,8 @@ public class FeesService {
                     fee, paid,
                     deriveStatus(closed, fee, paid, fee.subtract(paid), lastPayment, slip, today),
                     lastPayment == null ? null : lastPayment.getOccurredOn(),
-                    lastPayment == null ? null : lastPayment.getMode()));
+                    lastPayment == null ? null : lastPayment.getMode(),
+                    key.courseId()));
 
             totalBilled = totalBilled.add(fee);
             totalPaid = totalPaid.add(paid);

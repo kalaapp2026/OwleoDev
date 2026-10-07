@@ -162,4 +162,8 @@ class EventsApi {
   Future<void> markInterested(String eventId) {
     return _client.callVoid((dio) => dio.post('/interests', data: {'eventId': eventId, 'postId': null}));
   }
+
+  Future<void> unmarkInterested(String eventId) {
+    return _client.callVoid((dio) => dio.delete('/interests/events/$eventId'));
+  }
 }

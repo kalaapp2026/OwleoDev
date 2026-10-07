@@ -194,4 +194,43 @@ class AuthApi {
   Future<void> updateLanguage(String tag) {
     return _client.callVoid((dio) => dio.patch('/users/me/language', data: {'languagePreference': tag}));
   }
+
+  // ---- Settings: notification preferences, login email, deletion request ----
+
+  Future<({bool attendance, bool events, bool study})> notificationPrefs() {
+    return _client.call(
+      (dio) => dio.get('/users/me/notification-prefs'),
+      (data) {
+        final m = data as Map<String, dynamic>;
+        return (
+          attendance: m['attendance'] as bool? ?? true,
+          events: m['events'] as bool? ?? true,
+          study: m['study'] as bool? ?? false,
+        );
+      },
+    );
+  }
+
+  Future<void> updateNotificationPrefs({required bool attendance, required bool events, required bool study}) {
+    return _client.callVoid((dio) => dio.patch('/users/me/notification-prefs',
+        data: {'attendance': attendance, 'events': events, 'study': study}));
+  }
+
+  /// Step 1 of changing the login email: a code is sent to the NEW address.
+  Future<void> requestEmailChangeCode(String newEmail) {
+    return _client.callVoid((dio) => dio.post('/users/me/email/code', data: {'newEmail': newEmail}));
+  }
+
+  /// Step 2: the code proves the new address is reachable, then it replaces the old one.
+  Future<void> confirmEmailChange(String newEmail, String code) {
+    return _client.callVoid((dio) => dio.post('/users/me/email', data: {'newEmail': newEmail, 'code': code}));
+  }
+
+  /// Returns false when a request was already pending.
+  Future<bool> requestAccountDeletion() {
+    return _client.call(
+      (dio) => dio.post('/me/deletion-request'),
+      (data) => (data as Map<String, dynamic>)['created'] as bool? ?? true,
+    );
+  }
 }

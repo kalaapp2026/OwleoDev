@@ -176,12 +176,48 @@ public class EventService {
 
     @Transactional(readOnly = true)
     public EventResponse get(UUID id) {
-        return toResponse(eventRepository.findById(id).orElseThrow(() -> new ResourceNotFoundException("Event not found: " + id)));
+        Event event = eventRepository.findById(id).orElseThrow(() -> new ResourceNotFoundException("Event not found: " + id));
+        if (!visibleToCaller(event)) throw new ResourceNotFoundException("Event not found: " + id);
+        return toResponse(event);
     }
 
     @Transactional(readOnly = true)
     public List<EventResponse> listForAcademy(UUID academyId) {
-        return eventRepository.findByAcademyId(academyId).stream().map(this::toResponse).collect(Collectors.toList());
+        return eventRepository.findByAcademyId(academyId).stream()
+                .filter(this::visibleToCaller)
+                .map(this::toResponse).collect(Collectors.toList());
+    }
+
+    /**
+     * A Student sees only the events aimed at them: not drafts, and only the audiences that
+     * include them (everyone, their courses, their batches, or a personal invite). Everyone else
+     * keeps the academy-wide list - staff manage events, so they see them all.
+     */
+    private boolean visibleToCaller(Event e) {
+        com.nest.common.security.MembershipClaim claim;
+        try {
+            claim = TenantContext.currentMembership();
+        } catch (com.nest.common.exception.ForbiddenException ex) {
+            return true; // a Guest/Artist has no academy role to narrow by
+        }
+        if (claim.roleType() != Role.STUDENT) return true;
+        if (e.getStatus() == EventStatus.DRAFT) return false;
+        UUID me = claim.membershipId();
+        return switch (e.getAudienceType()) {
+            case ALL_STUDENTS -> true;
+            case ALL_TRAINERS -> false;
+            case INDIVIDUALS -> e.getIndividualIds().contains(me)
+                    || e.getIndividualIds().contains(TenantContext.currentUserId());
+            case BY_BATCH, BY_COURSE -> {
+                var myBatchIds = batchMemberRepository.findByMembershipId(me).stream()
+                        .map(BatchMember::getBatchId).collect(Collectors.toSet());
+                if (e.getAudienceType() == EventAudienceType.BY_BATCH) {
+                    yield myBatchIds.stream().anyMatch(e.getBatchIds()::contains);
+                }
+                yield batchRepository.findAllById(myBatchIds).stream()
+                        .anyMatch(b -> e.getCourseIds().contains(b.getCourseId()));
+            }
+        };
     }
 
     @Transactional(readOnly = true)
@@ -262,6 +298,8 @@ public class EventService {
                 e.getEventDate(), e.getEndDate(), e.getLocation(), e.getVenueMapsUrl(), e.getVisibility(),
                 e.getCoverImageUrl(), e.getInterestDeadline(), e.getStatus(), e.getAudienceType(),
                 Set.copyOf(e.getCourseIds()), Set.copyOf(e.getBatchIds()), Set.copyOf(e.getIndividualIds()),
-                computeInvitedCount(e), interestedCount);
+                computeInvitedCount(e), interestedCount,
+                TenantContext.currentUserIdOrNull() != null
+                        && interestRepository.existsByUserIdAndEventId(TenantContext.currentUserIdOrNull(), e.getId()));
     }
 }

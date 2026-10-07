@@ -50,6 +50,19 @@ class NotificationDropdownContent extends ConsumerWidget {
                   style: Theme.of(context).textTheme.titleMedium,
                 ),
               ),
+              if (notificationsAsync.valueOrNull?.any((n) => !n.read) ?? false)
+                TextButton.icon(
+                  icon: const Icon(Icons.done_all, size: 15),
+                  label: const Text('Mark all read'),
+                  onPressed: () async {
+                    final api = ref.read(notificationApiProvider);
+                    for (final n in notificationsAsync.value!.where((n) => !n.read)) {
+                      await api.markRead(n.id);
+                    }
+                    ref.invalidate(notificationsProvider(module));
+                    ref.invalidate(unreadCountProvider(module));
+                  },
+                ),
               if (isSuperAdmin)
                 IconButton(
                   icon: const Icon(Icons.campaign_outlined),

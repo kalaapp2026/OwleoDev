@@ -10,5 +10,7 @@ public enum OtpPurpose {
     LOGIN,
     REGISTRATION,
     MEMBERSHIP_CONFIRMATION,
-    PASSWORD_RESET
+    PASSWORD_RESET,
+    /** Proves the new address is reachable before it replaces the login email. */
+    EMAIL_CHANGE
 }

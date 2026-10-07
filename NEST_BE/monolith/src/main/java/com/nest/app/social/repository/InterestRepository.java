@@ -17,4 +17,6 @@ public interface InterestRepository extends JpaRepository<Interest, UUID> {
     long countByEventId(UUID eventId);
 
     List<Interest> findByEventId(UUID eventId);
+
+    void deleteByUserIdAndEventId(UUID userId, UUID eventId);
 }

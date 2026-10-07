@@ -377,7 +377,9 @@ public class OtherFeesService {
         // A Trainer only sees this student's obligations for a course they hold FEES_ENTRY on -
         // matched through the specific one of the student's OWN batches this type is bound to,
         // since a shared type can span batches across several courses.
-        Optional<Set<UUID>> visibleCourseIds = courseFeatureGuard.visibleCourseIds(FeatureKey.FEES_ENTRY);
+        boolean isSelf = membershipId.equals(TenantContext.currentMembershipId());
+        Optional<Set<UUID>> visibleCourseIds = isSelf ? Optional.empty()
+                : courseFeatureGuard.visibleCourseIds(FeatureKey.FEES_ENTRY);
         if (visibleCourseIds.isPresent() && !types.isEmpty()) {
             Set<UUID> visibleSet = visibleCourseIds.get();
             Map<UUID, Batch> studentBatchesById = batchRepository.findAllById(studentBatchIds).stream()

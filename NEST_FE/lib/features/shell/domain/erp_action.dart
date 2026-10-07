@@ -14,6 +14,11 @@ class ErpAction {
   final List<String>? anyOfFeatures;
   final bool adminOnly;
   final bool superAdminOnly;
+  /// A tile that exists for the Student role only - the student-facing counterpart of a staff tile
+  /// that shares its label (Settings), so each role sees exactly one.
+  final bool studentOnly;
+  /// Staff-gated tile a Student ALSO sees (the screen behind it shows them their own view).
+  final bool alsoStudent;
 
   const ErpAction({
     required this.icon,
@@ -24,6 +29,8 @@ class ErpAction {
     this.anyOfFeatures,
     this.adminOnly = false,
     this.superAdminOnly = false,
+    this.studentOnly = false,
+    this.alsoStudent = false,
   });
 
   bool visibleFor(UserProfile user) {
@@ -35,6 +42,8 @@ class ErpAction {
     // membership, so none of these apply to them - showing them would just surface tiles that fail
     // the moment they're tapped (no active academy to scope the request to).
     if (user.isSuperAdmin) return false;
+    if (studentOnly) return user.activeMembership?.roleType == 'STUDENT';
+    if (alsoStudent && user.activeMembership?.roleType == 'STUDENT') return true;
     if (adminOnly) return user.isActiveAcademyAdmin;
     if (anyOfFeatures != null) {
       return user.isActiveAcademyAdmin || anyOfFeatures!.any(user.hasFeature);
@@ -58,10 +67,11 @@ class ErpAction {
 const kErpActions = <ErpAction>[
   ErpAction(icon: Icons.add_business_outlined, label: 'Academy Onboarding', route: '/erp/academies/new', superAdminOnly: true),
   ErpAction(icon: Icons.menu_book_outlined, label: 'Courses', route: '/erp/courses', adminOnly: true),
+  ErpAction(icon: Icons.menu_book_outlined, label: 'My Courses', route: '/erp/my-courses', studentOnly: true),
   ErpAction(icon: Icons.layers_outlined, label: 'Batches', route: '/erp/batches', requiredFeature: FeatureKeys.batchCreation),
   ErpAction(icon: Icons.calendar_month_outlined, label: 'Batch Scheduling', route: '/erp/scheduling',
       anyOfFeatures: [FeatureKeys.batchScheduling, FeatureKeys.reschedule]),
-  ErpAction(icon: Icons.event_outlined, label: 'Events', route: '/erp/events', requiredFeature: FeatureKeys.eventManagement),
+  ErpAction(icon: Icons.event_outlined, label: 'Events', route: '/erp/events', requiredFeature: FeatureKeys.eventManagement, alsoStudent: true),
   // adminOnly rather than a feature grant: none of the 13 delegable features maps to "send a
   // broadcast" yet (see BroadcastService's own doc comment) - Trainers still fully receive them.
   ErpAction(icon: Icons.chat_bubble_outline, label: 'Messages', route: '/erp/messages', adminOnly: true),
@@ -82,6 +92,8 @@ const kErpActions = <ErpAction>[
   // Own account password + this academy's plan/invoices - adminOnly rather than a feature grant,
   // since neither is delegable to a Trainer the way COURSE_MANAGEMENT/ABOUT_US_EDIT aren't.
   ErpAction(icon: Icons.tune_outlined, label: 'Settings', route: '/erp/academy-settings', adminOnly: true),
+  ErpAction(icon: Icons.person_outline, label: 'Profile', route: '/erp/my-profile', studentOnly: true),
+  ErpAction(icon: Icons.tune_outlined, label: 'Settings', route: '/erp/my-settings', studentOnly: true),
   // The three below are bottom-tab items (see app_shell.dart's _BottomNav), never shown in the
   // More grid - erpTabIndex-bound entries are filtered out there on purpose.
   ErpAction(icon: Icons.grid_view_outlined, label: 'Dashboard', erpTabIndex: 0),

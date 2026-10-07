@@ -20,6 +20,10 @@ class ProfileScreen extends ConsumerWidget {
 
     if (user == null) return const SizedBox.shrink();
 
+    // A student's Profile tab IS their rich profile (details, enrollment, performance log,
+    // achievements) - the generic list below is for the other roles.
+    if (user.activeMembership?.roleType == 'STUDENT') return const MyProfileScreen(embedded: true);
+
     return ListView(
       padding: const EdgeInsets.all(20),
       children: [

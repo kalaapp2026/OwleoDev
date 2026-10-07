@@ -6,19 +6,41 @@ import 'package:nest_fe/core/design/charts.dart';
 import 'package:nest_fe/core/design/pressable.dart';
 import 'package:nest_fe/core/widgets/async_value_view.dart';
 import 'package:nest_fe/features/attendance/data/attendance_api.dart';
+import 'package:nest_fe/core/format/money.dart';
 import 'package:nest_fe/features/attendance/data/student_attendance.dart';
+import 'package:nest_fe/features/fees/data/student_statement.dart' show FeeCategory;
+import 'package:nest_fe/features/fees/presentation/fees_screen.dart' show feesApiProvider;
 import 'package:nest_fe/features/scheduling/data/scheduling_api.dart';
 import 'package:nest_fe/features/shell/presentation/app_shell.dart';
 
 DateTime _dateOnly(DateTime d) => DateTime(d.year, d.month, d.day);
 
-// A "fee due" tile/card was tried here and pulled out: /students/{id}/statement is gated behind
-// the FEES_ENTRY feature (admin/trainer only, see FeesController) so a plain student gets a 403
-// even for their own membershipId - there is no backend route today for student self-service fee
-// viewing. Revisit when the Fees pass happens; showing a permanently-broken card is worse than
-// leaving it out (see this file's dashboard_screen.dart sibling comment on real-data-only cards).
+/// What the student still owes, with the most pressing item to name on the dashboard's Due card.
+typedef _FeeDue = ({num amount, String? line, DateTime? due});
 
-/// Three at-a-glance tiles: this month's attendance, enrolled course count and today's class
+final _myFeeDueProvider = FutureProvider.autoDispose<_FeeDue>((ref) async {
+  final statement = await ref.watch(feesApiProvider).myStatement();
+  final other = await ref.watch(feesApiProvider).myOtherFees();
+  final unpaidOther = other.fees.where((f) => !f.status.isSettled).toList()
+    ..sort((a, b) => (a.dueDate ?? DateTime(9999)).compareTo(b.dueDate ?? DateTime(9999)));
+  final unpaidRegular =
+      statement.rows.where((r) => r.category == FeeCategory.regular && !r.status.isSettled).toList();
+  // A fee with a due date outranks one without; otherwise the course fee is the headline.
+  final datedOther = unpaidOther.where((f) => f.dueDate != null).toList();
+  String? line;
+  DateTime? due;
+  if (datedOther.isNotEmpty) {
+    line = datedOther.first.name;
+    due = datedOther.first.dueDate;
+  } else if (unpaidRegular.isNotEmpty) {
+    line = '${unpaidRegular.first.context} · ${unpaidRegular.first.label}';
+  } else if (unpaidOther.isNotEmpty) {
+    line = unpaidOther.first.name;
+  }
+  return (amount: statement.outstanding + other.outstanding, line: line, due: due);
+});
+
+/// Four at-a-glance tiles: this month's attendance, enrolled course count and today's class
 /// count. Mirrors [DashboardStatsRow]'s tile layout but colour-coded per figure and wired to a
 /// single student's own data instead of academy-wide aggregates.
 class StudentQuickStats extends ConsumerWidget {
@@ -55,6 +77,7 @@ class StudentQuickStats extends ConsumerWidget {
       orElse: () => '—',
     );
 
+    final feeDue = ref.watch(_myFeeDueProvider).maybeWhen(data: (d) => money(d.amount), orElse: () => '—');
     final palette = context.palette;
     return Row(
       children: [
@@ -67,6 +90,17 @@ class StudentQuickStats extends ConsumerWidget {
             softColor: palette.primarySoft,
             onTap: () =>
                 context.findAncestorStateOfType<AppShellState>()?.goToErpTab(1),
+          ),
+        ),
+        const SizedBox(width: AppSpacing.sm),
+        Expanded(
+          child: _StudentStatTile(
+            icon: Icons.account_balance_wallet_outlined,
+            label: 'Fee due',
+            value: feeDue,
+            color: palette.notPaid,
+            softColor: palette.notPaidSoft,
+            onTap: () => context.findAncestorStateOfType<AppShellState>()?.goToErpTab(3),
           ),
         ),
         const SizedBox(width: AppSpacing.sm),
@@ -169,7 +203,7 @@ class _StudentStatTile extends StatelessWidget {
   }
 }
 
-/// The detail card below the quick-stat tiles: an attendance ring for the current month.
+/// The row under the quick-stat tiles: this month's attendance ring beside the fee Due card.
 class StudentAttendanceSummary extends ConsumerWidget {
   const StudentAttendanceSummary({super.key, required this.membershipId});
 
@@ -177,54 +211,106 @@ class StudentAttendanceSummary extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(child: _AttendanceRing(membershipId: membershipId)),
+          const SizedBox(width: AppSpacing.sm),
+          const Expanded(child: _DueCard()),
+        ],
+      ),
+    );
+  }
+}
+
+class _AttendanceRing extends ConsumerWidget {
+  const _AttendanceRing({required this.membershipId});
+  final String membershipId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
     final palette = context.palette;
     final attendanceAsync = ref.watch(studentAttendanceProvider(membershipId));
-
-    return _Card(
-      child: AsyncValueView<List<StudentAttendanceRecord>>(
-        value: attendanceAsync,
-        onRetry: () => ref.invalidate(studentAttendanceProvider(membershipId)),
-        data: (context, records) {
-          final summary = AttendanceMonthSummary.of(records, DateTime.now());
-          final ratio = summary.presentRatio;
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                'This month',
-                style: TextStyle(
-                  fontSize: AppType.smd,
-                  fontWeight: AppType.bold,
-                  color: palette.textMuted,
+    return Pressable(
+      onTap: () => context.findAncestorStateOfType<AppShellState>()?.goToErpTab(1),
+      borderRadius: AppRadii.all(AppRadii.x3l),
+      child: _Card(
+        child: AsyncValueView<List<StudentAttendanceRecord>>(
+          value: attendanceAsync,
+          onRetry: () => ref.invalidate(studentAttendanceProvider(membershipId)),
+          data: (context, records) {
+            final summary = AttendanceMonthSummary.of(records, DateTime.now());
+            final ratio = summary.presentRatio;
+            return Row(children: [
+              DonutChart(percent: (ratio ?? 0) * 100, color: palette.primary, size: 52),
+              const SizedBox(width: AppSpacing.md),
+              Expanded(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('This month',
+                        style: TextStyle(fontSize: AppType.sm, fontWeight: AppType.bold, color: palette.text)),
+                    const SizedBox(height: 2),
+                    Text(
+                      summary.total == 0 ? 'No classes yet' : '${summary.present}/${summary.total} classes',
+                      style: TextStyle(fontSize: AppType.xs, color: palette.textFaint),
+                    ),
+                  ],
                 ),
               ),
-              const SizedBox(height: AppSpacing.md),
-              Row(
-                children: [
-                  DonutChart(
-                    percent: (ratio ?? 0) * 100,
-                    color: palette.primary,
-                    size: 52,
-                  ),
-                  const SizedBox(width: AppSpacing.md),
-                  Expanded(
-                    child: Text(
-                      summary.total == 0
-                          ? 'No classes marked yet'
-                          : '${summary.present}/${summary.total} classes',
-                      style: TextStyle(
-                        fontSize: AppType.sm,
-                        fontWeight: AppType.semi,
-                        color: palette.textMuted,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
+            ]);
+          },
+        ),
+      ),
+    );
+  }
+}
+
+class _DueCard extends ConsumerWidget {
+  const _DueCard();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final palette = context.palette;
+    final async = ref.watch(_myFeeDueProvider);
+    final due = async.valueOrNull;
+    final clear = due != null && due.amount <= 0;
+    final color = clear ? palette.paidManual : palette.notPaid;
+    final soft = clear ? palette.paidManualSoft : palette.notPaidSoft;
+    final head = due == null
+        ? 'Fees'
+        : clear
+            ? 'All paid'
+            : due.due != null ? 'Due ${due.due!.day} ${monthsShort[due.due!.month - 1]}' : 'Fee due';
+    return Pressable(
+      onTap: () => context.findAncestorStateOfType<AppShellState>()?.goToErpTab(3),
+      borderRadius: AppRadii.all(AppRadii.x3l),
+      child: Container(
+        padding: const EdgeInsets.all(AppSpacing.xl),
+        decoration: BoxDecoration(
+          color: soft,
+          borderRadius: AppRadii.all(AppRadii.x3l),
+          border: Border.all(color: color.withValues(alpha: 0.27)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(head, style: TextStyle(fontSize: AppType.xs, fontWeight: AppType.bold, color: color)),
+            const SizedBox(height: 3),
+            Text(due == null ? '—' : money(due.amount),
+                style: TextStyle(fontSize: AppType.xxl, fontWeight: AppType.heavy, color: palette.text)),
+            if (due?.line != null && !clear) ...[
+              const SizedBox(height: 2),
+              Text(due!.line!,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: AppType.tiny, color: palette.textFaint)),
             ],
-          );
-        },
+          ],
+        ),
       ),
     );
   }
