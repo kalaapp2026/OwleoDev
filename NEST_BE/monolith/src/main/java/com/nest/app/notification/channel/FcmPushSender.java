@@ -100,7 +100,7 @@ public class FcmPushSender implements PushSender {
         String assertion = Jwts.builder()
                 .issuer(c.clientEmail)
                 .claim("scope", SCOPE)
-                .audience().add(c.tokenUri).and()
+                .audience().single(c.tokenUri)
                 .issuedAt(Date.from(now))
                 .expiration(Date.from(now.plusSeconds(3600)))
                 .signWith(c.privateKey, Jwts.SIG.RS256)
