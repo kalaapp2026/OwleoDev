@@ -81,7 +81,8 @@ class FeesRosterTest {
     @BeforeEach
     void setUp() {
         feesService = new FeesService(feeTransactionRepository, courseMapRepository, feeSlipRepository,
-                courseRepository, membershipRepository, userRepository, courseFeatureGuard, batchMemberRepository, batchRepository);
+                courseRepository, membershipRepository, userRepository, courseFeatureGuard, batchMemberRepository, batchRepository,
+                org.mockito.Mockito.mock(com.nest.app.notification.service.NotificationTriggers.class));
         UUID adminMembershipId = UUID.randomUUID();
         TenantContext.set(new NestPrincipal(UUID.randomUUID(), "meera", Role.ACADEMY_ADMIN,
                 List.of(new MembershipClaim(adminMembershipId, academyId, "Kalakshetra",

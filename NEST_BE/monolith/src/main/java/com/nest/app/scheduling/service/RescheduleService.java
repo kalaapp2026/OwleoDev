@@ -9,6 +9,7 @@ import com.nest.app.scheduling.entity.ClassInstanceStatus;
 import com.nest.app.scheduling.repository.ClassInstanceRepository;
 import com.nest.app.identity.entity.AcademyMembership;
 import com.nest.app.identity.repository.AcademyMembershipRepository;
+import com.nest.app.notification.service.NotificationTriggers;
 import com.nest.common.audit.Auditable;
 import com.nest.common.exception.BadRequestException;
 import com.nest.common.exception.ConflictException;
@@ -34,14 +35,17 @@ public class RescheduleService {
     private final AcademyMembershipRepository membershipRepository;
     private final BatchRepository batchRepository;
     private final CourseFeatureGuard courseFeatureGuard;
+    private final NotificationTriggers notificationTriggers;
 
     public RescheduleService(ClassInstanceRepository classInstanceRepository,
                               AcademyMembershipRepository membershipRepository,
-                              BatchRepository batchRepository, CourseFeatureGuard courseFeatureGuard) {
+                              BatchRepository batchRepository, CourseFeatureGuard courseFeatureGuard,
+                              NotificationTriggers notificationTriggers) {
         this.classInstanceRepository = classInstanceRepository;
         this.membershipRepository = membershipRepository;
         this.batchRepository = batchRepository;
         this.courseFeatureGuard = courseFeatureGuard;
+        this.notificationTriggers = notificationTriggers;
     }
 
     /** Per-course enforcement: the controller's @RequiresFeature(RESCHEDULE) only checks the
@@ -79,6 +83,8 @@ public class RescheduleService {
                 .originalInstanceId(original.getId())
                 .build();
         replacement = classInstanceRepository.save(replacement);
+        notificationTriggers.classRescheduled(original.getBatchId(), original.getDate(), request.newDate(),
+                request.newStartTime(), request.reason());
 
         return toResponse(replacement);
     }
@@ -99,7 +105,9 @@ public class RescheduleService {
         assertCanReschedule(instance.getBatchId());
         instance.setStatus(ClassInstanceStatus.CANCELLED);
         instance.setCancellationReason(reason);
-        return toResponse(classInstanceRepository.save(instance));
+        ClassInstance saved = classInstanceRepository.save(instance);
+        notificationTriggers.classCancelled(saved.getBatchId(), saved.getDate(), saved.getStartTime(), reason);
+        return toResponse(saved);
     }
 
     /** Puts a cancelled session back. The reason is cleared - keeping it would leave the row

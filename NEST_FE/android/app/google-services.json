@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "865244727878",
+    "project_id": "owleo-nest-91c26",
+    "storage_bucket": "owleo-nest-91c26.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:865244727878:android:31619fa570337c32925847",
+        "android_client_info": {
+          "package_name": "com.nest.nest_fe"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCL5LVvQAX5xOrvmzY2ASidsSoNMZrWwdo"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

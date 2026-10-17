@@ -5,6 +5,7 @@ import com.nest.app.attendance.dto.AttendanceResponse;
 import com.nest.app.attendance.dto.StudentAttendanceRecord;
 import com.nest.app.attendance.dto.SubmitAttendanceSheetRequest;
 import com.nest.app.attendance.entity.Attendance;
+import com.nest.app.attendance.entity.AttendanceStatus;
 import com.nest.app.attendance.repository.AttendanceRepository;
 import com.nest.app.curriculum.entity.Course;
 import com.nest.app.curriculum.repository.CourseRepository;
@@ -13,6 +14,7 @@ import com.nest.app.enrolment.repository.BatchRepository;
 import com.nest.app.identity.service.CourseFeatureGuard;
 import com.nest.app.scheduling.entity.ClassInstance;
 import com.nest.app.scheduling.repository.ClassInstanceRepository;
+import com.nest.app.notification.service.NotificationTriggers;
 import com.nest.common.audit.Auditable;
 import com.nest.common.exception.ForbiddenException;
 import com.nest.common.exception.ResourceNotFoundException;
@@ -39,15 +41,17 @@ public class AttendanceService {
     private final BatchRepository batchRepository;
     private final CourseRepository courseRepository;
     private final CourseFeatureGuard courseFeatureGuard;
+    private final NotificationTriggers notificationTriggers;
 
     public AttendanceService(AttendanceRepository attendanceRepository, ClassInstanceRepository classInstanceRepository,
                              BatchRepository batchRepository, CourseRepository courseRepository,
-                             CourseFeatureGuard courseFeatureGuard) {
+                             CourseFeatureGuard courseFeatureGuard, NotificationTriggers notificationTriggers) {
         this.attendanceRepository = attendanceRepository;
         this.classInstanceRepository = classInstanceRepository;
         this.batchRepository = batchRepository;
         this.courseRepository = courseRepository;
         this.courseFeatureGuard = courseFeatureGuard;
+        this.notificationTriggers = notificationTriggers;
     }
 
     @Transactional
@@ -57,9 +61,19 @@ public class AttendanceService {
         // (class -> batch -> course), not merely on some course. Admins bypass inside the guard.
         courseFeatureGuard.assertCourseFeature(courseIdOf(classInstanceId), FeatureKey.ATTENDANCE);
         UUID markedBy = TenantContext.currentUserId();
-        return request.entries().stream()
+        // Only newly-absent students are told: re-saving a sheet, or editing a note on someone
+        // already marked absent, must not send the same alert twice.
+        List<UUID> newlyAbsent = request.entries().stream()
+                .filter(e -> e.status() == AttendanceStatus.ABSENT)
+                .filter(e -> attendanceRepository.findByClassInstanceIdAndMembershipId(classInstanceId, e.membershipId())
+                        .map(existing -> existing.getStatus() != AttendanceStatus.ABSENT).orElse(true))
+                .map(AttendanceEntry::membershipId)
+                .toList();
+        List<AttendanceResponse> saved = request.entries().stream()
                 .map(entry -> upsert(classInstanceId, entry, markedBy))
                 .collect(Collectors.toList());
+        newlyAbsent.forEach(membershipId -> notificationTriggers.attendanceAbsent(classInstanceId, membershipId));
+        return saved;
     }
 
     private UUID courseIdOf(UUID classInstanceId) {

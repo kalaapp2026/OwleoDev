@@ -95,7 +95,7 @@ class BroadcastServiceTest {
         assertThatThrownBy(() -> broadcastService.create(request)).isInstanceOf(ForbiddenException.class);
 
         verify(broadcastRepository, never()).save(any());
-        verify(notificationService, never()).notify(any(), any(), any(), any(), any(), any());
+        verify(notificationService, never()).notifyBroadcast(any(), any(), any(), any(), any(), any());
     }
 
     @Test
@@ -117,7 +117,7 @@ class BroadcastServiceTest {
         var response = broadcastService.create(request);
 
         assertThat(response.recipientCount()).isEqualTo(2);
-        verify(notificationService, times(2)).notify(any(), eq(NotificationModule.ERP), eq(NotificationType.ACADEMY_BROADCAST), any(), any(), any());
+        verify(notificationService, times(2)).notifyBroadcast(any(), eq(NotificationModule.ERP), eq(NotificationType.ACADEMY_BROADCAST), any(), any(), any());
     }
 
     @Test
@@ -139,7 +139,7 @@ class BroadcastServiceTest {
         var response = broadcastService.create(request);
 
         assertThat(response.recipientCount()).isEqualTo(1);
-        verify(notificationService).notify(eq(userId), eq(NotificationModule.ERP), eq(NotificationType.ACADEMY_BROADCAST),
+        verify(notificationService).notifyBroadcast(eq(userId), eq(NotificationModule.ERP), eq(NotificationType.ACADEMY_BROADCAST),
                 eq("Recital"), eq("Practice moved to Hall B"), any());
     }
 
@@ -156,7 +156,7 @@ class BroadcastServiceTest {
         var response = broadcastService.create(request);
 
         assertThat(response.recipientCount()).isEqualTo(1);
-        verify(notificationService).notify(eq(userId), any(), any(), any(), any(), any());
+        verify(notificationService).notifyBroadcast(eq(userId), any(), any(), any(), any(), any());
     }
 
     @Test

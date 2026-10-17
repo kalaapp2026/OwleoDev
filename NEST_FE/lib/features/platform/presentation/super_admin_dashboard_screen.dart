@@ -6,6 +6,7 @@ import 'package:nest_fe/core/providers/core_providers.dart';
 import 'package:nest_fe/core/widgets/async_value_view.dart';
 import 'package:nest_fe/features/artist_application/presentation/artist_applications_screen.dart';
 import 'package:nest_fe/features/platform/data/platform_api.dart';
+import 'package:nest_fe/features/platform/presentation/notification_templates_screen.dart';
 import 'package:nest_fe/features/platform/presentation/platform_settings_screen.dart';
 import 'package:nest_fe/features/platform/presentation/console_layout.dart';
 
@@ -94,6 +95,19 @@ class SuperAdminDashboardScreen extends ConsumerWidget {
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () => Navigator.of(context).push(
                     MaterialPageRoute(builder: (_) => const PlatformSettingsScreen()),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Card(
+                margin: EdgeInsets.zero,
+                child: ListTile(
+                  leading: const Icon(Icons.notifications_active_outlined),
+                  title: const Text('Notification templates'),
+                  subtitle: const Text('What gets sent, to whom, on in-app, push and WhatsApp'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const NotificationTemplatesScreen()),
                   ),
                 ),
               ),

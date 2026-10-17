@@ -26,6 +26,8 @@ plugins {
     // this generation of plugin versions. 8.7.3/2.1.0 is the last well-supported combo before that.
     id("com.android.application") version "8.11.1" apply false
     id("org.jetbrains.kotlin.android") version "2.1.20" apply false
+    // Reads android/app/google-services.json for Firebase (push notifications).
+    id("com.google.gms.google-services") version "4.4.2" apply false
 }
 
 include(":app")

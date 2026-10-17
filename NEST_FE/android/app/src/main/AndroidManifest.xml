@@ -4,6 +4,7 @@
          fails instantly with "could not reach the server". Declared here so release APKs can talk
          to the backend too. -->
     <uses-permission android:name="android.permission.INTERNET"/>
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <application
         android:label="Owleo Nest"
         android:name="${applicationName}"

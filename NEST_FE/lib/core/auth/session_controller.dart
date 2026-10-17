@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:nest_fe/core/app_restart.dart';
+import 'package:nest_fe/core/push/push_service.dart';
 import 'package:nest_fe/core/auth/account_store.dart';
 import 'package:nest_fe/core/auth/session_state.dart';
 import 'package:nest_fe/core/auth/user_profile.dart';
@@ -140,6 +141,7 @@ class SessionController extends Notifier<SessionState> {
   /// Logs out the current account only. If other accounts are saved on the device, one of them
   /// becomes active instead of landing on the login screen.
   Future<void> logout() async {
+    await PushService.instance.unregister();
     final refreshToken = await SecureTokenStorage.instance.readRefreshToken();
     if (refreshToken != null) {
       try {

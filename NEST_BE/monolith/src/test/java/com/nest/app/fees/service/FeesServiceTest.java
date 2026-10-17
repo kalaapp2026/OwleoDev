@@ -73,7 +73,8 @@ class FeesServiceTest {
     @BeforeEach
     void setUp() {
         feesService = new FeesService(feeTransactionRepository, courseMapRepository, feeSlipRepository,
-                courseRepository, membershipRepository, userRepository, courseFeatureGuard, batchMemberRepository, batchRepository);
+                courseRepository, membershipRepository, userRepository, courseFeatureGuard, batchMemberRepository, batchRepository,
+                org.mockito.Mockito.mock(com.nest.app.notification.service.NotificationTriggers.class));
         // An active membership, not just a user: the ledger stamps academy_id on every row, so
         // recording a payment without a resolvable academy is now a ForbiddenException rather
         // than a row that belongs to no tenant.

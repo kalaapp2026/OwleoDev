@@ -29,6 +29,7 @@ import com.nest.app.identity.entity.User;
 import com.nest.app.identity.repository.AcademyMembershipRepository;
 import com.nest.app.identity.repository.CourseMapRepository;
 import com.nest.app.identity.repository.UserRepository;
+import com.nest.app.notification.service.NotificationTriggers;
 import com.nest.common.audit.Auditable;
 import com.nest.common.exception.ConflictException;
 import com.nest.common.exception.ResourceNotFoundException;
@@ -73,12 +74,13 @@ public class FeesService {
     private final CourseFeatureGuard courseFeatureGuard;
     private final BatchMemberRepository batchMemberRepository;
     private final BatchRepository batchRepository;
+    private final NotificationTriggers notificationTriggers;
 
     public FeesService(FeeTransactionRepository feeTransactionRepository, CourseMapRepository courseMapRepository,
                         FeeSlipRepository feeSlipRepository, CourseRepository courseRepository,
                         AcademyMembershipRepository membershipRepository, UserRepository userRepository,
                         CourseFeatureGuard courseFeatureGuard, BatchMemberRepository batchMemberRepository,
-                        BatchRepository batchRepository) {
+                        BatchRepository batchRepository, NotificationTriggers notificationTriggers) {
         this.feeTransactionRepository = feeTransactionRepository;
         this.courseMapRepository = courseMapRepository;
         this.feeSlipRepository = feeSlipRepository;
@@ -88,6 +90,7 @@ public class FeesService {
         this.courseFeatureGuard = courseFeatureGuard;
         this.batchMemberRepository = batchMemberRepository;
         this.batchRepository = batchRepository;
+        this.notificationTriggers = notificationTriggers;
     }
 
     /** closePeriod=true ("Close") writes off whatever's left unpaid in this period for good -
@@ -119,6 +122,8 @@ public class FeesService {
         // saveAndFlush: see PostService's identical note - @CreationTimestamp isn't populated
         // in-memory until the INSERT runs, which save() alone can defer past this read-back.
         FeeTransactionResponse response = toResponse(feeTransactionRepository.saveAndFlush(tx));
+        notificationTriggers.feePaymentReceived(request.membershipId(), request.courseId(), request.amountPaid(),
+                request.period(), request.mode().name());
 
         if (Boolean.TRUE.equals(request.closePeriod())) {
             closePeriod(request.membershipId(), request.courseId(), request.period());

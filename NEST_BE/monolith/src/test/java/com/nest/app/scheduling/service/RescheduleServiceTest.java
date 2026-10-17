@@ -54,7 +54,8 @@ class RescheduleServiceTest {
     @BeforeEach
     void setUp() {
         rescheduleService = new RescheduleService(classInstanceRepository, membershipRepository,
-                batchRepository, courseFeatureGuard);
+                batchRepository, courseFeatureGuard,
+                org.mockito.Mockito.mock(com.nest.app.notification.service.NotificationTriggers.class));
         // Every mutating path resolves the class's batch to check RESCHEDULE on its course - a
         // no-op guard mock and an arbitrary resolvable course keep tests that aren't specifically
         // about that check from having to wire it up themselves.

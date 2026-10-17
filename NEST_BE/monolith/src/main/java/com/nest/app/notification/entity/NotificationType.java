@@ -8,5 +8,7 @@ package com.nest.app.notification.entity;
 public enum NotificationType {
     MEMBERSHIP_CONFIRMATION,
     ADMIN_BROADCAST,
-    ACADEMY_BROADCAST
+    ACADEMY_BROADCAST,
+    /** Fired from a Super Admin-configured template (see NotificationEvent). */
+    TEMPLATE_EVENT
 }
