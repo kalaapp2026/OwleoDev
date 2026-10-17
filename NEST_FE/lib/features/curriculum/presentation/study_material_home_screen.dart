@@ -271,8 +271,6 @@ class _StudyMaterialHomeScreenState extends ConsumerState<StudyMaterialHomeScree
                     fontWeight: _sort == option ? AppType.bold : AppType.regular,
                     color: _sort == option ? palette.primary : palette.text,
                   )),
-              if (_sort == option)
-                Icon(Icons.check, size: 15, color: palette.primary),
             ],
           ),
           triggerBuilder: (context, isOpen, toggle) => AppIconButton(
@@ -421,16 +419,16 @@ class _BatchRow extends StatelessWidget {
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 7, vertical: 3),
                             decoration: BoxDecoration(
-                              color: palette.surfaceHigh,
+                              color: palette.goldSoft,
                               borderRadius: AppRadii.all(AppRadii.xs),
-                              border: Border.all(color: palette.border),
+                              border: Border.all(color: palette.gold),
                             ),
                             child: Text('INACTIVE',
                                 style: TextStyle(
                                   fontSize: AppType.micro,
                                   fontWeight: AppType.heavy,
                                   letterSpacing: 0.3,
-                                  color: palette.textMuted,
+                                  color: palette.gold,
                                 )),
                           ),
                         ],

@@ -438,7 +438,6 @@ class _UserListScreenState extends ConsumerState<UserListScreen> {
                       color: option == _sort ? accent : palette.text,
                     )),
               ),
-              if (option == _sort) Icon(Icons.check, size: 15, color: accent),
             ],
           ),
           triggerBuilder: (context, isOpen, toggle) => Pressable(

@@ -17,6 +17,28 @@ String monthLabel(DateTime month) => '${_monthNames[month.month - 1]} ${month.ye
 String shortMonthLabel(DateTime month) =>
     '${_monthNames[month.month - 1].substring(0, 3)} ${month.year}';
 
+/// What one day of a marked calendar shows: a dot per item, and optionally a ring round the whole
+/// day (the Schedule calendar's way of flagging a cancelled or rescheduled day).
+@immutable
+class CalendarDayMark {
+  const CalendarDayMark({this.dots = const [], this.ring});
+  final List<Color> dots;
+  final Color? ring;
+}
+
+/// Marks per day of a month (keyed by day number), for calendars that need to show what is on each
+/// day. Loaded per month, so stepping months fetches the next month's marks.
+typedef CalendarMarksLoader = Future<Map<int, CalendarDayMark>> Function(DateTime month);
+
+/// One line of the key under a marked calendar - a filled dot, or a hollow ring when [ring].
+@immutable
+class CalendarKeyEntry {
+  const CalendarKeyEntry(this.label, this.color, {this.ring = false});
+  final String label;
+  final Color color;
+  final bool ring;
+}
+
 /// Month grid with prev/next stepping, clamped to a range.
 ///
 /// Returns the chosen date, or null if dismissed. A null [selectedDay] means "the whole month" -
@@ -27,6 +49,8 @@ Future<DateTime?> showAppCalendar({
   int? selectedDay,
   DateTime? earliestMonth,
   DateTime? latestMonth,
+  CalendarMarksLoader? marksLoader,
+  List<CalendarKeyEntry> marksKey = const [],
 }) {
   return showDialog<DateTime>(
     context: context,
@@ -35,6 +59,8 @@ Future<DateTime?> showAppCalendar({
       selectedDay: selectedDay,
       earliestMonth: earliestMonth,
       latestMonth: latestMonth,
+      marksLoader: marksLoader,
+      marksKey: marksKey,
     ),
   );
 }
@@ -45,12 +71,16 @@ class _CalendarDialog extends StatefulWidget {
     this.selectedDay,
     this.earliestMonth,
     this.latestMonth,
+    this.marksLoader,
+    this.marksKey = const [],
   });
 
   final DateTime initialMonth;
   final int? selectedDay;
   final DateTime? earliestMonth;
   final DateTime? latestMonth;
+  final CalendarMarksLoader? marksLoader;
+  final List<CalendarKeyEntry> marksKey;
 
   @override
   State<_CalendarDialog> createState() => _CalendarDialogState();
@@ -59,13 +89,37 @@ class _CalendarDialog extends StatefulWidget {
 /// Which grid the dialog is showing. Landing straight on a day grid is fine when the target date
 /// is nearby, but stepping a birth year back one month at a time is dozens of taps - the year grid
 /// gives a direct jump instead.
-enum _CalendarView { day, year }
+enum _CalendarView { day, month, year }
 
 class _CalendarDialogState extends State<_CalendarDialog> {
   late DateTime _month = DateTime(widget.initialMonth.year, widget.initialMonth.month);
   late int? _day = widget.selectedDay;
   _CalendarView _view = _CalendarView.day;
   final ScrollController _yearScrollController = ScrollController();
+
+  Map<int, CalendarDayMark> _marks = const {};
+  // Guards against a slow load for a month the user has already stepped away from landing late.
+  int _marksRequest = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadMarks();
+  }
+
+  Future<void> _loadMarks() async {
+    final loader = widget.marksLoader;
+    if (loader == null) return;
+    final request = ++_marksRequest;
+    final month = _month;
+    setState(() => _marks = const {});
+    try {
+      final marks = await loader(month);
+      if (mounted && request == _marksRequest) setState(() => _marks = marks);
+    } catch (_) {
+      // Marks are decoration - a failed load leaves a plain, still-usable calendar.
+    }
+  }
 
   int get _earliestYear => (widget.earliestMonth?.year ?? _month.year - 100);
   int get _latestYear => (widget.latestMonth?.year ?? _month.year + 5);
@@ -97,6 +151,24 @@ class _CalendarDialogState extends State<_CalendarDialog> {
     return latest == null || _month.isBefore(DateTime(latest.year, latest.month));
   }
 
+  bool _monthInRange(DateTime month) {
+    final earliest = widget.earliestMonth;
+    final latest = widget.latestMonth;
+    if (earliest != null && month.isBefore(DateTime(earliest.year, earliest.month))) return false;
+    if (latest != null && month.isAfter(DateTime(latest.year, latest.month))) return false;
+    return true;
+  }
+
+  bool _canStepYear(int delta) {
+    final year = _month.year + delta;
+    return year >= _earliestYear && year <= _latestYear;
+  }
+
+  /// Steps the year shown on the month grid, keeping the month. Nothing is loaded yet - that waits
+  /// until a month is actually picked.
+  void _stepYear(int delta) =>
+      setState(() => _month = DateTime(_month.year + delta, _month.month));
+
   void _step(int delta) {
     setState(() {
       _month = DateTime(_month.year, _month.month + delta);
@@ -104,6 +176,7 @@ class _CalendarDialogState extends State<_CalendarDialog> {
       // date in a different month, which is not what stepping the month asked for.
       _day = null;
     });
+    _loadMarks();
   }
 
   @override
@@ -133,15 +206,24 @@ class _CalendarDialogState extends State<_CalendarDialog> {
               children: [
                 AppIconButton(
                   icon: Icons.chevron_left_rounded,
-                  onTap: _view == _CalendarView.day && _canGoBack ? () => _step(-1) : null,
+                  onTap: switch (_view) {
+                    _CalendarView.day => _canGoBack ? () => _step(-1) : null,
+                    _CalendarView.month => _canStepYear(-1) ? () => _stepYear(-1) : null,
+                    _CalendarView.year => null,
+                  },
                 ),
                 Expanded(
                   child: Center(
-                    // Tapping the month/year title jumps to a scrollable year grid rather than
-                    // making a decades-old date wait out one chevron tap per month.
+                    // The title drills out one level per tap: days -> months -> years, and back from
+                    // years to months. The year grid is there so a decades-old date doesn't have to
+                    // wait out one chevron tap per month.
                     child: Pressable(
                       onTap: () => setState(() {
-                        _view = _view == _CalendarView.day ? _CalendarView.year : _CalendarView.day;
+                        _view = switch (_view) {
+                          _CalendarView.day => _CalendarView.month,
+                          _CalendarView.month => _CalendarView.year,
+                          _CalendarView.year => _CalendarView.month,
+                        };
                         if (_view == _CalendarView.year) {
                           WidgetsBinding.instance
                               .addPostFrameCallback((_) => _scrollYearGridToCurrent());
@@ -173,7 +255,11 @@ class _CalendarDialogState extends State<_CalendarDialog> {
                 ),
                 AppIconButton(
                   icon: Icons.chevron_right_rounded,
-                  onTap: _view == _CalendarView.day && _canGoForward ? () => _step(1) : null,
+                  onTap: switch (_view) {
+                    _CalendarView.day => _canGoForward ? () => _step(1) : null,
+                    _CalendarView.month => _canStepYear(1) ? () => _stepYear(1) : null,
+                    _CalendarView.year => null,
+                  },
                 ),
               ],
             ),
@@ -196,13 +282,41 @@ class _CalendarDialogState extends State<_CalendarDialog> {
                     return _YearCell(
                       year: year,
                       selected: selected,
+                      // Picking a year lands on the month grid for it, so year then month is two
+                      // taps rather than a year followed by a trip back through the chevrons.
                       onTap: () => setState(() {
                         _month = DateTime(year, _month.month);
-                        _view = _CalendarView.day;
+                        _view = _CalendarView.month;
                       }),
                     );
                   },
                 ),
+              ),
+            ] else if (_view == _CalendarView.month) ...[
+              GridView.count(
+                crossAxisCount: 4,
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                mainAxisSpacing: 8,
+                crossAxisSpacing: 8,
+                childAspectRatio: 1.5,
+                children: [
+                  for (var m = 1; m <= 12; m++)
+                    _MonthCell(
+                      label: _monthNames[m - 1].substring(0, 3),
+                      selected: m == _month.month,
+                      enabled: _monthInRange(DateTime(_month.year, m)),
+                      onTap: () {
+                        setState(() {
+                          _month = DateTime(_month.year, m);
+                          // A different month, so the previously picked day no longer applies.
+                          _day = null;
+                          _view = _CalendarView.day;
+                        });
+                        _loadMarks();
+                      },
+                    ),
+                ],
               ),
             ] else ...[
               Row(
@@ -235,10 +349,45 @@ class _CalendarDialogState extends State<_CalendarDialog> {
                     _DayCell(
                       day: d,
                       selected: d == _day,
+                      mark: _marks[d],
                       onTap: () => setState(() => _day = d),
                     ),
                 ],
               ),
+              if (widget.marksKey.isNotEmpty) ...[
+                const SizedBox(height: AppSpacing.md),
+                Wrap(
+                  alignment: WrapAlignment.center,
+                  spacing: AppSpacing.xl,
+                  runSpacing: AppSpacing.xs,
+                  children: [
+                    for (final k in widget.marksKey)
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            width: k.ring ? 9 : 7,
+                            height: k.ring ? 9 : 7,
+                            decoration: BoxDecoration(
+                              color: k.ring ? Colors.transparent : k.color,
+                              shape: BoxShape.circle,
+                              border: k.ring ? Border.all(color: k.color, width: 1.5) : null,
+                            ),
+                          ),
+                          const SizedBox(width: 5),
+                          Text(
+                            k.label,
+                            style: TextStyle(
+                              fontSize: AppType.tiny,
+                              fontWeight: AppType.medium,
+                              color: palette.textMuted,
+                            ),
+                          ),
+                        ],
+                      ),
+                  ],
+                ),
+              ],
               const SizedBox(height: AppSpacing.lg),
               AppPrimaryButton(
                 label: 'Done',
@@ -249,6 +398,45 @@ class _CalendarDialogState extends State<_CalendarDialog> {
               ),
             ],
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _MonthCell extends StatelessWidget {
+  const _MonthCell({
+    required this.label,
+    required this.selected,
+    required this.enabled,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final bool enabled;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.palette;
+    return Pressable(
+      onTap: enabled ? onTap : () {},
+      child: Container(
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: selected ? palette.primary : Colors.transparent,
+          borderRadius: AppRadii.all(AppRadii.md),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: AppType.md,
+            fontWeight: selected ? AppType.heavy : AppType.regular,
+            color: selected
+                ? palette.onPrimary
+                : (enabled ? palette.text : palette.textFaint.withValues(alpha: 0.4)),
+          ),
         ),
       ),
     );
@@ -287,15 +475,24 @@ class _YearCell extends StatelessWidget {
 }
 
 class _DayCell extends StatelessWidget {
-  const _DayCell({required this.day, required this.selected, required this.onTap});
+  const _DayCell({
+    required this.day,
+    required this.selected,
+    required this.onTap,
+    this.mark,
+  });
 
   final int day;
   final bool selected;
+  final CalendarDayMark? mark;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final palette = context.palette;
+    final dots = mark?.dots ?? const <Color>[];
+    // The ring is for days that carry a change; the selected day is already filled, so it skips it.
+    final ring = selected ? null : mark?.ring;
     return Pressable(
       onTap: onTap,
       child: Container(
@@ -303,14 +500,42 @@ class _DayCell extends StatelessWidget {
         decoration: BoxDecoration(
           color: selected ? palette.primary : Colors.transparent,
           borderRadius: AppRadii.all(AppRadii.md),
+          border: ring == null ? null : Border.all(color: ring, width: 1.5),
         ),
-        child: Text(
-          '$day',
-          style: TextStyle(
-            fontSize: AppType.md,
-            fontWeight: selected ? AppType.heavy : AppType.regular,
-            color: selected ? palette.onPrimary : palette.text,
-          ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(
+              '$day',
+              style: TextStyle(
+                fontSize: AppType.md,
+                fontWeight: selected ? AppType.heavy : AppType.regular,
+                color: selected ? palette.onPrimary : palette.text,
+              ),
+            ),
+            if (dots.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 2),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    for (final c in dots.take(4))
+                      Container(
+                        width: 5,
+                        height: 5,
+                        margin: const EdgeInsets.symmetric(horizontal: 1),
+                        decoration: BoxDecoration(
+                          color: c,
+                          shape: BoxShape.circle,
+                          // On the selected (primary) cell a primary dot would vanish, so every dot
+                          // gets a light rim there and stays readable.
+                          border: selected ? Border.all(color: palette.onPrimary, width: 1) : null,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+          ],
         ),
       ),
     );

@@ -334,7 +334,6 @@ class _CourseListScreenState extends ConsumerState<CourseListScreen> {
                   color: _sort == option ? palette.primary : palette.text,
                 ),
               ),
-              if (_sort == option) Icon(Icons.check, size: 15, color: palette.primary),
             ],
           ),
           triggerBuilder: (context, isOpen, toggle) => AppIconButton(

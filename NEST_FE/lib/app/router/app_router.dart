@@ -56,6 +56,8 @@ class _WithNavBar extends StatelessWidget {
       body: child,
       bottomNavigationBar: shellState.buildOverlayBottomNav(
         onNavigate: () => Navigator.of(context).pop(),
+        // A More destination: only "More" is lit, not whichever tab the shell was last on.
+        moreActive: true,
         // Reusing onNavigate (pop) here would just close this screen and reveal whatever tab
         // AppShell was last on - not open the menu, which is what tapping More actually means.
         // Opening it directly on this screen's own Navigator (the same single Navigator AppShell

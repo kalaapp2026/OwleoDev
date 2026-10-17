@@ -72,15 +72,15 @@ enum AttendanceChip {
   final String label;
 
   Color color(AppPalette p) => switch (this) {
-        AttendanceChip.notMarked => p.gold,
+        AttendanceChip.notMarked => p.notPaid,
         AttendanceChip.marked => p.paidManual,
-        AttendanceChip.upcoming => p.primary,
+        AttendanceChip.upcoming => p.gold,
       };
 
   Color softColor(AppPalette p) => switch (this) {
-        AttendanceChip.notMarked => p.goldSoft,
+        AttendanceChip.notMarked => p.notPaidSoft,
         AttendanceChip.marked => p.paidManualSoft,
-        AttendanceChip.upcoming => p.primarySoft,
+        AttendanceChip.upcoming => p.goldSoft,
       };
 }
 

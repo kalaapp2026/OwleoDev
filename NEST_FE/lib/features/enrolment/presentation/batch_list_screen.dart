@@ -60,9 +60,11 @@ class _BatchListScreenState extends ConsumerState<BatchListScreen> {
       _kebabFor = null;
       _addMenuOpen = false;
     });
-    final saved = await Navigator.of(context).push<bool>(MaterialPageRoute(
-      builder: (_) => BatchFormScreen(existing: existing, initialType: newType),
-    ));
+    final saved = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => BatchFormScreen(existing: existing, initialType: newType),
+      ),
+    );
     if (saved == true) {
       _refresh();
       if (mounted) {
@@ -78,8 +80,7 @@ class _BatchListScreenState extends ConsumerState<BatchListScreen> {
       await ref.read(enrolmentApiProvider).setBatchStatus(batch.id, next);
       _refresh();
       if (mounted) {
-        showAppToast(context,
-            next == 'ACTIVE' ? 'Batch marked active' : 'Batch marked inactive');
+        showAppToast(context, next == 'ACTIVE' ? 'Batch marked active' : 'Batch marked inactive');
       }
     } catch (e) {
       _showError(e);
@@ -108,9 +109,9 @@ class _BatchListScreenState extends ConsumerState<BatchListScreen> {
 
   void _showError(Object error) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(error.toString().replaceFirst('Exception: ', ''))),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(error.toString().replaceFirst('Exception: ', ''))));
   }
 
   List<Batch> _visible(List<Batch> all, Map<String, Course> coursesById) {
@@ -141,9 +142,9 @@ class _BatchListScreenState extends ConsumerState<BatchListScreen> {
       if (rank != 0) return rank;
 
       if (_sort == BatchSort.course) {
-        final byCourse = (coursesById[a.courseId]?.name ?? '')
-            .toLowerCase()
-            .compareTo((coursesById[b.courseId]?.name ?? '').toLowerCase());
+        final byCourse = (coursesById[a.courseId]?.name ?? '').toLowerCase().compareTo(
+          (coursesById[b.courseId]?.name ?? '').toLowerCase(),
+        );
         if (byCourse != 0) return byCourse;
         return a.name.toLowerCase().compareTo(b.name.toLowerCase());
       }
@@ -187,7 +188,11 @@ class _BatchListScreenState extends ConsumerState<BatchListScreen> {
                       ),
                       Padding(
                         padding: const EdgeInsets.fromLTRB(
-                            AppSpacing.page, AppSpacing.xxl, AppSpacing.page, 0),
+                          AppSpacing.page,
+                          AppSpacing.xxl,
+                          AppSpacing.page,
+                          0,
+                        ),
                         child: Column(
                           children: [
                             _searchAndSortRow(palette),
@@ -206,8 +211,12 @@ class _BatchListScreenState extends ConsumerState<BatchListScreen> {
                           child: visible.isEmpty
                               ? _EmptyState(hasAny: batches.isNotEmpty)
                               : ListView.builder(
-                                  padding: const EdgeInsets.fromLTRB(AppSpacing.xl,
-                                      AppSpacing.md, AppSpacing.xl, AppSpacing.listBottom + 60),
+                                  padding: const EdgeInsets.fromLTRB(
+                                    AppSpacing.xl,
+                                    AppSpacing.md,
+                                    AppSpacing.xl,
+                                    AppSpacing.listBottom + 60,
+                                  ),
                                   itemCount: visible.length,
                                   itemBuilder: (context, i) {
                                     final batch = visible[i];
@@ -218,8 +227,9 @@ class _BatchListScreenState extends ConsumerState<BatchListScreen> {
                                         course: coursesById[batch.courseId],
                                         kebabOpen: _kebabFor == batch.id,
                                         onTap: () => _openForm(existing: batch),
-                                        onToggleKebab: () => setState(() => _kebabFor =
-                                            _kebabFor == batch.id ? null : batch.id),
+                                        onToggleKebab: () => setState(
+                                          () => _kebabFor = _kebabFor == batch.id ? null : batch.id,
+                                        ),
                                         onEdit: () => _openForm(existing: batch),
                                         onToggleStatus: () => _toggleStatus(batch),
                                         onDelete: () => _requestDelete(batch),
@@ -285,8 +295,7 @@ class _BatchListScreenState extends ConsumerState<BatchListScreen> {
       children: [
         Expanded(
           child: Container(
-            padding: const EdgeInsets.symmetric(
-                horizontal: AppSpacing.lg, vertical: AppSpacing.md),
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: AppSpacing.md),
             decoration: BoxDecoration(
               color: palette.surfaceRaised,
               borderRadius: AppRadii.all(AppRadii.lg),
@@ -301,9 +310,10 @@ class _BatchListScreenState extends ConsumerState<BatchListScreen> {
                     controller: _searchController,
                     onChanged: (v) => setState(() => _query = v),
                     style: TextStyle(
-                        fontSize: AppType.lg,
-                        fontWeight: AppType.regular,
-                        color: palette.text),
+                      fontSize: AppType.lg,
+                      fontWeight: AppType.regular,
+                      color: palette.text,
+                    ),
                     decoration: InputDecoration(
                       isDense: true,
                       filled: false,
@@ -312,8 +322,7 @@ class _BatchListScreenState extends ConsumerState<BatchListScreen> {
                       enabledBorder: InputBorder.none,
                       contentPadding: EdgeInsets.zero,
                       hintText: 'Search batch or course',
-                      hintStyle:
-                          TextStyle(fontSize: AppType.lg, color: palette.textFaint),
+                      hintStyle: TextStyle(fontSize: AppType.lg, color: palette.textFaint),
                     ),
                   ),
                 ),
@@ -341,13 +350,14 @@ class _BatchListScreenState extends ConsumerState<BatchListScreen> {
           optionBuilder: (context, option, _) => Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(option.label,
-                  style: TextStyle(
-                    fontSize: AppType.xl,
-                    fontWeight: _sort == option ? AppType.bold : AppType.regular,
-                    color: _sort == option ? palette.primary : palette.text,
-                  )),
-              if (_sort == option) Icon(Icons.check, size: 15, color: palette.primary),
+              Text(
+                option.label,
+                style: TextStyle(
+                  fontSize: AppType.xl,
+                  fontWeight: _sort == option ? AppType.bold : AppType.regular,
+                  color: _sort == option ? palette.primary : palette.text,
+                ),
+              ),
             ],
           ),
           triggerBuilder: (context, isOpen, toggle) => AppIconButton(
@@ -365,16 +375,25 @@ class _BatchListScreenState extends ConsumerState<BatchListScreen> {
   Widget _filterRow(AppPalette palette) {
     final meta = _categoryFilter?.meta(palette);
 
-    Widget pill(BatchPill kind, String label, IconData? icon, Color accent, Color soft) {
+    // [dot] draws a filled dot instead of an icon - the Inactive pill's marker, as on Courses.
+    Widget pill(
+      BatchPill kind,
+      String label,
+      IconData? icon,
+      Color accent,
+      Color soft, {
+      bool dot = false,
+    }) {
       final active = _pill == kind;
       return Expanded(
+        flex: 10,
         child: Pressable(
           // Tapping the active pill clears it, so there's always a way back to "all" without
           // hunting for an All chip that doesn't exist in this row.
           onTap: () => setState(() => _pill = active ? null : kind),
           child: AnimatedContainer(
             duration: AppMotion.fade,
-            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xs, vertical: 7),
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: 7),
             decoration: BoxDecoration(
               color: active ? soft : palette.surfaceRaised,
               borderRadius: AppRadii.all(AppRadii.pill),
@@ -383,8 +402,15 @@ class _BatchListScreenState extends ConsumerState<BatchListScreen> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                if (icon != null) ...[
-                  Icon(icon, size: 11, color: active ? accent : palette.textMuted),
+                if (dot) ...[
+                  Container(
+                    width: 7,
+                    height: 7,
+                    decoration: BoxDecoration(color: accent, shape: BoxShape.circle),
+                  ),
+                  const SizedBox(width: AppSpacing.xxs),
+                ] else if (icon != null) ...[
+                  Icon(icon, size: 13, color: active ? accent : palette.textMuted),
                   const SizedBox(width: AppSpacing.xxs),
                 ],
                 Flexible(
@@ -393,7 +419,7 @@ class _BatchListScreenState extends ConsumerState<BatchListScreen> {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      fontSize: AppType.sm,
+                      fontSize: AppType.base,
                       fontWeight: AppType.bold,
                       color: active ? accent : palette.textMuted,
                     ),
@@ -409,7 +435,7 @@ class _BatchListScreenState extends ConsumerState<BatchListScreen> {
     return Row(
       children: [
         Expanded(
-          flex: 3,
+          flex: 11,
           child: AttachedSelect<CourseCategory?>(
             label: 'Category',
             // A leading null is the "All batches" entry - modelled as absence rather than a
@@ -428,9 +454,10 @@ class _BatchListScreenState extends ConsumerState<BatchListScreen> {
                 children: [
                   if (dot != null) ...[
                     Container(
-                        width: 8,
-                        height: 8,
-                        decoration: BoxDecoration(color: dot, shape: BoxShape.circle)),
+                      width: 8,
+                      height: 8,
+                      decoration: BoxDecoration(color: dot, shape: BoxShape.circle),
+                    ),
                     const SizedBox(width: AppSpacing.md),
                   ],
                   Text(
@@ -447,51 +474,65 @@ class _BatchListScreenState extends ConsumerState<BatchListScreen> {
             triggerBuilder: (context, isOpen, toggle) => Pressable(
               onTap: toggle,
               child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: 7),
+                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: 7),
                 decoration: BoxDecoration(
                   color: meta?.soft ?? palette.surfaceRaised,
                   borderRadius: AppRadii.all(AppRadii.pill),
                   border: Border.all(color: meta?.color ?? palette.border),
                 ),
                 child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     if (meta != null) ...[
                       Container(
-                          width: 7,
-                          height: 7,
-                          decoration: BoxDecoration(
-                              color: meta.color, shape: BoxShape.circle)),
+                        width: 7,
+                        height: 7,
+                        decoration: BoxDecoration(color: meta.color, shape: BoxShape.circle),
+                      ),
                       const SizedBox(width: AppSpacing.xxs),
                     ],
                     Flexible(
                       child: Text(
-                        _categoryFilter?.label ?? 'All',
+                        _categoryFilter?.label ?? 'All batches',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
-                          fontSize: AppType.smd,
+                          fontSize: AppType.base,
                           fontWeight: AppType.bold,
                           color: meta?.color ?? palette.textMuted,
                         ),
                       ),
                     ),
-                    Icon(Icons.keyboard_arrow_down,
-                        size: 12, color: meta?.color ?? palette.textMuted),
+                    Icon(
+                      Icons.keyboard_arrow_down,
+                      size: 13,
+                      color: meta?.color ?? palette.textMuted,
+                    ),
                   ],
                 ),
               ),
             ),
           ),
         ),
-        const SizedBox(width: AppSpacing.xs),
+        const SizedBox(width: AppSpacing.sm),
         pill(BatchPill.regular, 'Regular', Icons.repeat, palette.primary, palette.primarySoft),
-        const SizedBox(width: AppSpacing.xs),
-        pill(BatchPill.temporary, 'Temporary', Icons.event_repeat_outlined, palette.gold,
-            palette.goldSoft),
-        const SizedBox(width: AppSpacing.xs),
-        pill(BatchPill.inactive, 'Inactive', null, palette.textFaint, palette.surfaceHigh),
+        const SizedBox(width: AppSpacing.sm),
+        pill(
+          BatchPill.temporary,
+          'Temporary',
+          Icons.event_repeat_outlined,
+          palette.gold,
+          palette.goldSoft,
+        ),
+        const SizedBox(width: AppSpacing.sm),
+        pill(
+          BatchPill.inactive,
+          'Inactive',
+          null,
+          palette.textFaint,
+          palette.surfaceHigh,
+          dot: true,
+        ),
       ],
     );
   }
@@ -529,9 +570,14 @@ class _Header extends StatelessWidget {
     final palette = context.palette;
     return Container(
       padding: const EdgeInsets.fromLTRB(
-          AppSpacing.page, AppSpacing.x4l, AppSpacing.page, AppSpacing.xxl),
-      decoration:
-          BoxDecoration(border: Border(bottom: BorderSide(color: palette.borderSoft))),
+        AppSpacing.page,
+        AppSpacing.x4l,
+        AppSpacing.page,
+        AppSpacing.xxl,
+      ),
+      decoration: BoxDecoration(
+        border: Border(bottom: BorderSide(color: palette.borderSoft)),
+      ),
       child: Row(
         children: [
           AppIconButton(icon: Icons.arrow_back, onTap: onBack),
@@ -541,15 +587,20 @@ class _Header extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text('Batches',
-                    style: TextStyle(
-                        fontSize: 17,
-                        fontWeight: AppType.bold,
-                        letterSpacing: -0.2,
-                        color: palette.text)),
+                Text(
+                  'Batches',
+                  style: TextStyle(
+                    fontSize: 17,
+                    fontWeight: AppType.bold,
+                    letterSpacing: -0.2,
+                    color: palette.text,
+                  ),
+                ),
                 const SizedBox(height: 2),
-                Text('$total batch${total == 1 ? '' : 'es'} · $active active',
-                    style: TextStyle(fontSize: AppType.smd, color: palette.textMuted)),
+                Text(
+                  '$total batch${total == 1 ? '' : 'es'} · $active active',
+                  style: TextStyle(fontSize: AppType.smd, color: palette.textMuted),
+                ),
               ],
             ),
           ),
@@ -621,15 +672,17 @@ class _BatchRow extends StatelessWidget {
                 ),
                 const SizedBox(width: AppSpacing.lg),
                 Expanded(
-                  child: Opacity(
-                    opacity: inactive ? 0.5 : 1,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Row(
-                          children: [
-                            Flexible(
+                  // Only the text is dimmed - the INACTIVE badge stays at full strength, in gold
+                  // like Courses, so it is the one thing on the row that still stands out.
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Row(
+                        children: [
+                          Flexible(
+                            child: Opacity(
+                              opacity: inactive ? 0.5 : 1,
                               child: Text(
                                 batch.name,
                                 maxLines: 1,
@@ -641,29 +694,33 @@ class _BatchRow extends StatelessWidget {
                                 ),
                               ),
                             ),
-                            if (inactive) ...[
-                              const SizedBox(width: AppSpacing.xs),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 7, vertical: 3),
-                                decoration: BoxDecoration(
-                                  color: palette.surfaceHigh,
-                                  borderRadius: AppRadii.all(AppRadii.xs),
-                                  border: Border.all(color: palette.border),
-                                ),
-                                child: Text('INACTIVE',
-                                    style: TextStyle(
-                                      fontSize: AppType.micro,
-                                      fontWeight: AppType.heavy,
-                                      letterSpacing: 0.3,
-                                      color: palette.textMuted,
-                                    )),
+                          ),
+                          if (inactive) ...[
+                            const SizedBox(width: AppSpacing.xs),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: palette.goldSoft,
+                                borderRadius: AppRadii.all(AppRadii.xs),
+                                border: Border.all(color: palette.gold),
                               ),
-                            ],
+                              child: Text(
+                                'INACTIVE',
+                                style: TextStyle(
+                                  fontSize: AppType.micro,
+                                  fontWeight: AppType.heavy,
+                                  letterSpacing: 0.3,
+                                  color: palette.gold,
+                                ),
+                              ),
+                            ),
                           ],
-                        ),
-                        const SizedBox(height: 3),
-                        Text.rich(
+                        ],
+                      ),
+                      const SizedBox(height: 3),
+                      Opacity(
+                        opacity: inactive ? 0.5 : 1,
+                        child: Text.rich(
                           TextSpan(
                             text: course?.name ?? 'Unlinked course',
                             style: TextStyle(
@@ -685,8 +742,11 @@ class _BatchRow extends StatelessWidget {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
-                        const SizedBox(height: 2),
-                        Text(
+                      ),
+                      const SizedBox(height: 2),
+                      Opacity(
+                        opacity: inactive ? 0.5 : 1,
+                        child: Text(
                           [
                             '${batch.studentCount} student'
                                 '${batch.studentCount == 1 ? '' : 's'}',
@@ -694,11 +754,10 @@ class _BatchRow extends StatelessWidget {
                           ].join(' · '),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style:
-                              TextStyle(fontSize: AppType.xs, color: palette.textFaint),
+                          style: TextStyle(fontSize: AppType.xs, color: palette.textFaint),
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
                 ),
                 _Kebab(
@@ -724,13 +783,15 @@ class _BatchRow extends StatelessWidget {
                       bottomRight: Radius.circular(7),
                     ),
                   ),
-                  child: Text('TEMPORARY',
-                      style: TextStyle(
-                        fontSize: 9,
-                        fontWeight: AppType.heavy,
-                        letterSpacing: 0.4,
-                        color: palette.onGold,
-                      )),
+                  child: Text(
+                    'TEMPORARY',
+                    style: TextStyle(
+                      fontSize: 9,
+                      fontWeight: AppType.heavy,
+                      letterSpacing: 0.4,
+                      color: palette.onGold,
+                    ),
+                  ),
                 ),
               ),
           ],
@@ -801,9 +862,7 @@ class _EmptyState extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.all(AppSpacing.x4l),
         child: Text(
-          hasAny
-              ? 'No batches match this search.'
-              : 'No batches yet. Add your first one below.',
+          hasAny ? 'No batches match this search.' : 'No batches yet. Add your first one below.',
           textAlign: TextAlign.center,
           style: TextStyle(fontSize: AppType.lg, color: palette.textFaint),
         ),
@@ -831,8 +890,7 @@ class _AddTypeButton extends StatelessWidget {
     return Pressable(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.symmetric(
-            horizontal: AppSpacing.x3l, vertical: AppSpacing.lg),
+        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.x3l, vertical: AppSpacing.lg),
         decoration: BoxDecoration(
           color: palette.surfaceHigh,
           borderRadius: AppRadii.all(AppRadii.pill),
@@ -844,11 +902,10 @@ class _AddTypeButton extends StatelessWidget {
           children: [
             Icon(icon, size: 15, color: accent),
             const SizedBox(width: AppSpacing.sm),
-            Text(label,
-                style: TextStyle(
-                    fontSize: AppType.lg,
-                    fontWeight: AppType.bold,
-                    color: palette.text)),
+            Text(
+              label,
+              style: TextStyle(fontSize: AppType.lg, fontWeight: AppType.bold, color: palette.text),
+            ),
           ],
         ),
       ),
@@ -868,8 +925,7 @@ class _AddBatchButton extends StatelessWidget {
     return Pressable(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.symmetric(
-            horizontal: AppSpacing.x4l, vertical: AppSpacing.xl),
+        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.x4l, vertical: AppSpacing.xl),
         decoration: BoxDecoration(
           color: palette.primary,
           borderRadius: AppRadii.all(AppRadii.pill),
@@ -884,11 +940,14 @@ class _AddBatchButton extends StatelessWidget {
               child: Icon(Icons.add, size: 17, color: palette.onPrimary),
             ),
             const SizedBox(width: AppSpacing.sm),
-            Text('Add Batch',
-                style: TextStyle(
-                    fontSize: AppType.xxl,
-                    fontWeight: AppType.bold,
-                    color: palette.onPrimary)),
+            Text(
+              'Add Batch',
+              style: TextStyle(
+                fontSize: AppType.xxl,
+                fontWeight: AppType.bold,
+                color: palette.onPrimary,
+              ),
+            ),
           ],
         ),
       ),

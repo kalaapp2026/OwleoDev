@@ -60,6 +60,22 @@ class AppTheme {
         centerTitle: false,
         scrolledUnderElevation: 0,
       ),
+      // Every Material AppBar's automatic back button gets the same small tile as AppTopBar.
+      actionIconTheme: ActionIconThemeData(
+        backButtonIconBuilder: (context) {
+          final palette = context.palette;
+          return Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: palette.surfaceRaised,
+              borderRadius: AppRadii.all(AppRadii.lg),
+              border: Border.all(color: palette.border),
+            ),
+            child: Icon(Icons.arrow_back, size: 18, color: palette.text),
+          );
+        },
+      ),
       cardTheme: CardThemeData(
         color: cardColor,
         elevation: 0,

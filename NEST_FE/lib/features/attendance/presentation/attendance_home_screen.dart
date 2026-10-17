@@ -46,6 +46,41 @@ class _AttendanceHomeScreenState extends ConsumerState<AttendanceHomeScreen> {
   void _shiftDay(int delta) =>
       setState(() => _date = _date.add(Duration(days: delta)));
 
+  /// One dot per class meeting on each day of [month], coloured by where it stands on attendance -
+  /// marked, not marked, or still upcoming - so the calendar shows both when classes are and what
+  /// is outstanding. Days with a class still to mark get a red box instead of a dot. Respects the course
+  /// filter, and skips cancelled and vacated slots.
+  Future<Map<int, CalendarDayMark>> _monthMarks(DateTime month) async {
+    final palette = context.palette;
+    final entries = await ref.read(scheduleFeedProvider((
+      from: DateTime(month.year, month.month, 1),
+      to: DateTime(month.year, month.month + 1, 0),
+      courseId: _courseFilterId,
+    )).future);
+    final today = DateTime.now();
+    final dots = <int, List<Color>>{};
+    final needsMarking = <int>{};
+    for (final e in entries.where((e) => e.status.meets)) {
+      final chip = e.attendanceChip(today);
+      // A class still to mark is shown by the red box alone - no dot as well.
+      if (chip == AttendanceChip.notMarked) {
+        needsMarking.add(e.date.day);
+        dots.putIfAbsent(e.date.day, () => []);
+      } else {
+        (dots[e.date.day] ??= []).add(chip.color(palette));
+      }
+    }
+    // A red box round any day that still has a class to mark, as the Schedule calendar boxes a
+    // cancelled day - so outstanding work is visible at a glance, not just as one dot among others.
+    return {
+      for (final day in dots.keys)
+        day: CalendarDayMark(
+          dots: dots[day]!,
+          ring: needsMarking.contains(day) ? palette.notPaid : null,
+        ),
+    };
+  }
+
   Future<void> _openMarking(ScheduleEntry entry) async {
     final marked = await Navigator.of(context).push<bool>(MaterialPageRoute(
       builder: (_) => MarkAttendanceScreen(entry: entry),
@@ -150,6 +185,8 @@ class _AttendanceHomeScreenState extends ConsumerState<AttendanceHomeScreen> {
       options: <Course?>[null, ...selectable],
       labelOf: (c) => c?.name ?? 'All courses',
       value: selected,
+      searchable: true,
+      searchHint: 'Search course',
       panelWidth: 260,
       onSelected: (c) => setState(() => _courseFilterId = c?.id),
       optionBuilder: (context, option, _) {
@@ -243,8 +280,18 @@ class _AttendanceHomeScreenState extends ConsumerState<AttendanceHomeScreen> {
           Expanded(
             child: Pressable(
               onTap: () async {
+                final palette = context.palette;
                 final picked = await showAppCalendar(
-                    context: context, month: _date, selectedDay: _date.day);
+                  context: context,
+                  month: _date,
+                  selectedDay: _date.day,
+                  marksLoader: _monthMarks,
+                  marksKey: [
+                    for (final chip in AttendanceChip.values)
+                      CalendarKeyEntry(chip.label, chip.color(palette),
+                          ring: chip == AttendanceChip.notMarked),
+                  ],
+                );
                 if (picked != null && mounted) setState(() => _date = picked);
               },
               child: Padding(
@@ -309,7 +356,7 @@ class _AttendanceHomeScreenState extends ConsumerState<AttendanceHomeScreen> {
                 ? 'ALL CLASSES MARKED'
                 : '$unmarked CLASS${unmarked == 1 ? '' : 'ES'} STILL TO MARK',
             style: AppType.sectionLabel(
-                unmarked == 0 ? palette.paidManual : palette.gold),
+                unmarked == 0 ? palette.paidManual : palette.notPaid),
           ),
         ),
         for (final entry in classes)

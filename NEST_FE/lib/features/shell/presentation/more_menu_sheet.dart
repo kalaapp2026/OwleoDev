@@ -265,6 +265,9 @@ class _MoreSheetBodyState extends State<_MoreSheetBody> with SingleTickerProvide
                                   if (item.erpTabIndex != null) {
                                     widget.shellState.goToErpTab(item.erpTabIndex!);
                                   } else if (item.route != null) {
+                                    // Park the shell on Dashboard first, so backing out of the
+                                    // destination always ends there rather than on the last tab.
+                                    widget.shellState.goToErpTab(0);
                                     sheetContext.push(item.route!);
                                   }
                                 },

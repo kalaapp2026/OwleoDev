@@ -215,6 +215,10 @@ class AppShellState extends ConsumerState<AppShell> {
 
     final studentHeader = isStudent && _mode == AppMode.erp && !isDashboardHero && user != null;
 
+    // Every ERP tab other than Dashboard (Attendance, Fees, Profile) gets the back tile, which
+    // returns to Dashboard - the tabs have no route of their own to pop.
+    final tabBack = _mode == AppMode.erp && _erpIndex != 0;
+
     return Scaffold(
       // Truly transparent rather than colour-matched to the gradient's start: matching a solid
       // colour to a gradient still leaves a seam the moment the gradient's own stops shift, which
@@ -230,8 +234,8 @@ class AppShellState extends ConsumerState<AppShell> {
         // under it, and the theme toggle beside the bell.
         // Tabs have no route to pop, so Back returns to the Dashboard tab.
         automaticallyImplyLeading: false,
-        leadingWidth: studentHeader ? AppSpacing.x4l + 36 + AppSpacing.lg : null,
-        leading: studentHeader
+        leadingWidth: tabBack ? AppSpacing.x4l + 36 + AppSpacing.lg : null,
+        leading: tabBack
             ? Padding(
                 padding: const EdgeInsets.only(left: AppSpacing.x4l, right: AppSpacing.lg),
                 child: Center(
@@ -251,7 +255,7 @@ class AppShellState extends ConsumerState<AppShell> {
                 ),
               )
             : null,
-        titleSpacing: studentHeader ? 0 : null,
+        titleSpacing: tabBack ? 0 : null,
         title: isDashboardHero
             ? null
             : studentHeader
@@ -549,7 +553,8 @@ class _BottomNavBarState extends State<BottomNavBar> with SingleTickerProviderSt
         : erpRightIcons;
 
     Widget navItem(IconData icon, String label, int index, ValueChanged<int> onTap, int slot) {
-      final selected = currentIndex == index;
+      // While More is active (its sheet is open, or we're on a More destination) it alone is lit.
+      final selected = currentIndex == index && (isSocial || !widget.moreActive);
       final color = selected ? colorScheme.primary : colorScheme.onSurface.withValues(alpha: 0.45);
       return Expanded(
         child: InkWell(
