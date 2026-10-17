@@ -429,8 +429,15 @@ public class BatchService {
             rosterSizes.merge(member.getBatchId(), 1, Integer::sum);
         }
 
+        Map<UUID, List<com.nest.app.scheduling.entity.Schedule>> slotsByBatch = new HashMap<>();
+        for (com.nest.app.scheduling.entity.Schedule slot :
+                scheduleRepository.findByBatchIdInAndEffectiveToIsNull(batchIds)) {
+            slotsByBatch.computeIfAbsent(slot.getBatchId(), k -> new java.util.ArrayList<>()).add(slot);
+        }
+
         List<BatchResponse> result = new java.util.ArrayList<>();
         for (Batch b : batches) {
+            List<com.nest.app.scheduling.entity.Schedule> slots = slotsByBatch.getOrDefault(b.getId(), List.of());
             List<BatchResponse.TrainerSummary> trainers = trainerIdsByBatch
                     .getOrDefault(b.getId(), List.of()).stream()
                     .map(id -> new BatchResponse.TrainerSummary(id, namesByMembership.get(id)))
@@ -444,7 +451,10 @@ public class BatchService {
                     b.getId(), b.getCourseId(), b.getName(), b.getDescription(), b.getBatchType(),
                     b.getTrainerMembershipId(), namesByMembership.get(b.getTrainerMembershipId()),
                     b.getStatus(), b.getStartDate(), b.getEndDate(), trainers,
-                    rosterSizes.getOrDefault(b.getId(), 0)));
+                    rosterSizes.getOrDefault(b.getId(), 0),
+                    slots.isEmpty() ? null : slots.get(0).getStartTime().toString(),
+                    slots.isEmpty() ? null : slots.get(0).getEndTime().toString(),
+                    slots.stream().map(com.nest.app.scheduling.entity.Schedule::getDayOfWeek).distinct().sorted().toList()));
         }
         return result;
     }

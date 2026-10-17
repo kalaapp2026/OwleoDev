@@ -49,6 +49,29 @@ public class NotificationService {
                 .build());
     }
 
+    /** One recipient's copy of an academy broadcast, linked back so the sender can see read counts. */
+    @Transactional
+    public void notifyBroadcast(UUID userId, NotificationModule module, NotificationType type, String title, String body, UUID broadcastId) {
+        repository.save(AppNotification.builder()
+                .userId(userId)
+                .module(module)
+                .type(type)
+                .title(title)
+                .body(body)
+                .broadcastId(broadcastId)
+                .build());
+    }
+
+    /** Opened copies per broadcast. A broadcast with no linked copies (sent before tracking) is absent. */
+    @Transactional(readOnly = true)
+    public java.util.Map<UUID, Integer> readCountsForBroadcasts(java.util.Collection<UUID> broadcastIds) {
+        java.util.Map<UUID, Integer> counts = new java.util.HashMap<>();
+        for (Object[] row : repository.readStatsForBroadcasts(broadcastIds)) {
+            counts.put((UUID) row[0], ((Number) row[2]).intValue());
+        }
+        return counts;
+    }
+
     @Transactional(readOnly = true)
     public List<NotificationResponse> listForUser(UUID userId, NotificationModule module) {
         return repository.findByUserIdAndModuleOrderByCreatedAtDesc(userId, module).stream()

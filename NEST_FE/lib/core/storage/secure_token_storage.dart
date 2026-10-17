@@ -32,6 +32,12 @@ class SecureTokenStorage {
 
   Future<String?> readRefreshToken() => _read(_refreshTokenKey);
 
+  /// Generic string slots for [AccountStore]'s roster - same timeout/degrade-to-absent behaviour
+  /// as the token reads.
+  Future<String?> readKey(String key) => _read(key);
+
+  Future<void> writeKey(String key, String value) => _write(key, value);
+
   Future<void> clear() async {
     await Future.wait([
       _delete(_accessTokenKey),

@@ -121,7 +121,7 @@ class _RescheduleSheetState extends State<_RescheduleSheet> {
                     context: context,
                     title: 'Start time',
                     initial: _startTime,
-                    accentColor: accent,
+                    accentColor: palette.primary,
                   );
                   if (mounted) setState(() => _startTime = picked);
                 }),

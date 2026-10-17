@@ -50,13 +50,25 @@ class SignupScreen extends StatelessWidget {
   Widget build(BuildContext context) => const _AuthScreen(initialMode: _AuthMode.signUp);
 }
 
+/// "Add account" from the profile's account switcher - the same login form, reachable while
+/// already signed in (so it can't be `/login`, which bounces an authenticated user home), with a
+/// back arrow to cancel. A successful login makes the new account active and restarts the app
+/// scope, see SessionController._onLoginSuccess.
+class AddAccountScreen extends StatelessWidget {
+  const AddAccountScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) => const _AuthScreen(initialMode: _AuthMode.signIn, isAddingAccount: true);
+}
+
 const List<String> _kGenders = ['Male', 'Female', 'Other'];
 const List<String> _kBloodGroups = ['A+', 'A-', 'B+', 'B-', 'O+', 'O-', 'AB+', 'AB-'];
 
 class _AuthScreen extends ConsumerStatefulWidget {
-  const _AuthScreen({required this.initialMode});
+  const _AuthScreen({required this.initialMode, this.isAddingAccount = false});
 
   final _AuthMode initialMode;
+  final bool isAddingAccount;
 
   @override
   ConsumerState<_AuthScreen> createState() => _AuthScreenState();
@@ -291,9 +303,22 @@ class _AuthScreenState extends ConsumerState<_AuthScreen> {
             SafeArea(
               child: Column(
                 children: [
-                  const Padding(
-                    padding: EdgeInsets.fromLTRB(AppSpacing.page, AppSpacing.md, AppSpacing.page, 0),
-                    child: Row(mainAxisAlignment: MainAxisAlignment.end, children: [_ThemeToggleButton()]),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(AppSpacing.page, AppSpacing.md, AppSpacing.page, 0),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        if (widget.isAddingAccount)
+                          AppIconButton(
+                            icon: Icons.arrow_back_rounded,
+                            tooltip: 'Back',
+                            onTap: () => Navigator.of(context).maybePop(),
+                          )
+                        else
+                          const SizedBox.shrink(),
+                        const _ThemeToggleButton(),
+                      ],
+                    ),
                   ),
                   Expanded(
                     child: Center(

@@ -6,6 +6,7 @@ import com.nest.app.scheduling.dto.ScheduleResponse;
 import com.nest.app.scheduling.dto.SetScheduleRequest;
 import com.nest.app.scheduling.dto.SlotRequest;
 import com.nest.app.enrolment.entity.Batch;
+import com.nest.app.enrolment.entity.BatchType;
 import com.nest.app.enrolment.repository.BatchRepository;
 import com.nest.app.identity.service.CourseFeatureGuard;
 import com.nest.app.scheduling.entity.ClassInstance;
@@ -38,6 +39,7 @@ import java.util.stream.Collectors;
 public class SchedulingService {
 
     private static final int MATERIALISE_WEEKS_AHEAD = 8;
+    private static final int MAX_TEMPORARY_WEEKS = 52;
 
     private final ScheduleRepository scheduleRepository;
     private final ClassInstanceRepository classInstanceRepository;
@@ -150,6 +152,16 @@ public class SchedulingService {
     private void materialiseInstances(Schedule schedule) {
         LocalDate cursor = schedule.getEffectiveFrom();
         LocalDate horizon = cursor.plusWeeks(MATERIALISE_WEEKS_AHEAD);
+
+        // A temporary batch runs for exactly its start..end range: classes are generated across all
+        // of it and never past it, so a one-day batch gets that one day and nothing in the
+        // following weeks. Capped at a year as a guard against a mistyped end date.
+        Batch batch = batchRepository.findById(schedule.getBatchId()).orElse(null);
+        if (batch != null && batch.getBatchType() == BatchType.TEMPORARY && batch.getEndDate() != null) {
+            LocalDate cap = cursor.plusWeeks(MAX_TEMPORARY_WEEKS);
+            horizon = batch.getEndDate().isAfter(cap) ? cap : batch.getEndDate();
+        }
+
         while (!cursor.getDayOfWeek().equals(schedule.getDayOfWeek())) {
             cursor = cursor.plusDays(1);
         }

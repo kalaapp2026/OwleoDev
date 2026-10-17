@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:nest_fe/core/auth/account_store.dart';
 import 'package:nest_fe/core/network/api_config.dart';
 import 'package:nest_fe/core/storage/secure_token_storage.dart';
 
@@ -82,6 +83,8 @@ class AuthInterceptor extends Interceptor {
       final newAccessToken = response.data['accessToken'] as String;
       final newRefreshToken = response.data['refreshToken'] as String;
       await SecureTokenStorage.instance.saveTokens(accessToken: newAccessToken, refreshToken: newRefreshToken);
+      // The refresh token is single-use; the saved-accounts roster must keep the rotated one.
+      await AccountStore.instance.updateActiveTokens(newAccessToken, newRefreshToken);
       return newAccessToken;
     } on DioException {
       await SecureTokenStorage.instance.clear();

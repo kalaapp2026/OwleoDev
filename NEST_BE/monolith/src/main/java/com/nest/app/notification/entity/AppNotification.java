@@ -60,6 +60,10 @@ public class AppNotification {
     @Column(name = "action_code")
     private String actionCode;
 
+    /** Set when this alert is one recipient's copy of an academy broadcast. */
+    @Column(name = "broadcast_id")
+    private UUID broadcastId;
+
     @Column(name = "read_at")
     private Instant readAt;
 

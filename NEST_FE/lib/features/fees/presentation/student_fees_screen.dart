@@ -420,16 +420,25 @@ class _StatementState extends State<_Statement> {
           borderRadius: AppRadii.all(AppRadii.xl),
           border: Border.all(color: palette.border),
         ),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('${inRange.length} transaction${inRange.length == 1 ? '' : 's'}',
-              style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w600, color: palette.textMuted)),
-          const SizedBox(height: 2),
-          Text(money(total), style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: palette.text)),
-          const SizedBox(height: 8),
-          OutlinedButton.icon(
+        child: Row(children: [
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('${inRange.length} transaction${inRange.length == 1 ? '' : 's'}',
+                  style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w600, color: palette.textMuted)),
+              const SizedBox(height: 2),
+              Text(money(total), style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: palette.text)),
+            ]),
+          ),
+          FilledButton.icon(
             onPressed: widget.onDownload,
-            icon: const Icon(Icons.download, size: 15),
-            label: const Text('Download statement'),
+            icon: const Icon(Icons.download_rounded, size: 16),
+            label: const Text('Download'),
+            style: FilledButton.styleFrom(
+              backgroundColor: palette.primary,
+              foregroundColor: palette.onPrimary,
+              shape: RoundedRectangleBorder(borderRadius: AppRadii.all(AppRadii.lg)),
+              textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800),
+            ),
           ),
         ]),
       ),

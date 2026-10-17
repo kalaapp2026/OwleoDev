@@ -52,7 +52,7 @@ class AppTopBar extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                         fontSize: AppType.title,
-                        fontWeight: AppType.bold,
+                        fontWeight: AppType.heavy,
                         letterSpacing: AppType.titleTracking,
                         color: palette.text)),
                 if (subtitle != null)

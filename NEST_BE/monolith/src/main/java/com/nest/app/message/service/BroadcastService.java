@@ -25,6 +25,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -95,17 +96,21 @@ public class BroadcastService {
         Set<UUID> recipientUserIds = membershipRepository.findAllById(recipientMembershipIds).stream()
                 .map(AcademyMembership::getUserId).collect(Collectors.toSet());
         for (UUID userId : recipientUserIds) {
-            notificationService.notify(userId, NotificationModule.ERP, NotificationType.ACADEMY_BROADCAST,
-                    request.title(), request.body(), null);
+            notificationService.notifyBroadcast(userId, NotificationModule.ERP, NotificationType.ACADEMY_BROADCAST,
+                    request.title(), request.body(), broadcast.getId());
         }
 
-        return toResponse(broadcast);
+        return toResponse(broadcast, Map.of());
     }
 
     @Transactional(readOnly = true)
     public List<BroadcastResponse> list() {
-        return broadcastRepository.findByAcademyIdOrderByCreatedAtDesc(TenantContext.currentAcademyId()).stream()
-                .map(this::toResponse).collect(Collectors.toList());
+        List<AcademyBroadcast> broadcasts =
+                broadcastRepository.findByAcademyIdOrderByCreatedAtDesc(TenantContext.currentAcademyId());
+        Map<UUID, Integer> reads = broadcasts.isEmpty()
+                ? Map.of()
+                : notificationService.readCountsForBroadcasts(broadcasts.stream().map(AcademyBroadcast::getId).toList());
+        return broadcasts.stream().map(b -> toResponse(b, reads)).collect(Collectors.toList());
     }
 
     private Set<UUID> resolveRecipients(UUID academyId, EventAudienceType audienceType,
@@ -138,9 +143,9 @@ public class BroadcastService {
                 .map(BatchMember::getMembershipId).collect(Collectors.toSet());
     }
 
-    private BroadcastResponse toResponse(AcademyBroadcast b) {
+    private BroadcastResponse toResponse(AcademyBroadcast b, Map<UUID, Integer> reads) {
         return new BroadcastResponse(b.getId(), b.getAcademyId(), b.getTitle(), b.getBody(), b.getAudienceType(),
                 Set.copyOf(b.getCourseIds()), Set.copyOf(b.getBatchIds()), Set.copyOf(b.getIndividualIds()),
-                b.getRecipientCount(), b.getCreatedBy(), b.getCreatedAt());
+                b.getRecipientCount(), b.getCreatedBy(), b.getCreatedAt(), reads.get(b.getId()));
     }
 }

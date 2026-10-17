@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import 'package:nest_fe/app/theme/app_typography.dart';
+import 'package:nest_fe/core/design/pressable.dart';
 import 'package:nest_fe/app/theme/app_tokens.dart';
 import 'package:nest_fe/core/auth/feature_keys.dart';
 import 'package:nest_fe/core/auth/session_controller.dart';
@@ -118,6 +121,8 @@ class _AdminTrainerDashboardBody extends ConsumerWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 DashboardStatsRow(isAdmin: user.isActiveAcademyAdmin),
+                const SizedBox(height: AppSpacing.xl),
+                const _GlobalSearchBar(),
                 const SizedBox(height: AppSpacing.xxl),
                 const TodaysScheduleCard(),
                 if (canSeeFees) ...[
@@ -132,6 +137,38 @@ class _AdminTrainerDashboardBody extends ConsumerWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// The prototype's "Search students or trainers..." pill under the stat tiles. Opens the people
+/// search rather than being a field itself, so the dashboard never grabs the keyboard.
+class _GlobalSearchBar extends StatelessWidget {
+  const _GlobalSearchBar();
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.palette;
+    return Pressable(
+      onTap: () => context.push('/erp/students'),
+      borderRadius: AppRadii.all(AppRadii.lg),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl, vertical: AppSpacing.xl),
+        decoration: BoxDecoration(
+          color: palette.surfaceRaised,
+          borderRadius: AppRadii.all(AppRadii.lg),
+          border: Border.all(color: palette.border),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.search, size: 16, color: palette.textFaint),
+            const SizedBox(width: AppSpacing.lg),
+            Text('Search students or trainers…',
+                style: TextStyle(fontSize: AppType.md, fontWeight: AppType.regular, color: palette.textFaint)),
+          ],
+        ),
       ),
     );
   }

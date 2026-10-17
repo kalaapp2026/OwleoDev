@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:nest_fe/core/design/pressable.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:nest_fe/app/theme/app_tokens.dart';
 import 'package:nest_fe/app/theme/app_typography.dart';
@@ -384,35 +385,50 @@ class _State extends ConsumerState<StudentAttendanceHomeScreen> {
     final selected = _selectedDay == null
         ? null
         : byDay['${_selectedDay!.year}-${_selectedDay!.month}-${_selectedDay!.day}'];
-    return Column(children: [
-      Row(children: [
-        IconButton(
-            onPressed: () => setState(() => _month = DateTime(_month.year, _month.month - 1)),
-            icon: const Icon(Icons.chevron_left)),
-        Expanded(
-          child: Center(
-            child: Text('${monthsFull[_month.month - 1]} ${_month.year}',
-                style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14.5, color: palette.text)),
+    Widget arrow(IconData icon, VoidCallback onTap) => Pressable(
+          onTap: onTap,
+          child: Container(
+            width: 32,
+            height: 32,
+            decoration: BoxDecoration(
+              color: palette.surfaceRaised,
+              borderRadius: AppRadii.all(AppRadii.md),
+              border: Border.all(color: palette.border),
+            ),
+            child: Icon(icon, size: 18, color: palette.text),
           ),
+        );
+
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Padding(
+        padding: const EdgeInsets.only(bottom: 10),
+        child: Wrap(spacing: 14, children: [
+          _legend2('Present', palette.paidManual),
+          _legend2('Absent', palette.notPaid),
+        ]),
+      ),
+      _card(Column(children: [
+        Row(children: [
+          arrow(Icons.chevron_left, () => setState(() => _month = DateTime(_month.year, _month.month - 1))),
+          Expanded(
+            child: Center(
+              child: Text('${monthsFull[_month.month - 1]} ${_month.year}',
+                  style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15, color: palette.text)),
+            ),
+          ),
+          arrow(Icons.chevron_right, () => setState(() => _month = DateTime(_month.year, _month.month + 1))),
+        ]),
+        const SizedBox(height: 12),
+        GridView.count(
+          crossAxisCount: 7,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          mainAxisSpacing: 4,
+          crossAxisSpacing: 4,
+          children: cells,
         ),
-        IconButton(
-            onPressed: () => setState(() => _month = DateTime(_month.year, _month.month + 1)),
-            icon: const Icon(Icons.chevron_right)),
-      ]),
-      _card(GridView.count(
-        crossAxisCount: 7,
-        shrinkWrap: true,
-        physics: const NeverScrollableScrollPhysics(),
-        mainAxisSpacing: 4,
-        crossAxisSpacing: 4,
-        children: cells,
-      )),
+      ])),
       if (selected != null) ...[const SizedBox(height: 12), ..._rows([selected], '')],
-      const SizedBox(height: 12),
-      Wrap(spacing: 14, children: [
-        _legend2('Present', palette.paidManual),
-        _legend2('Absent', palette.notPaid),
-      ]),
     ]);
   }
 
@@ -506,20 +522,29 @@ class _State extends ConsumerState<StudentAttendanceHomeScreen> {
       Text('History can cover up to a 6-month range',
           style: TextStyle(fontSize: 9.5, color: palette.textFaint)),
       const SizedBox(height: 12),
-      _card(Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text('${s.present + s.absent} class${s.present + s.absent == 1 ? '' : 'es'} counted',
-            style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w600, color: palette.textMuted)),
-        const SizedBox(height: 2),
-        Text('${s.pct.round()}% attendance',
-            style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w800,
-                color: s.pct >= _minAttendancePct ? palette.text : palette.notPaid)),
-        const SizedBox(height: 8),
-        OutlinedButton.icon(
+      _card(Row(children: [
+        Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('${s.present + s.absent} class${s.present + s.absent == 1 ? '' : 'es'} counted',
+                style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w600, color: palette.textMuted)),
+            const SizedBox(height: 2),
+            Text('${s.pct.round()}% attendance',
+                style: TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.w800,
+                    color: s.pct >= _minAttendancePct ? palette.text : palette.notPaid)),
+          ]),
+        ),
+        FilledButton.icon(
           onPressed: shown.isEmpty ? null : () => _export(shown),
-          icon: const Icon(Icons.download, size: 15),
+          icon: const Icon(Icons.download_rounded, size: 16),
           label: const Text('Download'),
+          style: FilledButton.styleFrom(
+            backgroundColor: palette.primary,
+            foregroundColor: palette.onPrimary,
+            shape: RoundedRectangleBorder(borderRadius: AppRadii.all(AppRadii.lg)),
+            textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800),
+          ),
         ),
       ])),
       const SizedBox(height: 12),

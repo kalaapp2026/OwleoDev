@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'app_colors.dart';
 import 'app_tokens.dart';
+import 'app_typography.dart';
 
 /// Two fully-specified Material 3 themes built from [AppColors]. Every screen
 /// should read colors through `Theme.of(context).colorScheme` (or the
@@ -9,41 +10,51 @@ import 'app_tokens.dart';
 class AppTheme {
   AppTheme._();
 
+  /// Edge of the square back tile, shared with AppTopBar and AppIconButton.
+  static const double _backTileSize = 36;
+
   static ThemeData get light => _build(brightness: Brightness.light);
   static ThemeData get dark => _build(brightness: Brightness.dark);
 
   static ThemeData _build({required Brightness brightness}) {
     final isDark = brightness == Brightness.dark;
 
-    final colorScheme = isDark
-        ? const ColorScheme.dark(
-            primary: AppColors.darkTeal,
-            onPrimary: AppColors.darkBg,
-            secondary: AppColors.darkAmber,
-            onSecondary: AppColors.darkBg,
-            tertiary: AppColors.darkAmber,
-            onTertiary: AppColors.darkBg,
-            surface: AppColors.darkSurface,
-            onSurface: AppColors.darkInk,
-            error: AppColors.danger,
-            onError: Colors.white,
-          )
-        : const ColorScheme.light(
-            primary: AppColors.lightPurple,
-            onPrimary: Colors.white,
-            secondary: AppColors.lightPink,
-            onSecondary: Colors.white,
-            tertiary: AppColors.lightCyan,
-            onTertiary: AppColors.lightInk,
-            surface: Colors.white,
-            onSurface: AppColors.lightInk,
-            error: AppColors.danger,
-            onError: Colors.white,
-          );
+    // Material's scheme is derived from the same tokens the screens read, so a stock button, switch
+    // or text field is the prototype's colour in both themes rather than a second brand.
+    final p = isDark ? AppPalette.dark : AppPalette.light;
+    final colorScheme = (isDark ? const ColorScheme.dark() : const ColorScheme.light()).copyWith(
+      primary: p.primary,
+      onPrimary: p.onPrimary,
+      secondary: p.gold,
+      onSecondary: p.onGold,
+      tertiary: p.gold,
+      onTertiary: p.onGold,
+      surface: p.surface,
+      onSurface: p.text,
+      error: p.notPaid,
+      onError: Colors.white,
+      outline: p.border,
+      outlineVariant: p.borderSoft,
+      // Material derives these from its own seed (a purple), which leaks into any stock FAB, chip,
+      // switch track or tonal button. Pin them to the tokens.
+      primaryContainer: Color.alphaBlend(p.primarySoft, p.surface),
+      onPrimaryContainer: p.primary,
+      secondaryContainer: Color.alphaBlend(p.goldSoft, p.surface),
+      onSecondaryContainer: p.gold,
+      tertiaryContainer: Color.alphaBlend(p.goldSoft, p.surface),
+      onTertiaryContainer: p.gold,
+      surfaceTint: Colors.transparent,
+      surfaceContainerLowest: p.surface,
+      surfaceContainerLow: p.surface,
+      surfaceContainer: p.surfaceRaised,
+      surfaceContainerHigh: p.surfaceHigh,
+      surfaceContainerHighest: p.surfaceHigh,
+      onSurfaceVariant: p.textMuted,
+    );
 
-    final scaffoldBg = isDark ? AppColors.darkBg : AppColors.lightBg;
-    final cardColor = isDark ? AppColors.darkSurface : Colors.white;
-    final borderColor = isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.06);
+    final scaffoldBg = p.bg;
+    final cardColor = p.surface;
+    final borderColor = p.border;
 
     return ThemeData(
       useMaterial3: true,
@@ -59,20 +70,31 @@ class AppTheme {
         elevation: 0,
         centerTitle: false,
         scrolledUnderElevation: 0,
+        // Same geometry as AppTopBar (Courses): tile 20px in from the edge, title 12px after it.
+        // The leading slot is exactly that tile's footprint and the title starts where it ends.
+        leadingWidth: AppSpacing.page + _backTileSize + AppSpacing.lg,
+        titleSpacing: 0,
       ),
       // Every Material AppBar's automatic back button gets the same small tile as AppTopBar.
       actionIconTheme: ActionIconThemeData(
         backButtonIconBuilder: (context) {
           final palette = context.palette;
-          return Container(
-            width: 36,
-            height: 36,
-            decoration: BoxDecoration(
-              color: palette.surfaceRaised,
-              borderRadius: AppRadii.all(AppRadii.lg),
-              border: Border.all(color: palette.border),
+          // Left-aligned with the page inset, less the 8px an IconButton pads its icon by.
+          return Align(
+            alignment: Alignment.centerLeft,
+            child: Padding(
+              padding: const EdgeInsets.only(left: AppSpacing.page - 8),
+              child: Container(
+                width: _backTileSize,
+                height: _backTileSize,
+                decoration: BoxDecoration(
+                  color: palette.surfaceRaised,
+                  borderRadius: AppRadii.all(AppRadii.lg),
+                  border: Border.all(color: palette.border),
+                ),
+                child: Icon(Icons.arrow_back, size: 18, color: palette.text),
+              ),
             ),
-            child: Icon(Icons.arrow_back, size: 18, color: palette.text),
           );
         },
       ),
@@ -148,9 +170,16 @@ class AppTheme {
           borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
         ),
       ),
+      floatingActionButtonTheme: FloatingActionButtonThemeData(
+        backgroundColor: p.primary,
+        foregroundColor: p.onPrimary,
+        elevation: 6,
+        extendedTextStyle: const TextStyle(fontSize: AppType.xxl, fontWeight: AppType.heavy),
+        shape: RoundedRectangleBorder(borderRadius: AppRadii.all(AppRadii.pill)),
+      ),
       snackBarTheme: SnackBarThemeData(
-        backgroundColor: isDark ? Colors.white : AppColors.lightInk,
-        contentTextStyle: TextStyle(color: isDark ? AppColors.darkBg : Colors.white),
+        backgroundColor: isDark ? Colors.white : p.text,
+        contentTextStyle: TextStyle(color: isDark ? p.bg : Colors.white),
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       ),
@@ -176,12 +205,12 @@ class AppTheme {
     return TextTheme(
       displaySmall: TextStyle(fontSize: 30, fontWeight: FontWeight.w700, color: ink, letterSpacing: -0.3),
       headlineSmall: TextStyle(fontSize: 22, fontWeight: FontWeight.w700, color: ink, letterSpacing: -0.2),
-      titleLarge: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: ink),
-      titleMedium: TextStyle(fontSize: 15.5, fontWeight: FontWeight.w600, color: ink),
+      titleLarge: TextStyle(fontSize: AppType.title, fontWeight: AppType.heavy, letterSpacing: AppType.titleTracking, color: ink),
+      titleMedium: TextStyle(fontSize: 15.5, fontWeight: AppType.bold, color: ink),
       bodyLarge: TextStyle(fontSize: 15, color: ink),
       bodyMedium: TextStyle(fontSize: 13.5, color: ink.withValues(alpha: 0.75)),
       bodySmall: TextStyle(fontSize: 12, color: ink.withValues(alpha: 0.6)),
-      labelLarge: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600, color: ink),
+      labelLarge: TextStyle(fontSize: 13.5, fontWeight: AppType.bold, color: ink),
     );
   }
 }

@@ -17,6 +17,8 @@ public record BroadcastResponse(
         Set<UUID> individualIds,
         int recipientCount,
         UUID createdBy,
-        Instant createdAt
+        Instant createdAt,
+        /** How many recipients have opened it; null for a broadcast sent before read tracking existed. */
+        Integer readCount
 ) {
 }

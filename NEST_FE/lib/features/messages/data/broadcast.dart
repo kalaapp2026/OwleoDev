@@ -11,6 +11,9 @@ class Broadcast {
   final int recipientCount;
   final String createdAt;
 
+  /// How many recipients have opened it; null for a broadcast sent before read tracking existed.
+  final int? readCount;
+
   Broadcast({
     required this.id,
     required this.title,
@@ -21,6 +24,7 @@ class Broadcast {
     required this.individualIds,
     required this.recipientCount,
     required this.createdAt,
+    this.readCount,
   });
 
   factory Broadcast.fromJson(Map<String, dynamic> json) => Broadcast(
@@ -33,5 +37,6 @@ class Broadcast {
         individualIds: Set<String>.from(json['individualIds'] as List? ?? const []),
         recipientCount: json['recipientCount'] as int? ?? 0,
         createdAt: json['createdAt'] as String? ?? '',
+        readCount: json['readCount'] as int?,
       );
 }

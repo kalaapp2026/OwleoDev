@@ -3,6 +3,7 @@ package com.nest.app.enrolment.dto;
 import com.nest.app.enrolment.entity.BatchStatus;
 import com.nest.app.enrolment.entity.BatchType;
 
+import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
@@ -26,7 +27,12 @@ public record BatchResponse(
         List<TrainerSummary> trainers,
         /** Live roster count. Not a stored cap - the batch form shows capacity as "however many
          * students are currently in it", so a stale number is worse than no number. */
-        int studentCount
+        int studentCount,
+        /** The class time, "HH:mm" (every slot of a batch shares one). Null until a schedule is set. */
+        String startTime,
+        String endTime,
+        /** The weekdays the batch meets, Monday first. Empty until a schedule is set. */
+        List<DayOfWeek> days
 ) {
     public record TrainerSummary(UUID membershipId, String name) {
     }

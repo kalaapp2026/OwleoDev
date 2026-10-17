@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:nest_fe/features/profile/presentation/account_switcher_sheet.dart';
 import 'package:nest_fe/features/profile/presentation/my_profile_screen.dart';
 import 'package:nest_fe/features/profile/presentation/user_settings_screen.dart';
 import 'package:nest_fe/l10n/app_localizations.dart';
@@ -9,8 +10,23 @@ import 'package:nest_fe/core/widgets/app_notice.dart';
 import 'package:nest_fe/features/academy/presentation/academy_management_screen.dart';
 import 'package:nest_fe/features/artist_application/presentation/artist_applications_screen.dart';
 
-class ProfileScreen extends ConsumerWidget {
+/// The Profile tab: the account-switcher bar on top, whichever profile body fits the role below.
+class ProfileScreen extends StatelessWidget {
   const ProfileScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return const Column(
+      children: [
+        AccountSwitcherBar(),
+        Expanded(child: _ProfileBody()),
+      ],
+    );
+  }
+}
+
+class _ProfileBody extends ConsumerWidget {
+  const _ProfileBody();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {

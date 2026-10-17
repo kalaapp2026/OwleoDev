@@ -102,7 +102,7 @@ class _StatTile extends StatelessWidget {
       onTap: onTap,
       borderRadius: AppRadii.all(AppRadii.xl),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: AppSpacing.lg),
+        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.lg),
         decoration: BoxDecoration(
           color: palette.surfaceRaised,
           borderRadius: AppRadii.all(AppRadii.xl),
@@ -110,6 +110,7 @@ class _StatTile extends StatelessWidget {
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Container(
               width: 24,

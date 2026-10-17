@@ -1,6 +1,7 @@
 package com.nest.app.scheduling.service;
 
 import com.nest.app.enrolment.entity.Batch;
+import com.nest.app.enrolment.entity.BatchType;
 import com.nest.app.enrolment.repository.BatchRepository;
 import com.nest.app.identity.service.CourseFeatureGuard;
 import com.nest.app.scheduling.dto.AddClassInstanceRequest;
@@ -22,6 +23,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.doThrow;
@@ -83,6 +85,55 @@ class SchedulingServiceTest {
                 LocalDate.now());
 
         assertThatCode(() -> schedulingService.setSchedule(request)).doesNotThrowAnyException();
+    }
+
+    /** Sets a schedule for a batch of the given type/dates and returns every class instance saved. */
+    private List<com.nest.app.scheduling.entity.ClassInstance> materialise(
+            BatchType type, LocalDate start, LocalDate end, DayOfWeek day) {
+        newService();
+        when(batchRepository.findById(batchId)).thenReturn(Optional.of(Batch.builder()
+                .id(batchId).courseId(courseId).batchType(type).startDate(start).endDate(end).build()));
+        when(scheduleRepository.findByBatchIdAndEffectiveToIsNull(batchId)).thenReturn(List.of());
+        when(scheduleRepository.save(org.mockito.ArgumentMatchers.any())).thenAnswer(inv -> {
+            var s = inv.getArgument(0, com.nest.app.scheduling.entity.Schedule.class);
+            s.setId(UUID.randomUUID());
+            return s;
+        });
+        var saved = new java.util.ArrayList<com.nest.app.scheduling.entity.ClassInstance>();
+        when(classInstanceRepository.save(org.mockito.ArgumentMatchers.any())).thenAnswer(inv -> {
+            saved.add(inv.getArgument(0));
+            return inv.getArgument(0);
+        });
+
+        schedulingService.setSchedule(new SetScheduleRequest(batchId,
+                List.of(new SlotRequest(day, LocalTime.of(17, 0), LocalTime.of(18, 0))), start));
+        return saved;
+    }
+
+    // 2026-10-19 is a Monday.
+    private static final LocalDate MONDAY = LocalDate.of(2026, 10, 19);
+
+    @Test
+    void aOneDayTemporaryBatchGetsThatDayAndNothingAfter() {
+        var classes = materialise(BatchType.TEMPORARY, MONDAY, MONDAY, DayOfWeek.MONDAY);
+
+        assertThat(classes).extracting(c -> c.getDate()).containsExactly(MONDAY);
+    }
+
+    @Test
+    void aTemporaryBatchStopsAtItsEndDate() {
+        var classes = materialise(BatchType.TEMPORARY, MONDAY, MONDAY.plusWeeks(2), DayOfWeek.MONDAY);
+
+        assertThat(classes).extracting(c -> c.getDate())
+                .containsExactly(MONDAY, MONDAY.plusWeeks(1), MONDAY.plusWeeks(2));
+    }
+
+    @Test
+    void aRegularBatchStillGetsEightWeeksAhead() {
+        var classes = materialise(BatchType.REGULAR, MONDAY, null, DayOfWeek.MONDAY);
+
+        assertThat(classes).hasSize(9);
+        assertThat(classes.get(8).getDate()).isEqualTo(MONDAY.plusWeeks(8));
     }
 
     @Test

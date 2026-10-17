@@ -1,4 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:nest_fe/core/app_restart.dart';
+import 'package:nest_fe/core/auth/account_store.dart';
 import 'package:nest_fe/core/auth/session_state.dart';
 import 'package:nest_fe/core/auth/user_profile.dart';
 import 'package:nest_fe/core/error/api_exception.dart';
@@ -43,8 +45,7 @@ class SessionController extends Notifier<SessionState> {
     } on ApiException {
       // AuthInterceptor already tried a silent refresh before this bubbled up - if we're here,
       // the session really is gone.
-      await SecureTokenStorage.instance.clear();
-      state = SessionState.unauthenticated();
+      await _dropActiveAccount();
     }
   }
 
@@ -100,11 +101,44 @@ class SessionController extends Notifier<SessionState> {
   }
 
   Future<void> _onLoginSuccess(LoginResult result) async {
+    final wasLoggedIn = state.isAuthenticated;
     await SecureTokenStorage.instance.saveTokens(accessToken: result.accessToken, refreshToken: result.refreshToken);
+    await AccountStore.instance.upsertActive(SavedAccount(
+      userId: result.user.id,
+      username: result.user.username,
+      fullName: result.user.fullName,
+      accessToken: result.accessToken,
+      refreshToken: result.refreshToken,
+    ));
+    if (wasLoggedIn) {
+      // "Add account" while someone is already signed in: the new account becomes active, and
+      // the previous user's cached data must not leak into it, so start a clean provider scope.
+      ActiveMembershipHolder.instance.membershipId = null;
+      AppRestart.restart();
+      return;
+    }
     _applyActiveMembership(result.user);
     state = SessionState.authenticated(result.user);
   }
 
+  /// Instagram-style account switch: make [userId]'s saved tokens the active ones and restart.
+  Future<void> switchAccount(String userId) async {
+    if (userId == state.user?.id) return;
+    final accounts = await AccountStore.instance.all();
+    final target = accounts.where((a) => a.userId == userId).firstOrNull;
+    if (target == null) return;
+    await _activate(target);
+  }
+
+  Future<void> _activate(SavedAccount account) async {
+    await SecureTokenStorage.instance.saveTokens(accessToken: account.accessToken, refreshToken: account.refreshToken);
+    await AccountStore.instance.setActive(account.userId);
+    ActiveMembershipHolder.instance.membershipId = null;
+    AppRestart.restart();
+  }
+
+  /// Logs out the current account only. If other accounts are saved on the device, one of them
+  /// becomes active instead of landing on the login screen.
   Future<void> logout() async {
     final refreshToken = await SecureTokenStorage.instance.readRefreshToken();
     if (refreshToken != null) {
@@ -115,13 +149,23 @@ class SessionController extends Notifier<SessionState> {
         // the server call fails (e.g. offline).
       }
     }
-    await _clearAndSetUnauthenticated();
+    await _dropActiveAccount();
   }
 
   /// Invoked by AuthInterceptor when a refresh attempt fails - the refresh token itself is
   /// invalid/expired/revoked, so there is nothing left to do server-side.
   void _handleSessionExpired() {
-    _clearAndSetUnauthenticated();
+    _dropActiveAccount();
+  }
+
+  Future<void> _dropActiveAccount() async {
+    final activeId = await AccountStore.instance.activeId() ?? state.user?.id;
+    final remaining = activeId == null ? await AccountStore.instance.all() : await AccountStore.instance.remove(activeId);
+    if (remaining.isNotEmpty) {
+      await _activate(remaining.first);
+      return;
+    }
+    await _clearAndSetUnauthenticated();
   }
 
   Future<void> _clearAndSetUnauthenticated() async {

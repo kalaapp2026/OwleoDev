@@ -251,7 +251,7 @@ class _DayCell extends StatelessWidget {
     final Color? ringColor = isSelected
         ? null
         : isToday
-            ? palette.primary
+            ? context.calendarAccent
             : info?.hasCancelled == true
                 ? palette.notPaid
                 : info?.hasRescheduled == true
@@ -262,7 +262,7 @@ class _DayCell extends StatelessWidget {
       onTap: onTap,
       child: Container(
         decoration: BoxDecoration(
-          color: isSelected ? palette.primary : Colors.transparent,
+          color: isSelected ? context.calendarAccent : Colors.transparent,
           borderRadius: AppRadii.all(AppRadii.md),
           border: ringColor == null
               ? Border.all(color: Colors.transparent)
@@ -277,9 +277,9 @@ class _DayCell extends StatelessWidget {
                 fontSize: AppType.base,
                 fontWeight: isSelected || isToday ? AppType.heavy : AppType.regular,
                 color: isSelected
-                    ? palette.onPrimary
+                    ? context.onCalendarAccent
                     : isToday
-                        ? palette.primary
+                        ? context.calendarAccent
                         : palette.text,
               ),
             ),
@@ -297,7 +297,7 @@ class _DayCell extends StatelessWidget {
                         height: 4.5,
                         margin: const EdgeInsets.symmetric(horizontal: 1),
                         decoration: BoxDecoration(
-                          color: isSelected ? palette.onPrimary : color,
+                          color: isSelected ? context.onCalendarAccent : color,
                           shape: BoxShape.circle,
                         ),
                       ),
@@ -308,7 +308,7 @@ class _DayCell extends StatelessWidget {
                           fontSize: 7,
                           height: 1,
                           fontWeight: AppType.heavy,
-                          color: isSelected ? palette.onPrimary : palette.textFaint,
+                          color: isSelected ? context.onCalendarAccent : palette.textFaint,
                         ),
                       ),
                   ],

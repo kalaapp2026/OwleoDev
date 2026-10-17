@@ -11,5 +11,8 @@ public interface ScheduleRepository extends JpaRepository<Schedule, UUID> {
 
     List<Schedule> findByBatchIdAndEffectiveToIsNull(UUID batchId);
 
+    /** The slots in force today for a whole page of batches - one query, not one per batch. */
+    List<Schedule> findByBatchIdInAndEffectiveToIsNull(java.util.Collection<UUID> batchIds);
+
     void deleteByBatchId(UUID batchId);
 }

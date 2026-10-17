@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:nest_fe/app/theme/app_tokens.dart';
 import 'package:nest_fe/app/theme/app_typography.dart';
 import 'package:nest_fe/core/auth/session_controller.dart';
+import 'package:nest_fe/core/design/app_top_bar.dart';
 import 'package:nest_fe/core/design/calendar_modal.dart';
 import 'package:nest_fe/core/design/confirm_dialog.dart';
 import 'package:nest_fe/core/design/pressable.dart';
@@ -132,13 +133,13 @@ class _EventListScreenState extends ConsumerState<EventListScreen> {
     final academyId = _academyId;
     final eventsAsync = ref.watch(_academyEventsProvider(academyId));
     final today = DateTime.now();
+    final upcomingCount = eventsAsync.valueOrNull?.where((e) {
+      final end = e.endDate == null ? DateTime.tryParse(e.eventDate) : DateTime.tryParse(e.endDate!);
+      return end == null || !end.isBefore(DateTime(today.year, today.month, today.day));
+    }).length;
 
     return Scaffold(
       backgroundColor: palette.bg,
-      appBar: AppBar(
-        title: const Text('Events'),
-        actions: [IconButton(icon: const Icon(Icons.calendar_month_outlined), onPressed: _openCalendar)],
-      ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () async {
           await Navigator.of(context).push(MaterialPageRoute(builder: (_) => const EventFormScreen()));
@@ -147,7 +148,19 @@ class _EventListScreenState extends ConsumerState<EventListScreen> {
         icon: const Icon(Icons.add),
         label: const Text('Add Event'),
       ),
-      body: Padding(
+      body: SafeArea(
+        child: Column(
+          children: [
+            AppTopBar(
+              title: 'Events',
+              subtitle: upcomingCount == null ? null : '$upcomingCount upcoming',
+              actions: [
+                AppIconButton(icon: Icons.calendar_month_outlined, onTap: _openCalendar),
+                const ThemeModeButton(),
+              ],
+            ),
+            Expanded(
+              child: Padding(
         padding: const EdgeInsets.all(AppSpacing.page),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -161,7 +174,7 @@ class _EventListScreenState extends ConsumerState<EventListScreen> {
               ),
               child: Row(
                 children: [
-                  Icon(Icons.search, size: 15, color: palette.textFaint),
+                  Icon(Icons.search, size: 16, color: palette.textFaint),
                   const SizedBox(width: AppSpacing.sm),
                   Expanded(
                     child: TextField(
@@ -252,6 +265,10 @@ class _EventListScreenState extends ConsumerState<EventListScreen> {
                   );
                 },
               ),
+            ),
+          ],
+        ),
+      ),
             ),
           ],
         ),

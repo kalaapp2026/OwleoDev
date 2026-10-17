@@ -25,6 +25,7 @@ import 'package:nest_fe/features/platform/presentation/platform_settings_screen.
 import 'package:nest_fe/features/platform/presentation/billing_screen.dart';
 import 'package:nest_fe/features/platform/presentation/super_admin_dashboard_screen.dart';
 import 'package:nest_fe/features/profile/presentation/profile_screen.dart';
+import 'package:nest_fe/features/profile/presentation/account_switcher_sheet.dart';
 import 'package:nest_fe/features/shell/presentation/more_menu_sheet.dart';
 import 'package:nest_fe/features/social/presentation/events_tab.dart';
 import 'package:nest_fe/features/social/presentation/feed_screen.dart';
@@ -255,7 +256,9 @@ class AppShellState extends ConsumerState<AppShell> {
                 ),
               )
             : null,
-        titleSpacing: tabBack ? 0 : null,
+        // The theme zeroes titleSpacing for screens with a back tile; the Dashboard tab has none and
+        // keeps Material's default inset.
+        titleSpacing: tabBack ? 0 : NavigationToolbar.kMiddleSpacing,
         title: isDashboardHero
             ? null
             : studentHeader
@@ -279,7 +282,7 @@ class AppShellState extends ConsumerState<AppShell> {
             : null,
         actions: [
           if (isDashboardHero) const _ThemeToggleButton(),
-          if (studentHeader) const Padding(padding: EdgeInsets.only(right: 4), child: ThemeModeButton()),
+          if (studentHeader || (_mode == AppMode.erp && !isDashboardHero)) const Padding(padding: EdgeInsets.only(right: 4), child: ThemeModeButton()),
           // Platform settings live in the app bar, not just on the Platform dashboard: a gear icon
           // is where anyone looks for settings first, and on the dashboard it sat below the charts
           // where it was easy to miss entirely.
@@ -300,7 +303,7 @@ class AppShellState extends ConsumerState<AppShell> {
               padding: const EdgeInsets.only(right: AppSpacing.lg, left: AppSpacing.xs),
               child: InkWell(
                 borderRadius: AppRadii.all(AppRadii.pill),
-                onTap: () => setState(() => _erpIndex = 4),
+                onTap: () => showAccountMenu(context, onOpenProfile: () => setState(() => _erpIndex = 4)),
                 child: Container(
                   padding: const EdgeInsets.all(2),
                   decoration: BoxDecoration(
@@ -323,13 +326,16 @@ class AppShellState extends ConsumerState<AppShell> {
             IconButton(
               icon: const Icon(Icons.person_outline),
               tooltip: t.navProfile,
-              onPressed: () => setState(() {
-                if (_mode == AppMode.erp) {
-                  _erpIndex = 4;
-                } else {
-                  _socialIndex = 4;
-                }
-              }),
+              onPressed: () => showAccountMenu(
+                context,
+                onOpenProfile: () => setState(() {
+                  if (_mode == AppMode.erp) {
+                    _erpIndex = 4;
+                  } else {
+                    _socialIndex = 4;
+                  }
+                }),
+              ),
             ),
           if (_mode == AppMode.erp && !isDashboardHero) ...[
             if (user != null && user.hasMultipleAcademies)

@@ -245,6 +245,12 @@ class _CourseCard extends StatelessWidget {
         ? palette.textFaint
         : pct >= 85 ? palette.paidManual : pct >= 70 ? palette.partial : palette.notPaid;
     final trainers = {for (final b in batches) ...b.trainers.map((t) => t.name)}.where((n) => n.isNotEmpty);
+    // "Mon, Wed, Fri · 6:00 PM - 6:45 PM" per batch that has a schedule set.
+    final schedule = [
+      for (final b in batches)
+        if (b.days.isNotEmpty || b.timeRange != null)
+          [if (b.days.isNotEmpty) formatDays(b.days), if (b.timeRange != null) b.timeRange!].join(' · '),
+    ];
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
@@ -258,7 +264,8 @@ class _CourseCard extends StatelessWidget {
             borderRadius: AppRadii.all(AppRadii.xxl),
             border: Border.all(color: palette.border),
           ),
-          child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          child: Column(children: [
+            Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Container(
               width: 38,
               height: 38,
@@ -288,6 +295,26 @@ class _CourseCard extends StatelessWidget {
               StatusBadge(label: '${pct.round()}% present', color: pctColor),
             const SizedBox(width: 4),
             Icon(Icons.chevron_right, size: 16, color: palette.textFaint),
+            ]),
+            if (schedule.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              Divider(height: 1, color: palette.borderSoft),
+              const SizedBox(height: 10),
+              for (final line in schedule)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 2),
+                  child: Row(children: [
+                    Icon(Icons.schedule, size: 13, color: palette.textFaint),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(line,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(fontSize: 11, color: palette.textMuted)),
+                    ),
+                  ]),
+                ),
+            ],
           ]),
         ),
       ),

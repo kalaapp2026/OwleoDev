@@ -1,3 +1,4 @@
+import 'package:nest_fe/core/design/app_top_bar.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:nest_fe/app/theme/app_tokens.dart';
@@ -280,7 +281,7 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
                 Text('Schedule',
                     style: TextStyle(
                         fontSize: 17,
-                        fontWeight: AppType.bold,
+                        fontWeight: AppType.heavy,
                         letterSpacing: -0.2,
                         color: palette.text)),
                 const SizedBox(height: 2),
@@ -290,6 +291,8 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
             ),
           ),
           _viewToggle(palette),
+          const SizedBox(width: AppSpacing.md),
+          const ThemeModeButton(),
         ],
       ),
     );
@@ -308,11 +311,11 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
             height: 30,
             alignment: Alignment.center,
             decoration: BoxDecoration(
-              color: active ? palette.primary : Colors.transparent,
+              color: active ? context.calendarAccent : Colors.transparent,
               borderRadius: AppRadii.all(AppRadii.smd),
             ),
             child: Icon(icon,
-                size: 15, color: active ? palette.onPrimary : palette.textMuted),
+                size: 15, color: active ? context.onCalendarAccent : palette.textMuted),
           ),
         ),
       );
@@ -474,7 +477,7 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
 
     return Row(
       children: [
-        chip(ScheduleStatusFilter.all, 'All', null, palette.primary, palette.primarySoft, 0),
+        chip(ScheduleStatusFilter.all, 'All', null, context.calendarAccent, context.calendarAccent.withValues(alpha: 0.14), 0),
         const SizedBox(width: AppSpacing.xs),
         chip(ScheduleStatusFilter.changed, 'Rescheduled', Icons.refresh, palette.gold,
             palette.goldSoft, changedCount),

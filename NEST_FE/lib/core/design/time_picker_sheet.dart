@@ -283,6 +283,7 @@ class _TimePickerSheetState extends State<_TimePickerSheet> {
                 fontWeight: AppType.heavy,
                 height: 1,
                 color: active ? accent : palette.text,
+                shadows: active ? [Shadow(color: accent.withValues(alpha: 0.45), blurRadius: 14)] : null,
               ),
             ),
           ),
@@ -368,8 +369,19 @@ class _TimePickerSheetState extends State<_TimePickerSheet> {
               height: _clockSize,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: palette.surfaceRaised,
+                gradient: RadialGradient(
+                  center: const Alignment(0, -0.2),
+                  radius: 0.85,
+                  // Opaque on purpose: a translucent tint lets the glow beneath bleed through the face.
+                  colors: [Color.alphaBlend(accent.withValues(alpha: 0.08), palette.surfaceRaised), palette.surfaceRaised],
+                  stops: const [0, 0.7],
+                ),
                 border: Border.all(color: accent.withValues(alpha: 0.33), width: 1.5),
+                boxShadow: [
+                  BoxShadow(color: palette.borderSoft, spreadRadius: 1),
+                  BoxShadow(color: accent.withValues(alpha: 0.15), blurRadius: 28),
+                  const BoxShadow(color: Color(0x29241B10), blurRadius: 30, offset: Offset(0, 14)),
+                ],
               ),
             ),
             CustomPaint(
@@ -552,6 +564,7 @@ class _TimePickerSheetState extends State<_TimePickerSheet> {
               decoration: BoxDecoration(
                 color: _violatesMin ? palette.surfaceHigh : accent,
                 borderRadius: AppRadii.all(AppRadii.md),
+                boxShadow: _violatesMin ? null : [BoxShadow(color: accent.withValues(alpha: 0.33), blurRadius: 14, offset: const Offset(0, 4))],
               ),
               child: Text(
                 'SET',
@@ -590,6 +603,8 @@ class _DialPainter extends CustomPainter {
       ..strokeCap = StrokeCap.round;
 
     canvas.drawLine(centre, handEnd, paint);
+    canvas.drawCircle(
+        handEnd, knobRadius, Paint()..color = accent.withValues(alpha: 0.5)..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8));
     canvas.drawCircle(handEnd, knobRadius, Paint()..color = accent);
     // Painted last so the pivot stays visible on top of the hand.
     canvas.drawCircle(centre, 5, Paint()..color = accent);

@@ -87,6 +87,8 @@ class ScheduleRow extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.end,
                     mainAxisSize: MainAxisSize.min,
                     children: [
+                      // Leaves room under the TEMP ribbon hanging from the top-right corner.
+                      if (entry.isTemporary && !ghost) const SizedBox(height: AppSpacing.md),
                       _statusBadge(palette),
                       const SizedBox(height: AppSpacing.xs),
                       _kebab(palette),
@@ -99,7 +101,7 @@ class ScheduleRow extends StatelessWidget {
               if (entry.isTemporary && !ghost)
                 Positioned(
                   top: -AppSpacing.lg,
-                  right: 40,
+                  right: AppSpacing.lg,
                   child: Container(
                     padding:
                         const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: 3),
@@ -110,7 +112,7 @@ class ScheduleRow extends StatelessWidget {
                         bottomRight: Radius.circular(7),
                       ),
                     ),
-                    child: Text('TEMPORARY',
+                    child: Text('TEMP',
                         style: TextStyle(
                           fontSize: 9,
                           fontWeight: AppType.heavy,
@@ -166,11 +168,11 @@ class ScheduleRow extends StatelessWidget {
         _instructorLine(palette),
         if (entry.status == ScheduleEntryStatus.movedIn && entry.movedFrom != null)
           _note(palette, palette.gold, Icons.refresh,
-              'Rescheduled from ${formatFeeDate(entry.movedFrom!)}'
+              'Rescheduled from ${_shortDate(entry.movedFrom!)}'
               '${entry.reason == null ? '' : ' · ${entry.reason}'}'),
         if (entry.status == ScheduleEntryStatus.movedOut && entry.movedTo != null)
           _note(palette, palette.textFaint, Icons.arrow_forward,
-              'Moved to ${formatFeeDate(entry.movedTo!)}'),
+              'Moved to ${_shortDate(entry.movedTo!)}'),
         if (entry.status == ScheduleEntryStatus.cancelled)
           _note(palette, palette.notPaid, null,
               'Cancelled${entry.reason == null ? '' : ' · ${entry.reason}'}'),
@@ -206,6 +208,12 @@ class ScheduleRow extends StatelessWidget {
     );
   }
 
+  /// "18 Oct", with the year only when it differs from the class's own - the row already sits under
+  /// a dated heading, and the full date is what pushed this note onto a second line.
+  String _shortDate(DateTime d) => d.year == entry.date.year
+      ? '${d.day} ${monthsShort[d.month - 1]}'
+      : formatFeeDate(d);
+
   Widget _note(AppPalette palette, Color color, IconData? icon, String text) {
     return Padding(
       padding: const EdgeInsets.only(top: AppSpacing.xxs),
@@ -222,6 +230,8 @@ class ScheduleRow extends StatelessWidget {
           Expanded(
             child: Text(
               text,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
               style: TextStyle(
                   fontSize: AppType.xs, fontWeight: AppType.medium, color: color),
             ),

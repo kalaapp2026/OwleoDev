@@ -1,3 +1,4 @@
+import 'package:nest_fe/core/design/app_top_bar.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:nest_fe/app/theme/app_tokens.dart';
@@ -519,7 +520,7 @@ class _BatchListScreenState extends ConsumerState<BatchListScreen> {
         const SizedBox(width: AppSpacing.sm),
         pill(
           BatchPill.temporary,
-          'Temporary',
+          'Temp',
           Icons.event_repeat_outlined,
           palette.gold,
           palette.goldSoft,
@@ -591,7 +592,7 @@ class _Header extends StatelessWidget {
                   'Batches',
                   style: TextStyle(
                     fontSize: 17,
-                    fontWeight: AppType.bold,
+                    fontWeight: AppType.heavy,
                     letterSpacing: -0.2,
                     color: palette.text,
                   ),
@@ -604,6 +605,8 @@ class _Header extends StatelessWidget {
               ],
             ),
           ),
+          const SizedBox(width: AppSpacing.md),
+          const ThemeModeButton(),
         ],
       ),
     );
@@ -683,13 +686,22 @@ class _BatchRow extends StatelessWidget {
                           Flexible(
                             child: Opacity(
                               opacity: inactive ? 0.5 : 1,
-                              child: Text(
-                                batch.name,
+                              child: Text.rich(
+                                TextSpan(
+                                  text: batch.name,
+                                  children: [
+                                    if (batch.timeRange != null)
+                                      TextSpan(
+                                        text: ' [${batch.timeRange}]',
+                                        style: TextStyle(fontWeight: AppType.semi, color: palette.textMuted),
+                                      ),
+                                  ],
+                                ),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: TextStyle(
                                   fontSize: AppType.xxl,
-                                  fontWeight: AppType.semi,
+                                  fontWeight: AppType.heavy,
                                   color: inactive ? palette.textMuted : palette.text,
                                 ),
                               ),
@@ -748,6 +760,7 @@ class _BatchRow extends StatelessWidget {
                         opacity: inactive ? 0.5 : 1,
                         child: Text(
                           [
+                            if (batch.days.isNotEmpty) formatDays(batch.days),
                             '${batch.studentCount} student'
                                 '${batch.studentCount == 1 ? '' : 's'}',
                             if (batch.dateRangeSummary != null) batch.dateRangeSummary!,
@@ -773,7 +786,7 @@ class _BatchRow extends StatelessWidget {
             if (batch.isTemporary)
               Positioned(
                 top: -AppSpacing.lg,
-                right: 40,
+                right: AppSpacing.lg,
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: 3),
                   decoration: BoxDecoration(
@@ -784,7 +797,7 @@ class _BatchRow extends StatelessWidget {
                     ),
                   ),
                   child: Text(
-                    'TEMPORARY',
+                    'TEMP',
                     style: TextStyle(
                       fontSize: 9,
                       fontWeight: AppType.heavy,

@@ -120,7 +120,7 @@ class _MarkAttendanceScreenState extends ConsumerState<MarkAttendanceScreen> {
                       color: palette.gold,
                       borderRadius: AppRadii.all(AppRadii.xs),
                     ),
-                    child: Text('TEMPORARY',
+                    child: Text('TEMP',
                         style: TextStyle(
                           fontSize: 9,
                           fontWeight: AppType.heavy,

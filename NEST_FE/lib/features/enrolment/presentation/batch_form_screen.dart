@@ -144,7 +144,7 @@ class _BatchFormScreenState extends ConsumerState<BatchFormScreen> {
       context: context,
       title: 'Start time',
       initial: _startTime,
-      accentColor: _accent(),
+      accentColor: context.palette.primary,
     );
     if (!mounted) return;
     setState(() => _startTime = picked);
@@ -218,13 +218,6 @@ class _BatchFormScreenState extends ConsumerState<BatchFormScreen> {
       initiallySelected: _studentIds,
     );
     if (chosen != null && mounted) setState(() => _studentIds = chosen);
-  }
-
-  Color _accent() {
-    final course = _selectedCourse();
-    return course == null
-        ? context.palette.primary
-        : course.category.meta(context.palette).color;
   }
 
   Course? _selectedCourse() {
@@ -576,7 +569,7 @@ class _BatchFormScreenState extends ConsumerState<BatchFormScreen> {
                       child: _TimeTile(
                         caption: 'Start',
                         value: _startTime?.label,
-                        accent: meta.color,
+                        accent: palette.primary,
                         onTap: _pickStartTime,
                       ),
                     ),
@@ -607,7 +600,7 @@ class _BatchFormScreenState extends ConsumerState<BatchFormScreen> {
                         placeholder: _batchType == BatchType.temporary
                             ? 'Start date'
                             : 'Select the date this batch starts',
-                        accent: palette.gold,
+                        accent: palette.primary,
                         onTap: () => _pickDate(isStart: true),
                       ),
                     ),

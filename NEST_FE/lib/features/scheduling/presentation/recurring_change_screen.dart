@@ -301,7 +301,7 @@ class _RecurringChangeScreenState extends ConsumerState<RecurringChangeScreen> {
                       context: context,
                       title: 'Start time',
                       initial: _startTime,
-                      accentColor: meta.color,
+                      accentColor: palette.primary,
                     );
                     if (mounted) setState(() => _startTime = picked);
                   }),

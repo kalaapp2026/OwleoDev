@@ -130,7 +130,7 @@ public class ScheduleFeedService {
         // requested window - so dates are resolved from the full set for these ids, not just the
         // page being rendered. Without this, "moved to 3 Oct" renders as "moved to (unknown)"
         // whenever the window ends on 30 Sep.
-        Map<UUID, ClassInstance> partnerLookup = resolvePartners(instances);
+        Partners partners = resolvePartners(instances);
 
         // "Has anyone marked this class?" for every instance at once. A per-class query here is
         // the difference between one round trip and thirty on a month view.
@@ -155,7 +155,7 @@ public class ScheduleFeedService {
             if (course == null) {
                 continue;
             }
-            rows.add(toRow(instance, batch, course, trainerIdsByBatch, namesByMembership, partnerLookup,
+            rows.add(toRow(instance, batch, course, trainerIdsByBatch, namesByMembership, partners,
                     markedInstanceIds.contains(instance.getId()),
                     rosterSizes.getOrDefault(batch.getId(), 0)));
         }
@@ -168,7 +168,7 @@ public class ScheduleFeedService {
     private ScheduleEntryResponse toRow(ClassInstance instance, Batch batch, Course course,
                                          Map<UUID, List<UUID>> trainerIdsByBatch,
                                          Map<UUID, String> namesByMembership,
-                                         Map<UUID, ClassInstance> partnerLookup,
+                                         Partners partners,
                                          boolean attendanceMarked,
                                          int studentCount) {
         List<ScheduleEntryResponse.PersonRef> regulars =
@@ -202,10 +202,10 @@ public class ScheduleFeedService {
         LocalDate movedFrom = null;
         LocalDate movedTo = null;
         if (status == ScheduleEntryStatus.MOVED_IN) {
-            ClassInstance origin = partnerLookup.get(instance.getOriginalInstanceId());
+            ClassInstance origin = partners.byId().get(instance.getOriginalInstanceId());
             movedFrom = origin == null ? null : origin.getDate();
         } else if (status == ScheduleEntryStatus.MOVED_OUT) {
-            ClassInstance replacement = partnerLookup.get(instance.getId());
+            ClassInstance replacement = partners.replacementByOrigin().get(instance.getId());
             movedTo = replacement == null ? null : replacement.getDate();
         }
 
@@ -230,25 +230,26 @@ public class ScheduleFeedService {
      * origin's id (so a MOVED_OUT row can find its replacement) and by the replacement's own id
      * where needed.
      */
-    private Map<UUID, ClassInstance> resolvePartners(List<ClassInstance> instances) {
-        Set<UUID> wanted = instances.stream()
-                .map(ClassInstance::getOriginalInstanceId)
-                .filter(Objects::nonNull)
-                .collect(Collectors.toCollection(java.util.HashSet::new));
-
+    private Partners resolvePartners(List<ClassInstance> instances) {
+        // Two directions, kept in two maps. They used to share one, and when both halves of a
+        // reschedule were in the window the replacement overwrote its own origin's entry - so a
+        // "moved in" row looked up its origin, got itself back, and read "Rescheduled from <its own
+        // date>" instead of the day it was actually moved from.
         Map<UUID, ClassInstance> byId = new HashMap<>();
-        // Replacements already in this window index themselves under the origin they replaced,
-        // which is the direction a MOVED_OUT row needs.
+        Map<UUID, ClassInstance> replacementByOrigin = new HashMap<>();
         for (ClassInstance instance : instances) {
             byId.put(instance.getId(), instance);
             if (instance.getOriginalInstanceId() != null) {
-                byId.put(instance.getOriginalInstanceId(), instance);
+                replacementByOrigin.put(instance.getOriginalInstanceId(), instance);
             }
         }
 
         // Origins that fall outside the window still have to be fetched, or a MOVED_IN row can't
         // say where it came from.
-        Set<UUID> missing = wanted.stream().filter(id -> !byId.containsKey(id))
+        Set<UUID> missing = instances.stream()
+                .map(ClassInstance::getOriginalInstanceId)
+                .filter(Objects::nonNull)
+                .filter(id -> !byId.containsKey(id))
                 .collect(Collectors.toSet());
         if (!missing.isEmpty()) {
             for (ClassInstance origin : classInstanceRepository.findAllById(missing)) {
@@ -261,16 +262,20 @@ public class ScheduleFeedService {
         // index, since it only affects rows that were actually moved.
         List<ClassInstance> movedOut = instances.stream()
                 .filter(i -> i.getStatus() == ClassInstanceStatus.RESCHEDULED_CANCELLED)
-                .filter(i -> !byId.containsKey(i.getId()) || byId.get(i.getId()) == i)
+                .filter(i -> !replacementByOrigin.containsKey(i.getId()))
                 .toList();
         for (ClassInstance origin : movedOut) {
             classInstanceRepository.findByBatchId(origin.getBatchId()).stream()
                     .filter(candidate -> origin.getId().equals(candidate.getOriginalInstanceId()))
                     .findFirst()
-                    .ifPresent(replacement -> byId.put(origin.getId(), replacement));
+                    .ifPresent(replacement -> replacementByOrigin.put(origin.getId(), replacement));
         }
-        return byId;
+        return new Partners(byId, replacementByOrigin);
     }
+
+    /** Both halves of every visible reschedule: any instance by its own id (origins included, even
+     * out of window), and each origin's replacement keyed by the origin's id. */
+    private record Partners(Map<UUID, ClassInstance> byId, Map<UUID, ClassInstance> replacementByOrigin) {}
 
     private Map<UUID, String> resolveNames(Set<UUID> membershipIds) {
         if (membershipIds.isEmpty()) {

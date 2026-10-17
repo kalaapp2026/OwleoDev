@@ -1,3 +1,4 @@
+import 'package:nest_fe/core/design/app_top_bar.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:nest_fe/app/theme/app_tokens.dart';
@@ -11,6 +12,8 @@ import 'package:nest_fe/features/curriculum/data/study_material.dart';
 import 'package:nest_fe/features/curriculum/data/study_material_api.dart';
 import 'package:nest_fe/features/curriculum/presentation/batch_material_screen.dart';
 import 'package:nest_fe/features/curriculum/presentation/material_library_screen.dart';
+import 'package:nest_fe/features/curriculum/presentation/playlists_screen.dart';
+import 'package:nest_fe/core/auth/session_controller.dart';
 
 enum MaterialBatchSort {
   recent('Recently updated'),
@@ -79,6 +82,8 @@ class _StudyMaterialHomeScreenState extends ConsumerState<StudyMaterialHomeScree
   Widget build(BuildContext context) {
     final palette = context.palette;
     final async = ref.watch(materialBatchesProvider);
+    final membership = ref.watch(sessionControllerProvider).user?.activeMembership;
+    final isStudent = membership?.roleType == 'STUDENT';
 
     return Scaffold(
       backgroundColor: palette.bg,
@@ -102,6 +107,7 @@ class _StudyMaterialHomeScreenState extends ConsumerState<StudyMaterialHomeScree
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 _header(palette, totalFiles, batches.length),
+                if (isStudent) _studentStrip(palette),
                 Padding(
                   padding: const EdgeInsets.fromLTRB(
                       AppSpacing.page, AppSpacing.xxl, AppSpacing.page, 0),
@@ -116,10 +122,14 @@ class _StudyMaterialHomeScreenState extends ConsumerState<StudyMaterialHomeScree
                           // The libraries cut across batches. They sit here rather than as their
                           // own tiles because the question they answer - "where is that track" -
                           // only comes up once you are already looking for material.
-                          for (final type in StudyMaterialType.values) ...[
+                          // Audio first, as in the reference.
+                          for (final type in const [
+                            StudyMaterialType.audio,
+                            StudyMaterialType.notes,
+                            StudyMaterialType.image,
+                          ]) ...[
                             _LibraryButton(type: type),
-                            if (type != StudyMaterialType.values.last)
-                              const SizedBox(width: AppSpacing.xs),
+                            if (type != StudyMaterialType.image) const SizedBox(width: AppSpacing.xs),
                           ],
                         ],
                       ),
@@ -168,6 +178,59 @@ class _StudyMaterialHomeScreenState extends ConsumerState<StudyMaterialHomeScree
     );
   }
 
+  /// A student's strip under the header: which academy this is, and a way into their playlists.
+  Widget _studentStrip(AppPalette palette) {
+    final academy = ref.watch(sessionControllerProvider).user?.activeMembership?.academyName;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(AppSpacing.page, AppSpacing.xl, AppSpacing.page, 0),
+      child: Row(
+        children: [
+          if (academy != null)
+            Expanded(
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl, vertical: AppSpacing.md),
+                decoration: BoxDecoration(
+                  color: palette.goldSoft,
+                  borderRadius: AppRadii.all(AppRadii.pill),
+                  border: Border.all(color: palette.gold.withValues(alpha: 0.4)),
+                ),
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  Icon(Icons.account_balance_outlined, size: 14, color: palette.gold),
+                  const SizedBox(width: AppSpacing.md),
+                  Flexible(
+                    child: Text(academy,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(fontSize: AppType.md, fontWeight: AppType.heavy, color: palette.gold)),
+                  ),
+                ]),
+              ),
+            )),
+          const SizedBox(width: AppSpacing.lg),
+          Pressable(
+            onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const PlaylistsScreen())),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl, vertical: AppSpacing.md),
+              decoration: BoxDecoration(
+                color: palette.surfaceRaised,
+                borderRadius: AppRadii.all(AppRadii.lg),
+                border: Border.all(color: palette.border),
+              ),
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                Icon(Icons.queue_music_outlined, size: 15, color: palette.textMuted),
+                const SizedBox(width: AppSpacing.md),
+                Text('Playlists',
+                    style: TextStyle(fontSize: AppType.md, fontWeight: AppType.heavy, color: palette.textMuted)),
+              ]),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _header(AppPalette palette, int totalFiles, int batchCount) {
     return Container(
       padding: const EdgeInsets.fromLTRB(
@@ -186,7 +249,7 @@ class _StudyMaterialHomeScreenState extends ConsumerState<StudyMaterialHomeScree
                 Text('Study Material',
                     style: TextStyle(
                         fontSize: 17,
-                        fontWeight: AppType.bold,
+                        fontWeight: AppType.heavy,
                         letterSpacing: -0.2,
                         color: palette.text)),
                 const SizedBox(height: 2),
@@ -198,6 +261,8 @@ class _StudyMaterialHomeScreenState extends ConsumerState<StudyMaterialHomeScree
               ],
             ),
           ),
+          const SizedBox(width: AppSpacing.md),
+          const ThemeModeButton(),
         ],
       ),
     );

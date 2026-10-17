@@ -1,3 +1,4 @@
+import 'package:nest_fe/core/design/app_top_bar.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:nest_fe/app/theme/app_tokens.dart';
@@ -480,7 +481,7 @@ class _Header extends StatelessWidget {
                   'Courses',
                   style: TextStyle(
                     fontSize: 17,
-                    fontWeight: AppType.bold,
+                    fontWeight: AppType.heavy,
                     letterSpacing: -0.2,
                     color: palette.text,
                   ),
@@ -493,6 +494,8 @@ class _Header extends StatelessWidget {
               ],
             ),
           ),
+          const SizedBox(width: AppSpacing.md),
+          const ThemeModeButton(),
         ],
       ),
     );

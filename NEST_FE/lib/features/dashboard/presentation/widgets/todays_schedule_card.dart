@@ -132,13 +132,13 @@ class _TodaysScheduleCardState extends ConsumerState<TodaysScheduleCard> {
                             style: TextStyle(
                                 fontSize: AppType.sm,
                                 fontWeight: AppType.bold,
-                                color: palette.primary),
+                                color: _accent(palette, context)),
                           ),
                           const SizedBox(width: 2),
                           AnimatedRotation(
                             turns: _expanded ? 0.5 : 0,
                             duration: AppMotion.chevron,
-                            child: Icon(Icons.keyboard_arrow_down, size: 16, color: palette.primary),
+                            child: Icon(Icons.keyboard_arrow_down, size: 16, color: _accent(palette, context)),
                           ),
                         ],
                       ),
@@ -286,10 +286,10 @@ class _WeekDayCell extends StatelessWidget {
               height: 30,
               alignment: Alignment.center,
               decoration: BoxDecoration(
-                color: isSelected ? palette.primary : Colors.transparent,
+                color: isSelected ? _accent(palette, context) : Colors.transparent,
                 shape: BoxShape.circle,
                 border: isToday && !isSelected
-                    ? Border.all(color: palette.primary, width: 1.5)
+                    ? Border.all(color: _accent(palette, context), width: 1.5)
                     : null,
               ),
               child: Text(
@@ -299,9 +299,9 @@ class _WeekDayCell extends StatelessWidget {
                   fontWeight:
                       isSelected || isToday ? AppType.heavy : AppType.semi,
                   color: isSelected
-                      ? palette.onPrimary
+                      ? _onAccent(palette, context)
                       : isToday
-                          ? palette.primary
+                          ? _onAccent(palette, context)
                           : palette.text,
                 ),
               ),
@@ -382,3 +382,19 @@ class _ClassRow extends StatelessWidget {
     );
   }
 }
+
+/// The prototype's admin/trainer calendar is gold in light and teal in dark; a student's is teal in
+/// both.
+bool _goldAccent(BuildContext context) {
+  if (Theme.of(context).brightness == Brightness.dark) return false;
+  final role = ProviderScope.containerOf(context, listen: false)
+      .read(sessionControllerProvider)
+      .user
+      ?.activeMembership
+      ?.roleType;
+  return role != 'STUDENT';
+}
+
+Color _accent(AppPalette palette, BuildContext context) => _goldAccent(context) ? palette.gold : palette.primary;
+
+Color _onAccent(AppPalette palette, BuildContext context) => _goldAccent(context) ? palette.onGold : palette.onPrimary;

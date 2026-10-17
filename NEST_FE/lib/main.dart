@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:nest_fe/app/app.dart';
+import 'package:nest_fe/core/app_restart.dart';
 
 void main() {
-  runApp(const ProviderScope(child: OwleoNestApp()));
+  runApp(const AppRestart(child: OwleoNestApp()));
 }

@@ -178,52 +178,46 @@ class AppPalette extends ThemeExtension<AppPalette> {
     sageSoft: Color(0x247FBF7F),
   );
 
-  /// DERIVED, not from the prototype - the prototype is dark-only, but the app already ships a
-  /// System/Light/Dark setting, so a light counterpart has to exist or that setting becomes a
-  /// no-op on every migrated screen.
-  ///
-  /// Warm/cream neutrals with a brown accent, replacing an earlier cool-white-plus-teal draft
-  /// per explicit design direction: the light theme reads as its own warm palette rather than a
-  /// straight lightness-inversion of the dark (teal) one. [primary] driving this means every
-  /// focus ring, selected state and primary button goes brown in light mode - that is the
-  /// intended, app-wide effect, not scoped to any one screen.
+  /// Mirrors the prototype's light theme token for token: cream neutrals, a teal primary and a deeper
+  /// gold. [primary] drives every focus ring, selected state and primary button, so light uses the
+  /// same teal family as dark, darkened for contrast on cream.
   static const light = AppPalette(
-    bg: Color(0xFFFAF3E4),
-    surface: Color(0xFFFFFDF8),
-    surfaceRaised: Color(0xFFFFFDF8),
-    surfaceHigh: Color(0xFFF1E9D8),
-    border: Color(0xFFE3D6BE),
-    borderSoft: Color(0xFFEFE6D2),
-    text: Color(0xFF0E1626),
-    textMuted: Color(0xFF5A6478),
-    textFaint: Color(0xFF8892A6),
-    primary: Color(0xFF8B5A2B),
-    primaryDim: Color(0xFF6B4420),
-    primarySoft: Color(0x1F8B5A2B),
+    bg: Color(0xFFF7F1E4),
+    surface: Color(0xFFFFFFFF),
+    surfaceRaised: Color(0xFFFFFFFF),
+    surfaceHigh: Color(0xFFF2EADA),
+    border: Color(0xFFE4D9C3),
+    borderSoft: Color(0xFFEEE6D5),
+    text: Color(0xFF241B10),
+    textMuted: Color(0xFF6E6250),
+    textFaint: Color(0xFF8A7C63),
+    primary: Color(0xFF0E8C78),
+    primaryDim: Color(0xFF0A6B5C),
+    primarySoft: Color(0x1F0E8C78),
     onPrimary: Color(0xFFFFFFFF),
-    revenue: Color(0xFFB07C00),
-    revenueSoft: Color(0x24B07C00),
-    gold: Color(0xFFB8791A),
-    goldDim: Color(0xFF8A5A12),
-    goldLight: Color(0xFFE8B45C),
-    goldSoft: Color(0x24B8791A),
+    revenue: Color(0xFF8A6100),
+    revenueSoft: Color(0x248A6100),
+    gold: Color(0xFFA6690F),
+    goldDim: Color(0xFF7C4E0B),
+    goldLight: Color(0xFFC98A2C),
+    goldSoft: Color(0x24A6690F),
     onGold: Color(0xFFFFFFFF),
-    notPaid: Color(0xFFC5333A),
-    notPaidSoft: Color(0x1FC5333A),
-    paidManual: Color(0xFF17864B),
-    paidManualSoft: Color(0x1F17864B),
-    gateway: Color(0xFF1B6FB8),
-    gatewaySoft: Color(0x1F1B6FB8),
-    partial: Color(0xFFB07A16),
-    partialSoft: Color(0x1FB07A16),
+    notPaid: Color(0xFFC13A3A),
+    notPaidSoft: Color(0x1FC13A3A),
+    paidManual: Color(0xFF1E9358),
+    paidManualSoft: Color(0x1F1E9358),
+    gateway: Color(0xFF2373A8),
+    gatewaySoft: Color(0x1F2373A8),
+    partial: Color(0xFFB4790F),
+    partialSoft: Color(0x24B4790F),
     due: Color(0xFFD24520),
     dueSoft: Color(0x1FD24520),
-    violet: Color(0xFF6D4AC4),
-    violetSoft: Color(0x1F6D4AC4),
-    coral: Color(0xFFC8552A),
-    coralSoft: Color(0x1FC8552A),
-    magenta: Color(0xFFC2306B),
-    magentaSoft: Color(0x1FC2306B),
+    violet: Color(0xFF6E54CC),
+    violetSoft: Color(0x1F6E54CC),
+    coral: Color(0xFFC2532B),
+    coralSoft: Color(0x1FC2532B),
+    magenta: Color(0xFFB23370),
+    magentaSoft: Color(0x1FB23370),
     sage: Color(0xFF4A8F4A),
     sageSoft: Color(0x1F4A8F4A),
   );
@@ -363,6 +357,11 @@ class AppPalette extends ThemeExtension<AppPalette> {
 /// tree (which happens in tests and in isolated widget previews).
 extension AppPaletteContext on BuildContext {
   AppPalette get palette => Theme.of(this).extension<AppPalette>() ?? AppPalette.dark;
+
+  /// The prototype's accent for calendar-style modules (dashboard calendar, schedule): gold in light,
+  /// teal in dark.
+  Color get calendarAccent => Theme.of(this).brightness == Brightness.dark ? palette.primary : palette.gold;
+  Color get onCalendarAccent => Theme.of(this).brightness == Brightness.dark ? palette.onPrimary : palette.onGold;
 }
 
 // ---------------------------------------------------------------------------

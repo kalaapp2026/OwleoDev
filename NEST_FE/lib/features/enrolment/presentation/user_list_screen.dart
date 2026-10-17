@@ -1,3 +1,4 @@
+import 'package:nest_fe/core/design/app_top_bar.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:nest_fe/app/theme/app_tokens.dart';
@@ -310,7 +311,7 @@ class _UserListScreenState extends ConsumerState<UserListScreen> {
                 Text('Users',
                     style: TextStyle(
                         fontSize: AppType.title,
-                        fontWeight: AppType.bold,
+                        fontWeight: AppType.heavy,
                         letterSpacing: AppType.titleTracking,
                         color: palette.text)),
                 const SizedBox(height: 2),
@@ -319,6 +320,8 @@ class _UserListScreenState extends ConsumerState<UserListScreen> {
               ],
             ),
           ),
+          const SizedBox(width: AppSpacing.md),
+          const ThemeModeButton(),
         ],
       ),
     );

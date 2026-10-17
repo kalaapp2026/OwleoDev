@@ -89,6 +89,12 @@ class Batch {
   final List<BatchTrainer> trainers;
   final int studentCount;
 
+  /// The class time (wire "16:00") and meeting days, from the batch's current schedule; null/empty
+  /// until one is set.
+  final String? startTime;
+  final String? endTime;
+  final List<Weekday> days;
+
   const Batch({
     required this.id,
     required this.courseId,
@@ -102,7 +108,15 @@ class Batch {
     required this.endDate,
     required this.trainers,
     required this.studentCount,
+    this.startTime,
+    this.endTime,
+    this.days = const [],
   });
+
+  /// "4:00 PM - 5:00 PM", or null while no time is set.
+  String? get timeRange => (startTime == null || endTime == null)
+      ? null
+      : '${formatTimeOfDay(startTime)} - ${formatTimeOfDay(endTime)}';
 
   bool get isActive => status == 'ACTIVE';
   bool get isTemporary => batchType == BatchType.temporary;
@@ -134,6 +148,9 @@ class Batch {
             .map((t) => BatchTrainer.fromJson(t as Map<String, dynamic>))
             .toList(),
         studentCount: json['studentCount'] as int? ?? 0,
+        startTime: json['startTime'] as String?,
+        endTime: json['endTime'] as String?,
+        days: ((json['days'] as List?) ?? const []).map((d) => Weekday.fromWire(d as String)).toList(),
       );
 
   static DateTime? _parseDate(String? iso) =>

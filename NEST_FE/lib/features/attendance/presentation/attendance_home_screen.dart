@@ -158,13 +158,16 @@ class _AttendanceHomeScreenState extends ConsumerState<AttendanceHomeScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text('Attendance',
-                    style: TextStyle(
-                        fontSize: 17,
-                        fontWeight: AppType.bold,
-                        letterSpacing: -0.2,
-                        color: palette.text)),
-                const SizedBox(height: 2),
+                // Embedded under the shell's own "Attendance" title, so repeating it reads as a bug.
+                if (!widget.embedded) ...[
+                  Text('Attendance',
+                      style: TextStyle(
+                          fontSize: 17,
+                          fontWeight: AppType.heavy,
+                          letterSpacing: -0.2,
+                          color: palette.text)),
+                  const SizedBox(height: 2),
+                ],
                 Text(_longDate(_date),
                     style: TextStyle(fontSize: AppType.smd, color: palette.textMuted)),
               ],
@@ -475,7 +478,7 @@ class _ClassRow extends StatelessWidget {
             if (entry.isTemporary)
               Positioned(
                 top: -AppSpacing.lg,
-                right: 60,
+                right: AppSpacing.lg,
                 child: Container(
                   padding: const EdgeInsets.symmetric(
                       horizontal: AppSpacing.md, vertical: 3),
@@ -486,7 +489,7 @@ class _ClassRow extends StatelessWidget {
                       bottomRight: Radius.circular(7),
                     ),
                   ),
-                  child: Text('TEMPORARY',
+                  child: Text('TEMP',
                       style: TextStyle(
                         fontSize: 9,
                         fontWeight: AppType.heavy,

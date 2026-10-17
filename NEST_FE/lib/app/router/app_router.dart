@@ -89,6 +89,7 @@ final routerProvider = Provider<GoRouter>((ref) {
     routes: [
       GoRoute(path: '/login', builder: (context, state) => const LoginScreen()),
       GoRoute(path: '/signup', builder: (context, state) => const SignupScreen()),
+      GoRoute(path: '/add-account', builder: (context, state) => const AddAccountScreen()),
       GoRoute(path: '/become-artist', builder: (context, state) => const BecomeArtistScreen()),
       GoRoute(path: '/home', builder: (context, state) => const _RootGate()),
       GoRoute(
