@@ -72,6 +72,12 @@ public class NotificationService {
         return counts;
     }
 
+    /** Every recipient's copy of one broadcast; empty for one sent before read tracking. */
+    @Transactional(readOnly = true)
+    public List<com.nest.app.notification.entity.AppNotification> copiesOfBroadcast(UUID broadcastId) {
+        return repository.findByBroadcastId(broadcastId);
+    }
+
     @Transactional(readOnly = true)
     public List<NotificationResponse> listForUser(UUID userId, NotificationModule module) {
         return repository.findByUserIdAndModuleOrderByCreatedAtDesc(userId, module).stream()

@@ -4,7 +4,9 @@ import com.nest.app.enrolment.entity.Batch;
 import com.nest.app.enrolment.entity.BatchMember;
 import com.nest.app.enrolment.repository.BatchMemberRepository;
 import com.nest.app.enrolment.repository.BatchRepository;
+import com.nest.app.curriculum.repository.CourseRepository;
 import com.nest.app.event.entity.EventAudienceType;
+import com.nest.app.identity.repository.UserRepository;
 import com.nest.app.identity.entity.AcademyMembership;
 import com.nest.app.identity.entity.MembershipStatus;
 import com.nest.app.identity.repository.AcademyMembershipRepository;
@@ -55,13 +57,23 @@ class BroadcastServiceTest {
     @Mock
     private NotificationService notificationService;
 
+    @Mock
+    private CourseRepository courseRepository;
+    @Mock
+    private UserRepository userRepository;
+
     private BroadcastService broadcastService;
     private final UUID academyId = UUID.randomUUID();
+
+    private AcademyMembership active(UUID membershipId, UUID userId) {
+        return AcademyMembership.builder().id(membershipId).userId(userId).academyId(academyId)
+                .status(MembershipStatus.ACTIVE).build();
+    }
 
     @BeforeEach
     void setUp() {
         broadcastService = new BroadcastService(broadcastRepository, membershipRepository,
-                batchRepository, batchMemberRepository, notificationService);
+                batchRepository, batchMemberRepository, notificationService, courseRepository, userRepository);
         // lenient: unused by the rejection test (throws first) and by the listing test (never saves).
         org.mockito.Mockito.lenient().when(broadcastRepository.save(any(AcademyBroadcast.class))).thenAnswer(inv -> {
             AcademyBroadcast b = inv.getArgument(0);
@@ -107,11 +119,11 @@ class BroadcastServiceTest {
         UUID user2 = UUID.randomUUID();
         when(membershipRepository.findByAcademyIdAndRoleTypeAndStatus(academyId, Role.STUDENT, MembershipStatus.ACTIVE))
                 .thenReturn(List.of(
-                        AcademyMembership.builder().id(student1).userId(user1).build(),
-                        AcademyMembership.builder().id(student2).userId(user2).build()));
+                        active(student1, user1),
+                        active(student2, user2)));
         when(membershipRepository.findAllById(Set.of(student1, student2))).thenReturn(List.of(
-                AcademyMembership.builder().id(student1).userId(user1).build(),
-                AcademyMembership.builder().id(student2).userId(user2).build()));
+                active(student1, user1),
+                active(student2, user2)));
 
         var request = new CreateBroadcastRequest("Holiday", "No class Friday", EventAudienceType.ALL_STUDENTS, null, null, null);
         var response = broadcastService.create(request);
@@ -132,7 +144,7 @@ class BroadcastServiceTest {
         when(batchMemberRepository.findByBatchIdIn(Set.of(batchId)))
                 .thenReturn(List.of(BatchMember.builder().batchId(batchId).membershipId(membershipIdInBatch).build()));
         when(membershipRepository.findAllById(Set.of(membershipIdInBatch)))
-                .thenReturn(List.of(AcademyMembership.builder().id(membershipIdInBatch).userId(userId).build()));
+                .thenReturn(List.of(active(membershipIdInBatch, userId)));
 
         var request = new CreateBroadcastRequest("Recital", "Practice moved to Hall B",
                 EventAudienceType.BY_COURSE, Set.of(courseId), Set.of(), Set.of());
@@ -149,7 +161,7 @@ class BroadcastServiceTest {
         UUID membershipId = UUID.randomUUID();
         UUID userId = UUID.randomUUID();
         when(membershipRepository.findAllById(Set.of(membershipId)))
-                .thenReturn(List.of(AcademyMembership.builder().id(membershipId).userId(userId).build()));
+                .thenReturn(List.of(active(membershipId, userId)));
 
         var request = new CreateBroadcastRequest("Reminder", "Bring your costume",
                 EventAudienceType.INDIVIDUALS, Set.of(), Set.of(), Set.of(membershipId));
@@ -157,6 +169,74 @@ class BroadcastServiceTest {
 
         assertThat(response.recipientCount()).isEqualTo(1);
         verify(notificationService).notifyBroadcast(eq(userId), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void individualsFromAnotherAcademyOrRevokedAreNotNotified() {
+        actingAsAdmin();
+        UUID mine = UUID.randomUUID();
+        UUID foreign = UUID.randomUUID();
+        UUID revoked = UUID.randomUUID();
+        UUID myUser = UUID.randomUUID();
+        when(membershipRepository.findAllById(Set.of(mine, foreign, revoked))).thenReturn(List.of(
+                active(mine, myUser),
+                AcademyMembership.builder().id(foreign).userId(UUID.randomUUID()).academyId(UUID.randomUUID())
+                        .status(MembershipStatus.ACTIVE).build(),
+                AcademyMembership.builder().id(revoked).userId(UUID.randomUUID()).academyId(academyId)
+                        .status(MembershipStatus.REVOKED).build()));
+
+        var request = new CreateBroadcastRequest("Hi", "Hello", EventAudienceType.INDIVIDUALS,
+                Set.of(), Set.of(), Set.of(mine, foreign, revoked));
+        var response = broadcastService.create(request);
+
+        assertThat(response.recipientCount()).isEqualTo(1);
+        verify(notificationService, times(1)).notifyBroadcast(any(), any(), any(), any(), any(), any());
+        verify(notificationService).notifyBroadcast(eq(myUser), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void aBlankTitleIsStoredAsAnnouncement() {
+        actingAsAdmin();
+        when(membershipRepository.findByAcademyIdAndRoleTypeAndStatus(academyId, Role.STUDENT, MembershipStatus.ACTIVE))
+                .thenReturn(List.of());
+
+        var response = broadcastService.create(new CreateBroadcastRequest(" ", "Hello", EventAudienceType.ALL_STUDENTS, null, null, null));
+
+        assertThat(response.title()).isEqualTo("Announcement");
+    }
+
+    @Test
+    void previewCountsPeopleWithoutSendingAnything() {
+        actingAsAdmin();
+        UUID membershipId = UUID.randomUUID();
+        when(membershipRepository.findByAcademyIdAndRoleTypeAndStatus(academyId, Role.TRAINER, MembershipStatus.ACTIVE))
+                .thenReturn(List.of(active(membershipId, UUID.randomUUID())));
+        when(membershipRepository.findAllById(Set.of(membershipId))).thenReturn(List.of(active(membershipId, UUID.randomUUID())));
+
+        int count = broadcastService.preview(new com.nest.app.message.dto.AudiencePreviewRequest(
+                EventAudienceType.ALL_TRAINERS, null, null, null));
+
+        assertThat(count).isEqualTo(1);
+        verify(broadcastRepository, never()).save(any());
+        verify(notificationService, never()).notifyBroadcast(any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void detailIsAdminOnly() {
+        actingAsTrainer();
+        assertThatThrownBy(() -> broadcastService.detail(UUID.randomUUID())).isInstanceOf(ForbiddenException.class);
+    }
+
+    @Test
+    void detailOfAnotherAcademysBroadcastIsNotFound() {
+        actingAsAdmin();
+        UUID id = UUID.randomUUID();
+        when(broadcastRepository.findById(id)).thenReturn(java.util.Optional.of(
+                AcademyBroadcast.builder().id(id).academyId(UUID.randomUUID()).title("x").body("x")
+                        .audienceType(EventAudienceType.ALL_STUDENTS).createdBy(UUID.randomUUID()).build()));
+
+        assertThatThrownBy(() -> broadcastService.detail(id))
+                .isInstanceOf(com.nest.common.exception.ResourceNotFoundException.class);
     }
 
     @Test

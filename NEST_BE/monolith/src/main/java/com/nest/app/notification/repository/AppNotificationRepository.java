@@ -15,6 +15,9 @@ public interface AppNotificationRepository extends JpaRepository<AppNotification
 
     long countByUserIdAndModuleAndReadAtIsNull(UUID userId, NotificationModule module);
 
+    /** Every recipient's copy of one broadcast - the sender's per-person read list. */
+    List<AppNotification> findByBroadcastId(UUID broadcastId);
+
     /** {broadcastId, copies delivered, copies read} per broadcast - one query for a whole list. */
     @Query("select n.broadcastId, count(n), count(n.readAt) from AppNotification n "
             + "where n.broadcastId in :ids group by n.broadcastId")

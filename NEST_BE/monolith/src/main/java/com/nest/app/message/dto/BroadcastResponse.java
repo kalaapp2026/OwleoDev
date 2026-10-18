@@ -19,6 +19,8 @@ public record BroadcastResponse(
         UUID createdBy,
         Instant createdAt,
         /** How many recipients have opened it; null for a broadcast sent before read tracking existed. */
-        Integer readCount
+        Integer readCount,
+        /** Who it went to in words - "All students", the course names, the batch names. */
+        String audienceLabel
 ) {
 }

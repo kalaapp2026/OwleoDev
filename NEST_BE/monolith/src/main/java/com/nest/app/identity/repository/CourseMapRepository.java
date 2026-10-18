@@ -15,6 +15,9 @@ public interface CourseMapRepository extends JpaRepository<CourseMap, UUID> {
 
     List<CourseMap> findByCourseId(UUID courseId);
 
+    /** Several people's enrolments in one query - the chat contact list labels everyone with their courses. */
+    List<CourseMap> findByMembershipIdIn(java.util.Collection<UUID> membershipIds);
+
     /** Every enrolment across a set of courses - the fees dashboard sums over a whole academy. */
     List<CourseMap> findByCourseIdIn(List<UUID> courseIds);
 

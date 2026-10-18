@@ -72,9 +72,10 @@ const kErpActions = <ErpAction>[
   ErpAction(icon: Icons.calendar_month_outlined, label: 'Batch Scheduling', route: '/erp/scheduling',
       anyOfFeatures: [FeatureKeys.batchScheduling, FeatureKeys.reschedule]),
   ErpAction(icon: Icons.event_outlined, label: 'Events', route: '/erp/events', requiredFeature: FeatureKeys.eventManagement, alsoStudent: true),
-  // adminOnly rather than a feature grant: none of the 13 delegable features maps to "send a
-  // broadcast" yet (see BroadcastService's own doc comment) - Trainers still fully receive them.
-  ErpAction(icon: Icons.chat_bubble_outline, label: 'Messages', route: '/erp/messages', adminOnly: true),
+  // No gate: every role chats. The screen shows the Broadcasts tab to an Academy Admin only - none
+  // of the 13 delegable features maps to "send a broadcast" (see BroadcastService's doc comment) -
+  // and ChatService decides who may start a chat with whom.
+  ErpAction(icon: Icons.chat_bubble_outline, label: 'Messages', route: '/erp/messages'),
   // The single materials feature. It absorbed the old course-wide 'Course Materials' syllabus in
   // V29 - the two were the same idea, and a file lives on a batch.
   //
