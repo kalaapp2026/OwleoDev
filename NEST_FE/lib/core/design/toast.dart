@@ -9,26 +9,31 @@ import 'package:nest_fe/app/theme/app_typography.dart';
 /// Not a SnackBar. Material's version docks to the very bottom of the Scaffold, which on this app
 /// puts it behind the nav bar, and it carries its own theming that fights the palette.
 class AppToast extends StatelessWidget {
-  const AppToast({super.key, required this.message, this.icon = Icons.check_circle_outline});
+  const AppToast({super.key, required this.message, this.icon = Icons.check_circle_outline, this.error = false});
 
   final String message;
   final IconData icon;
 
+  /// A failure rather than a confirmation: red, with an alert icon. Without it a refusal ("already a
+  /// student at this academy") wore the same green check as "saved" and read as a success.
+  final bool error;
+
   @override
   Widget build(BuildContext context) {
     final palette = context.palette;
+    final accent = error ? palette.notPaid : palette.primary;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: AppSpacing.md),
       decoration: BoxDecoration(
         color: palette.surfaceHigh,
         borderRadius: AppRadii.all(AppRadii.xl),
-        border: Border.all(color: palette.primary),
+        border: Border.all(color: accent),
         boxShadow: AppShadows.dialog,
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 18, color: palette.primary),
+          Icon(error ? Icons.error_outline : icon, size: 18, color: accent),
           const SizedBox(width: AppSpacing.sm),
           Flexible(
             child: Text(
@@ -51,7 +56,9 @@ class AppToast extends StatelessWidget {
 /// Returns immediately. Repeated calls replace the visible toast rather than queueing, so a run of
 /// quick actions shows the latest result instead of making the user wait out a backlog.
 void showAppToast(BuildContext context, String message,
-    {Duration duration = const Duration(milliseconds: 2200)}) {
+    {Duration? duration, bool error = false}) {
+  // A failure is worth reading properly - it usually says what to do next - so it stays longer.
+  duration ??= error ? const Duration(milliseconds: 4200) : const Duration(milliseconds: 2200);
   final overlay = Overlay.maybeOf(context);
   if (overlay == null) return;
 
@@ -68,7 +75,7 @@ void showAppToast(BuildContext context, String message,
         top: false,
         child: Material(
           color: Colors.transparent,
-          child: _ToastFade(child: AppToast(message: message)),
+          child: _ToastFade(child: AppToast(message: message, error: error)),
         ),
       ),
     ),

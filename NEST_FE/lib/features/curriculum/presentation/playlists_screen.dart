@@ -34,7 +34,7 @@ class PlaylistsScreen extends ConsumerWidget {
       ref.invalidate(materialPlaylistsProvider);
     } catch (e) {
       if (context.mounted) {
-        showAppToast(context, e.toString().replaceFirst('Exception: ', ''));
+        showAppToast(context, e.toString().replaceFirst('Exception: ', ''), error: true);
       }
     }
   }
@@ -278,7 +278,7 @@ class _PlaylistDetailScreenState extends ConsumerState<PlaylistDetailScreen> {
     } catch (e) {
       if (mounted) {
         setState(() => _optimistic = null);
-        showAppToast(context, e.toString().replaceFirst('Exception: ', ''));
+        showAppToast(context, e.toString().replaceFirst('Exception: ', ''), error: true);
       }
     } finally {
       if (mounted) setState(() => _busy = false);

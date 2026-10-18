@@ -73,6 +73,26 @@ class AppTopBar extends StatelessWidget {
   }
 }
 
+/// The back tile for a Material [AppBar] whose back action is custom (a form that steps back a page
+/// before it leaves, say). Placed exactly where the theme's automatic back button puts it - 20px in
+/// from the edge, the title starting 12px after - so it can't drift from the other screens.
+class AppBarBackTile extends StatelessWidget {
+  const AppBarBackTile({super.key, required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Padding(
+        padding: const EdgeInsets.only(left: AppSpacing.page),
+        child: AppIconButton(icon: Icons.arrow_back, onTap: onTap),
+      ),
+    );
+  }
+}
+
 const _modes = [
   (mode: ThemeMode.system, icon: Icons.brightness_auto_outlined),
   (mode: ThemeMode.light, icon: Icons.light_mode_outlined),

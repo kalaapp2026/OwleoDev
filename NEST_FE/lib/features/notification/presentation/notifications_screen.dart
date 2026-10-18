@@ -1,4 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:nest_fe/core/format/money.dart';
+import 'package:nest_fe/core/design/pressable.dart';
+import 'package:nest_fe/app/theme/app_typography.dart';
+import 'package:nest_fe/app/theme/app_tokens.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:nest_fe/core/auth/session_controller.dart';
 import 'package:nest_fe/core/providers/core_providers.dart';
@@ -47,7 +51,7 @@ class NotificationDropdownContent extends ConsumerWidget {
               Expanded(
                 child: Text(
                   module == NotificationModule.erp ? 'ERP notifications' : 'Notifications',
-                  style: Theme.of(context).textTheme.titleMedium,
+                  style: TextStyle(fontSize: AppType.x4l, fontWeight: AppType.heavy, color: context.palette.text),
                 ),
               ),
               if (notificationsAsync.valueOrNull?.any((n) => !n.read) ?? false)
@@ -80,16 +84,20 @@ class NotificationDropdownContent extends ConsumerWidget {
             ],
           ),
         ),
-        const Divider(height: 1),
+        Divider(height: 1, color: context.palette.borderSoft),
         Flexible(
           child: AsyncValueView<List<AppNotification>>(
             value: notificationsAsync,
             onRetry: () => ref.invalidate(notificationsProvider(module)),
             data: (context, notifications) {
               if (notifications.isEmpty) {
-                return const Padding(
-                  padding: EdgeInsets.all(24),
-                  child: Center(child: Text('Nothing here yet.')),
+                return Padding(
+                  padding: const EdgeInsets.all(AppSpacing.x5l),
+                  child: Center(
+                    heightFactor: 1,
+                    child: Text('Nothing here yet.',
+                        style: TextStyle(fontSize: AppType.md, color: context.palette.textFaint)),
+                  ),
                 );
               }
               return ListView.separated(
@@ -122,65 +130,108 @@ class _NotificationCard extends StatelessWidget {
   final AppNotification notification;
   final VoidCallback onOpen;
 
+  /// Broadcasts read as announcements, template events (class changes, absences, payments) as
+  /// alerts, and the membership code as a verification.
+  (IconData, Color, Color) _tone(AppPalette palette) => switch (notification.type) {
+        'ACADEMY_BROADCAST' || 'ADMIN_BROADCAST' => (Icons.campaign_outlined, palette.gold, palette.goldSoft),
+        'MEMBERSHIP_CONFIRMATION' => (Icons.verified_user_outlined, palette.primary, palette.primarySoft),
+        _ => (Icons.notifications_active_outlined, palette.gateway, palette.gatewaySoft),
+      };
+
+  /// "just now", "5m ago", "3h ago", "2d ago", then the date.
+  String _ago() {
+    final at = DateTime.tryParse(notification.createdAt)?.toLocal();
+    if (at == null) return '';
+    final diff = DateTime.now().difference(at);
+    if (diff.inMinutes < 1) return 'just now';
+    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
+    if (diff.inHours < 24) return '${diff.inHours}h ago';
+    if (diff.inDays < 7) return '${diff.inDays}d ago';
+    return formatFeeDate(DateTime(at.year, at.month, at.day));
+  }
+
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    return Card(
-      elevation: notification.read ? 0 : 1.5,
-      color: notification.read ? null : colorScheme.primary.withValues(alpha: 0.06),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(12),
-        onTap: onOpen,
-        child: Padding(
-          padding: const EdgeInsets.all(14),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  if (!notification.read)
-                    Container(
-                      width: 8,
-                      height: 8,
-                      margin: const EdgeInsets.only(right: 8),
-                      decoration: BoxDecoration(color: colorScheme.primary, shape: BoxShape.circle),
-                    ),
-                  Expanded(
-                    child: Text(notification.title,
-                        style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
-                  ),
-                ],
+    final palette = context.palette;
+    final (icon, color, soft) = _tone(palette);
+    final unread = !notification.read;
+
+    return Pressable(
+      onTap: onOpen,
+      child: Container(
+        padding: const EdgeInsets.all(AppSpacing.xl),
+        decoration: BoxDecoration(
+          color: unread ? palette.primarySoft : palette.surfaceRaised,
+          borderRadius: AppRadii.all(AppRadii.xl),
+          border: Border.all(color: unread ? palette.primary.withValues(alpha: 0.35) : palette.borderSoft),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: 34,
+              height: 34,
+              decoration: BoxDecoration(
+                color: soft,
+                shape: BoxShape.circle,
+                border: Border.all(color: color.withValues(alpha: 0.4)),
               ),
-              const SizedBox(height: 6),
-              Text(notification.body, style: Theme.of(context).textTheme.bodyMedium),
-              if (notification.actionCode != null) ...[
-                const SizedBox(height: 10),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: colorScheme.primaryContainer,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
+              child: Icon(icon, size: 16, color: color),
+            ),
+            const SizedBox(width: AppSpacing.lg),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
                     children: [
-                      Icon(Icons.pin_outlined, size: 16, color: colorScheme.onPrimaryContainer),
-                      const SizedBox(width: 8),
-                      Text(
-                        notification.actionCode!,
-                        style: TextStyle(
-                          color: colorScheme.onPrimaryContainer,
-                          fontWeight: FontWeight.w800,
-                          fontSize: 18,
-                          letterSpacing: 3,
-                        ),
+                      Expanded(
+                        child: Text(notification.title,
+                            style: TextStyle(
+                                fontSize: AppType.lg,
+                                fontWeight: unread ? AppType.heavy : AppType.bold,
+                                color: palette.text)),
                       ),
+                      if (unread)
+                        Container(
+                          width: 8,
+                          height: 8,
+                          margin: const EdgeInsets.only(left: AppSpacing.md),
+                          decoration: BoxDecoration(color: palette.primary, shape: BoxShape.circle),
+                        ),
                     ],
                   ),
-                ),
-              ],
-            ],
-          ),
+                  const SizedBox(height: 3),
+                  Text(notification.body,
+                      style: TextStyle(fontSize: AppType.md, color: palette.textMuted, height: 1.35)),
+                  if (notification.actionCode != null) ...[
+                    const SizedBox(height: AppSpacing.lg),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl, vertical: AppSpacing.md),
+                      decoration: BoxDecoration(
+                        color: palette.primarySoft,
+                        borderRadius: AppRadii.all(AppRadii.md),
+                        border: Border.all(color: palette.primary.withValues(alpha: 0.35)),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.pin_outlined, size: 16, color: palette.primary),
+                          const SizedBox(width: AppSpacing.md),
+                          Text(notification.actionCode!,
+                              style: TextStyle(
+                                  color: palette.primary, fontWeight: AppType.heavy, fontSize: 18, letterSpacing: 3)),
+                        ],
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: AppSpacing.md),
+                  Text(_ago(),
+                      style: TextStyle(fontSize: AppType.xs, fontWeight: AppType.semi, color: palette.textFaint)),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
     );

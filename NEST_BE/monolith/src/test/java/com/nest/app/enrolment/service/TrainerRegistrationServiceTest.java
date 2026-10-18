@@ -202,7 +202,7 @@ class TrainerRegistrationServiceTest {
         // Someone already on NEST - e.g. a student at a different academy.
         User existing = User.builder().id(UUID.randomUUID()).username("priya").fullName("Priya").build();
         when(identityRegistrationService.findByEmail("priya@example.com")).thenReturn(java.util.Optional.of(existing));
-        when(identityRegistrationService.findMembership(eq(existing.getId()), any())).thenReturn(java.util.Optional.empty());
+        when(identityRegistrationService.findMembership(eq(existing.getId()), any(), eq(Role.TRAINER))).thenReturn(java.util.Optional.empty());
         when(identityRegistrationService.createMembership(any(), any(), any(), eq(Role.TRAINER),
                 eq(MembershipStatus.PENDING_CONFIRMATION), any()))
                 .thenReturn(AcademyMembership.builder().id(UUID.randomUUID()).build());
@@ -223,14 +223,62 @@ class TrainerRegistrationServiceTest {
     }
 
     @Test
-    void someoneAlreadyInThisAcademyIsRejectedWithAClearReason() {
+    void anExistingAccountWithAVerifiedGrantIsActivatedImmediatelyWithNoCode() {
+        newService();
+        actingAsAcademyAdmin();
+
+        User existing = User.builder().id(UUID.randomUUID()).username("priya").fullName("Priya").build();
+        UUID grantId = UUID.randomUUID();
+        when(identityRegistrationService.findByEmail("priya@example.com")).thenReturn(java.util.Optional.of(existing));
+        when(identityRegistrationService.findMembership(eq(existing.getId()), any(), eq(Role.TRAINER))).thenReturn(java.util.Optional.empty());
+        when(identityRegistrationService.createMembership(any(), any(), any(), eq(Role.TRAINER),
+                eq(MembershipStatus.ACTIVE), any()))
+                .thenReturn(AcademyMembership.builder().id(UUID.randomUUID()).build());
+
+        var request = new RegisterTrainerRequest("priya_new", "Priya", "9000000009", "priya@example.com",
+                java.time.LocalDate.of(1990, 1, 1), null, null, null, null,
+                Map.of(UUID.randomUUID(), Set.of(FeatureKey.ATTENDANCE)), null, null, grantId);
+
+        var response = trainerRegistrationService.registerTrainer(request);
+
+        assertThat(response.pendingConfirmation()).as("already confirmed by the person").isFalse();
+        assertThat(response.userId()).isEqualTo(existing.getId());
+        verify(identityRegistrationService).consumeLinkGrant(eq(grantId), eq(existing.getId()), any(), any());
+        // No second code, and no new account.
+        verify(membershipConfirmationService, never()).sendConfirmation(any(), any(), any(), any(), any());
+        verify(identityRegistrationService, never())
+                .createTrainerWithPassword(any(), any(), any(), any(), any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void anInvalidGrantStopsTheRegistrationBeforeAnythingIsCreated() {
+        newService();
+        actingAsAcademyAdmin();
+
+        User existing = User.builder().id(UUID.randomUUID()).username("priya").fullName("Priya").build();
+        UUID grantId = UUID.randomUUID();
+        when(identityRegistrationService.findByEmail("priya@example.com")).thenReturn(java.util.Optional.of(existing));
+        org.mockito.Mockito.doThrow(new com.nest.common.exception.BadRequestException("expired"))
+                .when(identityRegistrationService).consumeLinkGrant(eq(grantId), any(), any(), any());
+
+        var request = new RegisterTrainerRequest("priya_new", "Priya", "9000000009", "priya@example.com",
+                java.time.LocalDate.of(1990, 1, 1), null, null, null, null,
+                Map.of(UUID.randomUUID(), Set.of(FeatureKey.ATTENDANCE)), null, null, grantId);
+
+        assertThatThrownBy(() -> trainerRegistrationService.registerTrainer(request))
+                .isInstanceOf(com.nest.common.exception.BadRequestException.class);
+        verify(identityRegistrationService, never()).createMembership(any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void someoneAlreadyATrainerInThisAcademyIsRejectedWithAClearReason() {
         newService();
         actingAsAcademyAdmin();
 
         User existing = User.builder().id(UUID.randomUUID()).username("priya").fullName("Priya").build();
         when(identityRegistrationService.findByEmail("priya@example.com")).thenReturn(java.util.Optional.of(existing));
-        when(identityRegistrationService.findMembership(eq(existing.getId()), any())).thenReturn(java.util.Optional.of(
-                AcademyMembership.builder().id(UUID.randomUUID()).roleType(Role.STUDENT)
+        when(identityRegistrationService.findMembership(eq(existing.getId()), any(), eq(Role.TRAINER))).thenReturn(java.util.Optional.of(
+                AcademyMembership.builder().id(UUID.randomUUID()).roleType(Role.TRAINER)
                         .status(MembershipStatus.ACTIVE).build()));
 
         var request = new RegisterTrainerRequest("priya_new", "Priya", "9000000009", "priya@example.com",
@@ -239,7 +287,54 @@ class TrainerRegistrationServiceTest {
 
         assertThatThrownBy(() -> trainerRegistrationService.registerTrainer(request))
                 .isInstanceOf(com.nest.common.exception.BadRequestException.class)
-                .hasMessageContaining("already");
+                .hasMessageContaining("already a trainer");
+    }
+
+    @Test
+    void aStudentAtThisAcademyCanAlsoBeMadeATrainerThere() {
+        newService();
+        actingAsAcademyAdmin();
+
+        // She is a student here (Advance) and is now being made a trainer (Beginner). The lookup is by
+        // role, so her student membership is not in the way.
+        User existing = User.builder().id(UUID.randomUUID()).username("sushmitha").fullName("Sushmitha").build();
+        UUID grantId = UUID.randomUUID();
+        when(identityRegistrationService.findByEmail("sushmitha@example.com")).thenReturn(java.util.Optional.of(existing));
+        when(identityRegistrationService.findMembership(eq(existing.getId()), any(), eq(Role.TRAINER)))
+                .thenReturn(java.util.Optional.empty());
+        when(identityRegistrationService.createMembership(any(), any(), any(), eq(Role.TRAINER),
+                eq(MembershipStatus.ACTIVE), any()))
+                .thenReturn(AcademyMembership.builder().id(UUID.randomUUID()).build());
+
+        var request = new RegisterTrainerRequest("sushmitha", "Sushmitha", "9000000009", "sushmitha@example.com",
+                java.time.LocalDate.of(1990, 1, 1), null, null, null, null,
+                Map.of(UUID.randomUUID(), Set.of(FeatureKey.ATTENDANCE)), null, null, grantId);
+
+        var response = trainerRegistrationService.registerTrainer(request);
+
+        assertThat(response.pendingConfirmation()).isFalse();
+        assertThat(response.userId()).isEqualTo(existing.getId());
+        verify(identityRegistrationService).createMembership(eq(existing.getId()), any(), any(), eq(Role.TRAINER),
+                eq(MembershipStatus.ACTIVE), any());
+    }
+
+    @Test
+    void theAcademysOwnAdminCannotBeAddedAsATrainer() {
+        newService();
+        actingAsAcademyAdmin();
+
+        User admin = User.builder().id(UUID.randomUUID()).username("owner").fullName("Owner").build();
+        when(identityRegistrationService.findByEmail("owner@example.com")).thenReturn(java.util.Optional.of(admin));
+        when(identityRegistrationService.isAcademyAdmin(eq(admin.getId()), any())).thenReturn(true);
+
+        var request = new RegisterTrainerRequest("owner", "Owner", "9000000009", "owner@example.com",
+                java.time.LocalDate.of(1990, 1, 1), null, null, null, null,
+                Map.of(UUID.randomUUID(), Set.of(FeatureKey.ATTENDANCE)), null, null);
+
+        assertThatThrownBy(() -> trainerRegistrationService.registerTrainer(request))
+                .isInstanceOf(com.nest.common.exception.BadRequestException.class)
+                .hasMessageContaining("runs this academy");
+        verify(identityRegistrationService, never()).createMembership(any(), any(), any(), any(), any(), any());
     }
 
     @Test

@@ -93,7 +93,9 @@ class _BatchListScreenState extends ConsumerState<BatchListScreen> {
     final confirmed = await showAppConfirmDialog(
       context: context,
       title: 'Delete this batch?',
-      message: '"${batch.name}" will be permanently removed. This can\'t be undone.',
+      message:
+          '"${batch.name}" will be permanently removed, and any students in it will be taken out '
+          'of it. This can\'t be undone.',
       confirmLabel: 'Delete',
     );
     if (!confirmed) return;

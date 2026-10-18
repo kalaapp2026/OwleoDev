@@ -137,7 +137,7 @@ class _UserListScreenState extends ConsumerState<UserListScreen> {
             person.active ? '${person.fullName} marked inactive.' : '${person.fullName} marked active.');
       }
     } catch (e) {
-      if (mounted) showAppToast(context, e.toString().replaceFirst('Exception: ', ''));
+      if (mounted) showAppToast(context, e.toString().replaceFirst('Exception: ', ''), error: true);
     }
   }
 
@@ -153,7 +153,7 @@ class _UserListScreenState extends ConsumerState<UserListScreen> {
         title: 'New password',
       );
     } catch (e) {
-      if (mounted) showAppToast(context, e.toString().replaceFirst('Exception: ', ''));
+      if (mounted) showAppToast(context, e.toString().replaceFirst('Exception: ', ''), error: true);
     }
   }
 
@@ -175,7 +175,7 @@ class _UserListScreenState extends ConsumerState<UserListScreen> {
       _refresh();
       if (mounted) showAppToast(context, '${person.fullName} removed from this course.');
     } catch (e) {
-      if (mounted) showAppToast(context, e.toString().replaceFirst('Exception: ', ''));
+      if (mounted) showAppToast(context, e.toString().replaceFirst('Exception: ', ''), error: true);
     }
   }
 

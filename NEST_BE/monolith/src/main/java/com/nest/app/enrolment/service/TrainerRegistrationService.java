@@ -242,6 +242,13 @@ public class TrainerRegistrationService {
         // (PRD 7.4), so we link them to this academy instead of rejecting them as a duplicate.
         Optional<User> existing = identityRegistrationService.findByEmail(request.email());
         if (existing.isPresent()) {
+            // The person already agreed - the creator verified their code while filling in the form -
+            // so activate now rather than leaving a pending request.
+            if (request.linkGrantId() != null) {
+                identityRegistrationService.consumeLinkGrant(request.linkGrantId(), existing.get().getId(),
+                        creator.academyId(), TenantContext.currentUserId());
+                return linkVerifiedPerson(existing.get(), creator, request);
+            }
             return linkExistingPerson(existing.get(), creator, request);
         }
 
@@ -278,8 +285,8 @@ public class TrainerRegistrationService {
      * else and having to replay it later.
      */
     private TrainerResponse linkExistingPerson(User person, MembershipClaim creator, RegisterTrainerRequest request) {
-        identityRegistrationService.findMembership(person.getId(), creator.academyId()).ifPresent(existing -> {
-            // One membership per person per academy - so this is "already here", not "add another".
+        assertNotAlreadyTrainerHere(person, creator);
+        identityRegistrationService.findMembership(person.getId(), creator.academyId(), Role.TRAINER).ifPresent(existing -> {
             throw new BadRequestException(person.getFullName() + " is already "
                     + article(existing.getRoleType()) + " at this academy"
                     + (existing.getStatus() == MembershipStatus.PENDING_CONFIRMATION
@@ -305,6 +312,45 @@ public class TrainerRegistrationService {
         // No temp password: they already have an account and keep their existing credentials.
         return new TrainerResponse(person.getId(), membership.getId(), person.getUsername(),
                 null, request.courseFeatures(), true);
+    }
+
+    /**
+     * Being a student here does NOT stop someone being made a trainer here - they get a second
+     * membership in the other role and switch between the two from the academy switcher, the same
+     * way they would between two academies. Only the academy's own admin is turned away, since an
+     * admin already holds every permission.
+     */
+    private void assertNotAlreadyTrainerHere(User person, MembershipClaim creator) {
+        if (identityRegistrationService.isAcademyAdmin(person.getId(), creator.academyId())) {
+            throw new BadRequestException(person.getFullName() + " runs this academy and can't also be added as a trainer.");
+        }
+    }
+
+    /**
+     * Same as {@link #linkExistingPerson} for someone who has already confirmed themselves, so the
+     * membership is ACTIVE straight away and no code is sent. Their global account, role and password
+     * are untouched, and the form's profile fields are not applied to it - the account is theirs.
+     */
+    private TrainerResponse linkVerifiedPerson(User person, MembershipClaim creator, RegisterTrainerRequest request) {
+        assertNotAlreadyTrainerHere(person, creator);
+        identityRegistrationService.findMembership(person.getId(), creator.academyId(), Role.TRAINER).ifPresent(existing -> {
+            throw new BadRequestException(person.getFullName() + " is already "
+                    + article(existing.getRoleType()) + " at this academy.");
+        });
+
+        var membership = identityRegistrationService.createMembership(
+                person.getId(), creator.academyId(), creator.academyName(), Role.TRAINER,
+                MembershipStatus.ACTIVE, TenantContext.currentUserId());
+        identityRegistrationService.setJoiningDate(membership,
+                request.details() == null ? null : request.details().joiningDate());
+        identityRegistrationService.setSalary(membership,
+                request.details() == null ? null : request.details().salary());
+
+        saveCourseAssignment(membership.getId(), request.courseFeatures());
+        saveBatchScoping(membership.getId(), request.courseBatches());
+
+        return new TrainerResponse(person.getId(), membership.getId(), person.getUsername(),
+                null, request.courseFeatures(), false);
     }
 
     /** Completes the link once the person reads their code back to whoever registered them. */

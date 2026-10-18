@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:nest_fe/features/profile/presentation/account_switcher_sheet.dart';
 import 'package:nest_fe/features/profile/presentation/my_profile_screen.dart';
+import 'package:nest_fe/features/profile/presentation/role_switch_card.dart';
 import 'package:nest_fe/features/profile/presentation/user_settings_screen.dart';
 import 'package:nest_fe/l10n/app_localizations.dart';
 import 'package:nest_fe/core/auth/session_controller.dart';
@@ -19,6 +20,8 @@ class ProfileScreen extends StatelessWidget {
     return const Column(
       children: [
         AccountSwitcherBar(),
+        // Only appears for someone who is both a student and a trainer at this academy.
+        RoleSwitchCard(),
         Expanded(child: _ProfileBody()),
       ],
     );

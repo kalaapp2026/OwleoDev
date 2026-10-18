@@ -4,12 +4,13 @@ import 'package:go_router/go_router.dart';
 import 'package:nest_fe/app/theme/app_tokens.dart';
 import 'package:nest_fe/app/theme/app_typography.dart';
 import 'package:nest_fe/core/auth/account_store.dart';
+import 'package:nest_fe/core/auth/role_switch.dart';
 import 'package:nest_fe/core/auth/session_controller.dart';
 import 'package:nest_fe/core/design/avatar.dart';
 import 'package:nest_fe/core/design/pressable.dart';
 
 /// The saved accounts on this device, newest login last. Read fresh each time the sheet opens.
-final _savedAccountsProvider = FutureProvider.autoDispose<List<SavedAccount>>((ref) => AccountStore.instance.all());
+final savedAccountsProvider = FutureProvider.autoDispose<List<SavedAccount>>((ref) => AccountStore.instance.all());
 
 /// Username row at the top of Profile - tapping it opens the account switcher, like Instagram.
 class AccountSwitcherBar extends ConsumerWidget {
@@ -54,8 +55,9 @@ class AccountSwitcherBar extends ConsumerWidget {
   }
 }
 
-/// The prototype's top-right dropdown: the current profile (tap to open it), the other accounts on
-/// this device to switch to, and Add account. Anchored under the header, growing from its right edge.
+/// The top-right avatar menu: who you are (name, role, academy), View profile, for someone who
+/// holds both roles at this academy a switch to the other role's view, then the other logins saved
+/// on this device and Add account. Anchored under the header, growing from its right edge.
 Future<void> showAccountMenu(BuildContext context, {required VoidCallback onOpenProfile}) {
   final top = MediaQuery.paddingOf(context).top + kToolbarHeight - 4;
   return showGeneralDialog<void>(
@@ -68,7 +70,11 @@ Future<void> showAccountMenu(BuildContext context, {required VoidCallback onOpen
       final curved = CurvedAnimation(parent: anim, curve: Curves.easeOutCubic);
       return FadeTransition(
         opacity: curved,
-        child: ScaleTransition(scale: Tween(begin: 0.94, end: 1.0).animate(curved), alignment: Alignment.topRight, child: child),
+        child: ScaleTransition(
+          scale: Tween(begin: 0.94, end: 1.0).animate(curved),
+          alignment: Alignment.topRight,
+          child: child,
+        ),
       );
     },
     pageBuilder: (_, _, _) => Align(
@@ -81,6 +87,10 @@ Future<void> showAccountMenu(BuildContext context, {required VoidCallback onOpen
   );
 }
 
+/// What the avatar menu shows: who you are right now (name, role badge, academy), a way to your
+/// profile, and - only for someone who is both a student and a trainer at this academy - a one-tap
+/// switch to the other role. Below that, the other logins saved on this device and Add account
+/// (also reachable from the username bar on Profile).
 class _AccountMenuPanel extends ConsumerWidget {
   const _AccountMenuPanel({required this.onOpenProfile});
 
@@ -90,126 +100,185 @@ class _AccountMenuPanel extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final palette = context.palette;
     final user = ref.watch(sessionControllerProvider).user;
-    final accounts = ref.watch(_savedAccountsProvider).valueOrNull ?? const <SavedAccount>[];
     if (user == null) return const SizedBox.shrink();
+
+    final accounts = ref.watch(savedAccountsProvider).valueOrNull ?? const <SavedAccount>[];
+    // Other logins saved on this device - a different PERSON, unlike the role switch above, which is
+    // the same person using the app as the other of their two roles.
     final others = accounts.where((a) => a.userId != user.id).toList();
     final membership = user.activeMembership;
-    final subtitle = [
-      user.role.replaceAll('_', ' '),
-      if (membership?.academyName != null) membership!.academyName!,
-    ].join(' · ');
+    final other = otherRoleAtActiveAcademy(user);
+    final isTrainer = membership?.roleType == 'TRAINER';
+    // Gold marks the staff side everywhere in the app; the student side is the app's teal.
+    final badgeColor = isTrainer ? palette.gold : palette.primary;
+    final badgeSoft = isTrainer ? palette.goldSoft : palette.primarySoft;
 
-    Widget label(String text) => Padding(
-          padding: const EdgeInsets.fromLTRB(AppSpacing.xl, AppSpacing.lg, AppSpacing.xl, AppSpacing.xs),
-          child: Text(
-            text.toUpperCase(),
-            style: TextStyle(fontSize: 10, fontWeight: AppType.heavy, letterSpacing: 0.4, color: palette.textFaint),
+    Widget row({required IconData icon, required String text, required Color color, required VoidCallback onTap}) =>
+        Pressable(
+          onTap: () {
+            Navigator.of(context).pop();
+            onTap();
+          },
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl, vertical: AppSpacing.lg),
+            child: Row(
+              children: [
+                Icon(icon, size: 18, color: color),
+                const SizedBox(width: AppSpacing.lg),
+                Expanded(
+                  child: Text(
+                    text,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontSize: AppType.lg, fontWeight: AppType.bold, color: color),
+                  ),
+                ),
+              ],
+            ),
           ),
         );
 
+    Widget sectionLabel(String text) => Padding(
+      padding: const EdgeInsets.fromLTRB(AppSpacing.xl, AppSpacing.lg, AppSpacing.xl, AppSpacing.xs),
+      child: Text(
+        text.toUpperCase(),
+        style: TextStyle(fontSize: 10, fontWeight: AppType.heavy, letterSpacing: 0.4, color: palette.textFaint),
+      ),
+    );
+
     return Material(
-      color: palette.surface,
+      color: palette.surfaceRaised,
       elevation: 12,
       shadowColor: Colors.black45,
-      borderRadius: AppRadii.all(AppRadii.xl),
+      borderRadius: AppRadii.all(AppRadii.xxl),
       clipBehavior: Clip.antiAlias,
-      child: ConstrainedBox(
-        constraints: BoxConstraints(maxWidth: 280, maxHeight: MediaQuery.sizeOf(context).height * 0.7),
-        child: SizedBox(
-          width: 280,
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
+      child: Container(
+        width: 280,
+        constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.75),
+        decoration: BoxDecoration(
+          borderRadius: AppRadii.all(AppRadii.xxl),
+          border: Border.all(color: palette.border),
+        ),
+        // Scrolls rather than overflowing when several logins are saved on the device.
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(AppSpacing.xl),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      user.fullName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(fontSize: AppType.xl, fontWeight: AppType.heavy, color: palette.text),
+                    ),
+                    const SizedBox(height: AppSpacing.sm),
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: badgeSoft,
+                            borderRadius: AppRadii.all(AppRadii.pill),
+                            border: Border.all(color: badgeColor.withValues(alpha: 0.5)),
+                          ),
+                          child: Text(
+                            roleLabel(membership?.roleType ?? user.role),
+                            style: TextStyle(fontSize: AppType.sm, fontWeight: AppType.semi, color: badgeColor),
+                          ),
+                        ),
+                        if (membership?.academyName != null) ...[
+                          const SizedBox(width: AppSpacing.md),
+                          Expanded(
+                            child: Text(
+                              'at ${membership!.academyName}',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(fontSize: AppType.sm, color: palette.textMuted),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              Divider(height: 1, color: palette.borderSoft),
+              row(icon: Icons.people_outline, text: 'View profile', color: palette.text, onTap: onOpenProfile),
+              if (other != null)
+                row(
+                  icon: Icons.swap_horiz_rounded,
+                  text: 'Switch to ${roleLabel(other.roleType)} view',
+                  color: palette.gold,
+                  onTap: () => switchToRole(ref, context, other),
+                ),
+              Divider(height: 1, color: palette.borderSoft),
+              sectionLabel(others.isEmpty ? 'Accounts' : 'Switch account'),
+              for (final a in others)
                 Pressable(
                   onTap: () {
                     Navigator.of(context).pop();
-                    onOpenProfile();
+                    ref.read(sessionControllerProvider.notifier).switchAccount(a.userId);
                   },
                   child: Padding(
-                    padding: const EdgeInsets.all(AppSpacing.xl),
+                    padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl, vertical: AppSpacing.md),
                     child: Row(
                       children: [
-                        PersonAvatar(name: user.fullName, seed: user.id, size: 36),
+                        PersonAvatar(name: a.fullName, seed: a.userId, size: 28),
                         const SizedBox(width: AppSpacing.lg),
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(user.fullName,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(fontSize: AppType.md, fontWeight: AppType.heavy, color: palette.text)),
-                              Text(subtitle,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(fontSize: AppType.sm, color: palette.textMuted)),
+                              Text(
+                                a.fullName.isEmpty ? a.username : a.fullName,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(fontSize: AppType.md, fontWeight: AppType.bold, color: palette.text),
+                              ),
+                              Text(
+                                '@${a.username}',
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(fontSize: AppType.sm, color: palette.textFaint),
+                              ),
                             ],
                           ),
                         ),
-                        Icon(Icons.chevron_right_rounded, size: 18, color: palette.textFaint),
                       ],
                     ),
                   ),
                 ),
-                Divider(height: 1, color: palette.borderSoft),
-                label(others.isEmpty ? 'Accounts' : 'Switch account'),
-                for (final a in others)
-                  Pressable(
-                    onTap: () {
-                      Navigator.of(context).pop();
-                      ref.read(sessionControllerProvider.notifier).switchAccount(a.userId);
-                    },
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl, vertical: AppSpacing.md),
-                      child: Row(
-                        children: [
-                          PersonAvatar(name: a.fullName, seed: a.userId, size: 28),
-                          const SizedBox(width: AppSpacing.lg),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(a.fullName.isEmpty ? a.username : a.fullName,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: TextStyle(fontSize: AppType.md, fontWeight: AppType.bold, color: palette.text)),
-                                Text('@${a.username}',
-                                    overflow: TextOverflow.ellipsis,
-                                    style: TextStyle(fontSize: AppType.sm, color: palette.textFaint)),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                Pressable(
-                  onTap: () {
-                    Navigator.of(context).pop();
-                    context.push('/add-account');
-                  },
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(AppSpacing.xl, AppSpacing.md, AppSpacing.xl, AppSpacing.xl),
-                    child: Row(
-                      children: [
-                        Container(
-                          width: 28,
-                          height: 28,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: palette.primarySoft,
-                            border: Border.all(color: palette.primary, width: 1.5),
-                          ),
-                          child: Icon(Icons.add_rounded, size: 16, color: palette.primary),
+              Pressable(
+                onTap: () {
+                  Navigator.of(context).pop();
+                  context.push('/add-account');
+                },
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(AppSpacing.xl, AppSpacing.md, AppSpacing.xl, AppSpacing.xl),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 28,
+                        height: 28,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: palette.primarySoft,
+                          border: Border.all(color: palette.primary, width: 1.5),
                         ),
-                        const SizedBox(width: AppSpacing.lg),
-                        Text('Add account',
-                            style: TextStyle(fontSize: AppType.md, fontWeight: AppType.bold, color: palette.primary)),
-                      ],
-                    ),
+                        child: Icon(Icons.add_rounded, size: 16, color: palette.primary),
+                      ),
+                      const SizedBox(width: AppSpacing.lg),
+                      Text(
+                        'Add account',
+                        style: TextStyle(fontSize: AppType.md, fontWeight: AppType.bold, color: palette.primary),
+                      ),
+                    ],
                   ),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),
@@ -233,7 +302,7 @@ class _AccountSwitcherSheet extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final palette = context.palette;
     final activeId = ref.watch(sessionControllerProvider).user?.id;
-    final accounts = ref.watch(_savedAccountsProvider).valueOrNull ?? const <SavedAccount>[];
+    final accounts = ref.watch(savedAccountsProvider).valueOrNull ?? const <SavedAccount>[];
 
     return Container(
       decoration: BoxDecoration(color: palette.surface, borderRadius: AppRadii.sheetTop),

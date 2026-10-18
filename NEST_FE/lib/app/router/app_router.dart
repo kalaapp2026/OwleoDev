@@ -55,7 +55,9 @@ class _WithNavBar extends StatelessWidget {
     return Scaffold(
       body: child,
       bottomNavigationBar: shellState.buildOverlayBottomNav(
-        onNavigate: () => Navigator.of(context).pop(),
+        // Nothing to close here - the shell clears every pushed More screen itself when a tab is
+        // tapped, so a stack of them (Courses -> Batches) can't be left behind.
+        onNavigate: () {},
         // A More destination: only "More" is lit, not whichever tab the shell was last on.
         moreActive: true,
         // Reusing onNavigate (pop) here would just close this screen and reveal whatever tab

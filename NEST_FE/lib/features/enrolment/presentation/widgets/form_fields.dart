@@ -112,10 +112,14 @@ class AppTextField extends StatelessWidget {
     this.hasError = false,
     this.maxLines = 1,
     this.autofocus = false,
+    this.focusNode,
+    this.onSubmitted,
   });
 
   final TextEditingController controller;
   final String hint;
+  final FocusNode? focusNode;
+  final ValueChanged<String>? onSubmitted;
   final ValueChanged<String>? onChanged;
   final TextInputType? keyboardType;
   final TextCapitalization textCapitalization;
@@ -130,7 +134,9 @@ class AppTextField extends StatelessWidget {
     final palette = context.palette;
     return TextField(
       controller: controller,
+      focusNode: focusNode,
       onChanged: onChanged,
+      onSubmitted: onSubmitted,
       keyboardType: keyboardType,
       textCapitalization: textCapitalization,
       inputFormatters: inputFormatters,
@@ -371,6 +377,7 @@ class FormSection extends StatelessWidget {
     required this.children,
     this.subtitle,
     this.badge,
+    this.locked = false,
   });
 
   final String title;
@@ -380,6 +387,10 @@ class FormSection extends StatelessWidget {
   final bool expanded;
   final VoidCallback onToggle;
   final List<Widget> children;
+
+  /// Shows the fields filled in but not editable - used for details that belong to someone else's
+  /// account (an existing person auto-filled from their own profile).
+  final bool locked;
 
   /// A short status shown on the collapsed header - "3 courses", "incomplete".
   final String? badge;
@@ -468,10 +479,21 @@ class FormSection extends StatelessWidget {
                 ? Padding(
                     padding: const EdgeInsets.fromLTRB(
                         AppSpacing.xl, 0, AppSpacing.xl, AppSpacing.xs),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: children,
-                    ),
+                    child: locked
+                        // Contents shown but not editable; the header above still opens and closes.
+                        ? IgnorePointer(
+                            child: Opacity(
+                              opacity: 0.8,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: children,
+                              ),
+                            ),
+                          )
+                        : Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: children,
+                          ),
                   )
                 : const SizedBox(width: double.infinity),
           ),

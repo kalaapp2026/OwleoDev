@@ -1,17 +1,20 @@
 package com.nest.app.identity.service;
 
 import com.nest.app.identity.entity.AcademyMembership;
+import com.nest.app.identity.entity.AccountLinkGrant;
 import com.nest.app.identity.entity.CourseFeatureGrant;
 import com.nest.app.identity.entity.CourseMap;
 import com.nest.app.identity.entity.FeatureGrant;
 import com.nest.app.identity.entity.MembershipStatus;
 import com.nest.app.identity.entity.User;
 import com.nest.app.identity.repository.AcademyMembershipRepository;
+import com.nest.app.identity.repository.AccountLinkGrantRepository;
 import com.nest.app.identity.repository.CourseFeatureGrantRepository;
 import com.nest.app.identity.repository.CourseMapRepository;
 import com.nest.app.identity.repository.FeatureGrantRepository;
 import com.nest.app.identity.repository.UserRepository;
 import com.nest.common.crypto.PiiHasher;
+import com.nest.common.exception.BadRequestException;
 import com.nest.common.exception.ConflictException;
 import com.nest.common.exception.ResourceNotFoundException;
 import com.nest.common.security.Role;
@@ -45,11 +48,14 @@ public class IdentityRegistrationService {
     private final PiiHasher hasher;
     private final PasswordEncoder passwordEncoder;
     private final TempPasswordGenerator tempPasswordGenerator;
+    private final AccountLinkGrantRepository accountLinkGrantRepository;
 
     public IdentityRegistrationService(UserRepository userRepository, AcademyMembershipRepository membershipRepository,
                                         FeatureGrantRepository featureGrantRepository, CourseFeatureGrantRepository courseFeatureGrantRepository,
                                         CourseMapRepository courseMapRepository,
-                                        PiiHasher hasher, PasswordEncoder passwordEncoder, TempPasswordGenerator tempPasswordGenerator) {
+                                        PiiHasher hasher, PasswordEncoder passwordEncoder, TempPasswordGenerator tempPasswordGenerator,
+                                        AccountLinkGrantRepository accountLinkGrantRepository) {
+        this.accountLinkGrantRepository = accountLinkGrantRepository;
         this.userRepository = userRepository;
         this.membershipRepository = membershipRepository;
         this.featureGrantRepository = featureGrantRepository;
@@ -70,8 +76,38 @@ public class IdentityRegistrationService {
         return userRepository.findByEmailIgnoreCase(rawEmail.trim());
     }
 
-    public Optional<AcademyMembership> findMembership(UUID userId, UUID academyId) {
-        return membershipRepository.findByUserIdAndAcademyId(userId, academyId);
+    /**
+     * Spends the proof that an existing account holder agreed to join this academy (see
+     * {@link com.nest.app.identity.entity.AccountLinkGrant}). Single-use, and only valid for the
+     * person, academy and creator it was issued for - so a grant can't be carried to a different
+     * academy, a different account, or someone else's session.
+     *
+     * <p>Every way it can be wrong gets the same message on purpose: telling a caller WHICH check
+     * failed would tell them how to forge one.
+     */
+    @Transactional
+    public void consumeLinkGrant(UUID grantId, UUID userId, UUID academyId, UUID actorUserId) {
+        AccountLinkGrant grant = accountLinkGrantRepository.findById(grantId).orElse(null);
+        if (grant == null || grant.isUsed() || grant.getExpiresAt().isBefore(java.time.Instant.now())
+                || !grant.getUserId().equals(userId) || !grant.getAcademyId().equals(academyId)
+                || !grant.getCreatedBy().equals(actorUserId)) {
+            throw new BadRequestException("That confirmation has expired - ask the person for a new code.");
+        }
+        grant.setUsed(true);
+        accountLinkGrantRepository.save(grant);
+    }
+
+    /** The person's membership at this academy in the given role. A person may hold one of each role
+     * at the same academy (a student for one course, a trainer for another) but never two of the
+     * same role - so this is "already here as a student?", not "already here at all?". */
+    public Optional<AcademyMembership> findMembership(UUID userId, UUID academyId, Role role) {
+        return membershipRepository.findByUserIdAndAcademyIdAndRoleType(userId, academyId, role);
+    }
+
+    /** The academy's own admin can't also be added as one of its students or trainers - an admin
+     * already has every permission, and a second, lesser membership would only muddy who they are. */
+    public boolean isAcademyAdmin(UUID userId, UUID academyId) {
+        return membershipRepository.findByUserIdAndAcademyIdAndRoleType(userId, academyId, Role.ACADEMY_ADMIN).isPresent();
     }
 
     public List<UUID> courseIdsForMembership(UUID membershipId) {

@@ -181,7 +181,9 @@ class _AcademyChip extends ConsumerWidget {
       padding: EdgeInsets.zero,
       onSelected: (membershipId) =>
           ref.read(sessionControllerProvider.notifier).switchActiveMembership(membershipId),
-      itemBuilder: (context) => user.activeMemberships
+      // Academies only - one entry each. Switching between your student and trainer roles is in the
+      // avatar menu, not here.
+      itemBuilder: (context) => user.academyChoices
           .map(
             (m) => PopupMenuItem<String>(
               value: m.membershipId,
@@ -197,7 +199,7 @@ class _AcademyChip extends ConsumerWidget {
                       ],
                     ),
                   ),
-                  if (m.membershipId == user.activeMembershipId)
+                  if (m.academyId == user.activeMembership?.academyId)
                     Icon(Icons.check_circle, color: Theme.of(context).colorScheme.primary, size: 18),
                 ],
               ),

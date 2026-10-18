@@ -1,3 +1,4 @@
+import 'dart:async' show FutureOr;
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -7,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:nest_fe/app/theme/app_tokens.dart';
 import 'package:nest_fe/app/theme/app_typography.dart';
 import 'package:nest_fe/app/theme/theme_controller.dart';
+import 'package:nest_fe/core/auth/role_switch.dart';
 import 'package:nest_fe/core/auth/session_controller.dart';
 import 'package:nest_fe/core/design/app_top_bar.dart' show ThemeModeButton;
 import 'package:nest_fe/core/design/avatar.dart';
@@ -82,6 +84,15 @@ class AppShellState extends ConsumerState<AppShell> {
         _erpIndex = index;
       });
 
+  /// Pops every screen pushed over the shell (the More destinations), leaving the shell itself.
+  /// A no-op when nothing is pushed.
+  void popToShell() => Navigator.of(context).popUntil((route) => route.isFirst);
+
+  Future<void> _leaveOverlay(FutureOr<void> Function() onNavigate) async {
+    await onNavigate();
+    if (mounted) popToShell();
+  }
+
   /// A second copy of the same bottom nav bar, for the More sheet to paint on top of its own
   /// blurred backdrop. A modal route's Overlay always paints above the Scaffold's
   /// bottomNavigationBar - reserving empty space in the sheet and hoping the real one shows
@@ -97,7 +108,7 @@ class AppShellState extends ConsumerState<AppShell> {
   /// (there's no "closed" state for it to represent: it only ever renders while the sheet is
   /// open), false for a pushed "More"-destination screen's copy, where no sheet is open over it.
   Widget buildOverlayBottomNav({
-    required VoidCallback onNavigate,
+    required FutureOr<void> Function() onNavigate,
     VoidCallback? onMoreTap,
     bool moreActive = false,
   }) {
@@ -115,24 +126,30 @@ class AppShellState extends ConsumerState<AppShell> {
       canToggleErp: canToggle,
       isSuperAdmin: isSuperAdmin,
       moreActive: moreActive,
-      onSocialTap: (i) {
-        onNavigate();
-        setState(() => _socialIndex = i);
+      // Every tap first lets the caller close itself (the More sheet), then clears any More
+      // destination pushed over the shell - otherwise the tab changes underneath a screen that is
+      // still on top, and Back then walks through the stack instead of landing on the shell.
+      onSocialTap: (i) async {
+        await _leaveOverlay(onNavigate);
+        if (mounted) setState(() => _socialIndex = i);
       },
-      onErpTap: (i) {
-        onNavigate();
-        setState(() => _erpIndex = i);
+      onErpTap: (i) async {
+        await _leaveOverlay(onNavigate);
+        if (mounted) setState(() => _erpIndex = i);
       },
       // Tapping "More" again while it's already open just closes it, rather than opening a
       // second sheet on top of itself - unless the caller asked for different behaviour.
-      onMoreTap: onMoreTap ?? onNavigate,
-      onSearchTap: () {
-        onNavigate();
-        Navigator.of(context).push(MaterialPageRoute(builder: (_) => const SearchProfilesScreen()));
+      onMoreTap: onMoreTap ?? () => onNavigate(),
+      onSearchTap: () async {
+        await _leaveOverlay(onNavigate);
+        if (mounted) {
+          Navigator.of(context).push(MaterialPageRoute(builder: (_) => const SearchProfilesScreen()));
+        }
       },
-      onToggle: () {
+      onToggle: () async {
         if (!canToggle) return;
-        onNavigate();
+        await _leaveOverlay(onNavigate);
+        if (!mounted) return;
         setState(() {
           _modeChosenByUser = true;
           _mode = _mode == AppMode.social ? AppMode.erp : AppMode.social;
@@ -174,6 +191,14 @@ class AppShellState extends ConsumerState<AppShell> {
   @override
   Widget build(BuildContext context) {
     final session = ref.watch(sessionControllerProvider);
+
+    // Switching between a person's student and trainer roles (from Profile) lands on the new role's
+    // own Dashboard, not on whichever tab happened to be open - the role decides what every other
+    // tab is, so staying put would leave them on a page that no longer means the same thing.
+    ref.listen<int>(roleSwitchTickProvider, (previous, next) {
+      if (previous != next) goToErpTab(0);
+    });
+
     final user = session.user;
     final hasErpAccess = user?.hasErpAccess ?? false;
     final isSuperAdmin = user?.isSuperAdmin ?? false;
@@ -344,7 +369,8 @@ class AppShellState extends ConsumerState<AppShell> {
                 icon: const Icon(Icons.arrow_drop_down),
                 onSelected: (membershipId) =>
                     ref.read(sessionControllerProvider.notifier).switchActiveMembership(membershipId),
-                itemBuilder: (context) => user.activeMemberships
+                // Academies only - one entry each. The student/trainer switch is in the avatar menu.
+                itemBuilder: (context) => user.academyChoices
                     .map(
                       (m) => PopupMenuItem<String>(
                         value: m.membershipId,
@@ -363,7 +389,7 @@ class AppShellState extends ConsumerState<AppShell> {
                                 ],
                               ),
                             ),
-                            if (m.membershipId == user.activeMembershipId)
+                            if (m.academyId == user.activeMembership?.academyId)
                               Icon(Icons.check_circle, color: Theme.of(context).colorScheme.primary, size: 18),
                           ],
                         ),
@@ -682,25 +708,29 @@ class _NotificationBellState extends ConsumerState<_NotificationBell> {
           Positioned.fill(
             child: GestureDetector(behavior: HitTestBehavior.opaque, onTap: _close),
           ),
-          CompositedTransformFollower(
-            link: _link,
-            showWhenUnlinked: false,
-            targetAnchor: Alignment.bottomRight,
-            followerAnchor: Alignment.topRight,
-            offset: const Offset(0, 8),
-            child: Material(
-              elevation: 8,
-              borderRadius: BorderRadius.circular(14),
-              clipBehavior: Clip.antiAlias,
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 380, maxHeight: 440),
-                child: SizedBox(
-                  width: 380,
+          // Anchored to the screen's top-right rather than to the bell: the bell sits left of the
+          // avatar, so a fixed-width panel right-aligned to it ran off the left edge of a phone.
+          Builder(builder: (ctx) {
+            final media = MediaQuery.of(ctx);
+            final palette = ctx.palette;
+            final width = (media.size.width - AppSpacing.page * 2).clamp(0.0, 380.0);
+            return Positioned(
+              top: media.padding.top + kToolbarHeight - 4,
+              right: AppSpacing.page,
+              width: width,
+              child: Material(
+                color: palette.surface,
+                elevation: 8,
+                shadowColor: Colors.black45,
+                borderRadius: AppRadii.all(AppRadii.xl),
+                clipBehavior: Clip.antiAlias,
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(maxHeight: (media.size.height * 0.6).clamp(0.0, 440.0)),
                   child: NotificationDropdownContent(module: widget.module, onClose: _close),
                 ),
               ),
-            ),
-          ),
+            );
+          }),
         ],
       ),
     );

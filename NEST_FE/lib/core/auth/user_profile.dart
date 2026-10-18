@@ -81,7 +81,30 @@ class UserProfile {
   // PRD 2.4), so they'd otherwise be locked out of the ERP side entirely. Their ERP home is the
   // academy-onboarding tile, not the within-academy tools an academy member sees.
   bool get hasErpAccess => activeMemberships.isNotEmpty || isSuperAdmin;
-  bool get hasMultipleAcademies => activeMemberships.length > 1;
+  /// More than one ACADEMY - not more than one membership. Someone who is both a student and a
+  /// trainer at one academy holds two memberships there but still belongs to a single academy, and
+  /// the academy switcher has nothing to offer them (their role switch lives in the avatar menu).
+  bool get hasMultipleAcademies => activeMemberships.map((m) => m.academyId).toSet().length > 1;
+
+  /// What the academy switcher lists: each academy once. The entry for the academy you are in is your
+  /// current membership; for any other, the membership in the SAME role if you hold one there (so
+  /// moving academy doesn't also change role), otherwise the first you have. Selecting an entry
+  /// switches to that membership.
+  List<MembershipSummary> get academyChoices {
+    final current = activeMembership;
+    final seen = <String>{};
+    final choices = <MembershipSummary>[];
+    for (final m in activeMemberships) {
+      if (!seen.add(m.academyId)) continue;
+      if (m.academyId == current?.academyId) {
+        choices.add(current!);
+        continue;
+      }
+      final here = activeMemberships.where((x) => x.academyId == m.academyId).toList();
+      choices.add(here.firstWhere((x) => x.roleType == current?.roleType, orElse: () => here.first));
+    }
+    return choices;
+  }
 
   MembershipSummary? get activeMembership {
     final active = activeMemberships;

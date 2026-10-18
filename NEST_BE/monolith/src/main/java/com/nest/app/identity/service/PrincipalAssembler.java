@@ -44,10 +44,19 @@ public class PrincipalAssembler {
         this.academyRepository = academyRepository;
     }
 
+    /** Oldest membership first. The first one is the default on login, and a person with two
+     * memberships at one academy (student and trainer) must land on the same one every time rather
+     * than whichever the database happens to return first. */
+    private static final java.util.Comparator<AcademyMembership> OLDEST_FIRST =
+            java.util.Comparator.comparing(AcademyMembership::getCreatedAt,
+                            java.util.Comparator.nullsLast(java.util.Comparator.<java.time.Instant>naturalOrder()))
+                    .thenComparing(AcademyMembership::getId);
+
     public NestPrincipal assemble(User user) {
         List<AcademyMembership> activeMemberships =
                 membershipRepository.findByUserIdAndStatus(user.getId(), MembershipStatus.ACTIVE).stream()
                         .filter(m -> !isAcademySuspended(m.getAcademyId()))
+                        .sorted(OLDEST_FIRST)
                         .collect(Collectors.toList());
 
         List<MembershipClaim> claims = activeMemberships.stream().map(this::toClaim).collect(Collectors.toList());
@@ -67,6 +76,7 @@ public class PrincipalAssembler {
         //     feature/course grants (PRD 2.4 tenant suspension).
         return membershipRepository.findByUserIdAndStatus(user.getId(), MembershipStatus.ACTIVE).stream()
                 .filter(m -> !isAcademySuspended(m.getAcademyId()))
+                .sorted(OLDEST_FIRST)
                 .map(m -> new MembershipSummary(m.getId(), m.getAcademyId(), m.getAcademyName(), m.getRoleType(),
                         m.getStatus().name(), featureKeysFor(m.getId()), courseIdsFor(m.getId())))
                 .collect(Collectors.toList());

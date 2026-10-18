@@ -253,11 +253,11 @@ public class BatchService {
         batchMemberRepository.deleteByBatchIdAndMembershipId(batchId, membershipId);
     }
 
-    /** Genuine hard delete - unlike a Course, an empty batch that never held a class carries no
-     * history worth preserving. Two guards make sure nothing is ever silently lost:
+    /** Genuine hard delete - unlike a Course, a batch that never held a class carries no history
+     * worth preserving. The roster goes with it: students are only linked to the batch, so there is
+     * nothing of theirs to lose, and making someone unmap each student first (and then fail to save)
+     * only got in the way. One guard remains, so real history is never silently lost:
      * <ul>
-     *   <li>any current roster must be unmapped first (explicit, so a delete can never look like
-     *       "where did my batch go" to a student who was still in it);</li>
      *   <li>any batch that has actually HELD a class (i.e. has real attendance history) can't be
      *       deleted at all - deactivate it instead, the same as a Course.</li>
      * </ul>
@@ -269,10 +269,6 @@ public class BatchService {
                 .orElseThrow(() -> new ResourceNotFoundException("Batch not found: " + batchId));
         courseFeatureGuard.assertCourseFeature(batch.getCourseId(), FeatureKey.BATCH_CREATION);
 
-        if (!batchMemberRepository.findByBatchId(batchId).isEmpty()) {
-            throw new ConflictException("Please de-link the students from this batch first.");
-        }
-
         boolean hasAttendanceHistory = classInstanceRepository.findByBatchId(batchId).stream()
                 .anyMatch(ci -> ci.getStatus() == ClassInstanceStatus.HELD);
         if (hasAttendanceHistory) {
@@ -282,6 +278,7 @@ public class BatchService {
         scheduleRepository.deleteByBatchId(batchId);
         classInstanceRepository.deleteByBatchId(batchId);
         batchTrainerRepository.deleteByBatchId(batchId);
+        batchMemberRepository.deleteByBatchId(batchId);
         // Material shared with a batch has no meaning without it - leaving these behind would
         // orphan rows nothing can ever reach or clean up.
         studyMaterialRepository.deleteByBatchId(batchId);

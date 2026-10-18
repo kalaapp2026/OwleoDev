@@ -32,6 +32,17 @@ public record RegisterTrainerRequest(
         /** Per course, which batches the grants above apply to. An absent or empty set means
          * every batch on that course - the access a trainer had before batches could be named. */
         Map<UUID, Set<UUID>> courseBatches,
-        PersonDetails details
+        PersonDetails details,
+        /** Present when the creator already verified, with the person's own code, that this email's
+         * existing account agrees to join - see ExistingAccountService. Null otherwise. */
+        UUID linkGrantId
 ) {
+    /** The shape before {@code linkGrantId} existed - kept so older callers needn't pass a null. */
+    public RegisterTrainerRequest(String username, String fullName, String phone, String email, LocalDate dob,
+                                  String address, String city, String state, Integer yearsOfExperience,
+                                  Map<UUID, Set<String>> courseFeatures, Map<UUID, Set<UUID>> courseBatches,
+                                  PersonDetails details) {
+        this(username, fullName, phone, email, dob, address, city, state, yearsOfExperience, courseFeatures,
+                courseBatches, details, null);
+    }
 }

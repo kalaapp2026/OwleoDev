@@ -120,18 +120,16 @@ class BatchServiceTest {
     }
 
     @Test
-    void deletingABatchWithMembersIsRejected() {
+    void deletingABatchWithMembersRemovesTheRosterWithoutDelinkingFirst() {
         Batch batch = Batch.builder().id(UUID.randomUUID()).courseId(courseId).batchType(BatchType.REGULAR).build();
 
         when(batchRepository.findById(batch.getId())).thenReturn(java.util.Optional.of(batch));
-        when(batchMemberRepository.findByBatchId(batch.getId()))
-                .thenReturn(List.of(BatchMember.builder().batchId(batch.getId()).membershipId(membershipId).build()));
+        when(classInstanceRepository.findByBatchId(batch.getId())).thenReturn(List.of());
 
-        assertThatThrownBy(() -> batchService.delete(batch.getId()))
-                .isInstanceOf(ConflictException.class)
-                .hasMessageContaining("de-link");
+        assertThatCode(() -> batchService.delete(batch.getId())).doesNotThrowAnyException();
 
-        verify(batchRepository, never()).delete(any());
+        verify(batchMemberRepository).deleteByBatchId(batch.getId());
+        verify(batchRepository).delete(batch);
     }
 
     @Test
@@ -140,7 +138,6 @@ class BatchServiceTest {
         ClassInstance heldInstance = ClassInstance.builder().id(UUID.randomUUID()).batchId(batch.getId()).status(ClassInstanceStatus.HELD).build();
 
         when(batchRepository.findById(batch.getId())).thenReturn(java.util.Optional.of(batch));
-        when(batchMemberRepository.findByBatchId(batch.getId())).thenReturn(List.of());
         when(classInstanceRepository.findByBatchId(batch.getId())).thenReturn(List.of(heldInstance));
 
         assertThatThrownBy(() -> batchService.delete(batch.getId()))
@@ -155,7 +152,6 @@ class BatchServiceTest {
         Batch batch = Batch.builder().id(UUID.randomUUID()).courseId(courseId).batchType(BatchType.REGULAR).build();
 
         when(batchRepository.findById(batch.getId())).thenReturn(java.util.Optional.of(batch));
-        when(batchMemberRepository.findByBatchId(batch.getId())).thenReturn(List.of());
         when(classInstanceRepository.findByBatchId(batch.getId())).thenReturn(List.of());
 
         assertThatCode(() -> batchService.delete(batch.getId())).doesNotThrowAnyException();

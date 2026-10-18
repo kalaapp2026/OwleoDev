@@ -80,6 +80,94 @@ class StudentRegistrationResult {
       );
 }
 
+/// What the creator may know before the person has agreed: that the account exists, a masked name to
+/// recognise it by, and whether they are already at this academy.
+class ExistingAccountCheck {
+  final bool exists;
+  final String maskedName;
+  final bool alreadyAtThisAcademy;
+  final String? roleHere;
+
+  const ExistingAccountCheck({
+    required this.exists,
+    required this.maskedName,
+    required this.alreadyAtThisAcademy,
+    required this.roleHere,
+  });
+
+  factory ExistingAccountCheck.fromJson(Map<String, dynamic> json) => ExistingAccountCheck(
+        exists: json['exists'] as bool? ?? false,
+        maskedName: json['maskedName'] as String? ?? '',
+        alreadyAtThisAcademy: json['alreadyAtThisAcademy'] as bool? ?? false,
+        roleHere: json['roleHere'] as String?,
+      );
+}
+
+/// One academy an existing account is mapped to, with the courses it has there.
+class ExistingEnrolment {
+  final String academyName;
+  final bool thisAcademy;
+  final String role;
+  final List<String> courseIds;
+  final List<String> courseNames;
+
+  const ExistingEnrolment({
+    required this.academyName,
+    required this.thisAcademy,
+    required this.role,
+    required this.courseIds,
+    required this.courseNames,
+  });
+
+  factory ExistingEnrolment.fromJson(Map<String, dynamic> json) => ExistingEnrolment(
+        academyName: json['academyName'] as String? ?? '',
+        thisAcademy: json['thisAcademy'] as bool? ?? false,
+        role: json['role'] as String? ?? '',
+        courseIds: ((json['courseIds'] as List?) ?? const []).cast<String>(),
+        courseNames: ((json['courseNames'] as List?) ?? const []).cast<String>(),
+      );
+}
+
+/// What a verified code unlocks - see [EnrolmentApi.verifyExistingAccount].
+class ExistingAccountProfile {
+  final String linkGrantId;
+  final String userId;
+  final String username;
+  final String fullName;
+  final String? phone;
+  final String? email;
+  final DateTime? dob;
+  final PersonDetails details;
+  final List<ExistingEnrolment> enrolments;
+
+  const ExistingAccountProfile({
+    required this.linkGrantId,
+    required this.userId,
+    required this.username,
+    required this.fullName,
+    required this.phone,
+    required this.email,
+    required this.dob,
+    required this.details,
+    required this.enrolments,
+  });
+
+  factory ExistingAccountProfile.fromJson(Map<String, dynamic> json) => ExistingAccountProfile(
+        linkGrantId: json['linkGrantId'] as String,
+        userId: json['userId'] as String,
+        username: json['username'] as String? ?? '',
+        fullName: json['fullName'] as String? ?? '',
+        phone: json['phone'] as String?,
+        email: json['email'] as String?,
+        dob: json['dob'] == null ? null : DateTime.tryParse(json['dob'] as String),
+        details: PersonDetails.fromJson(
+            (json['details'] as Map?)?.cast<String, dynamic>() ?? const <String, dynamic>{}),
+        enrolments: ((json['enrolments'] as List?) ?? const [])
+            .map((e) => ExistingEnrolment.fromJson((e as Map).cast<String, dynamic>()))
+            .toList(),
+      );
+}
+
 class TrainerRegistrationResult {
   final String userId;
   final String membershipId;
@@ -435,6 +523,10 @@ class EnrolmentApi {
     String? state,
     required List<Map<String, dynamic>> courses, // [{courseId, fee}]
     PersonDetails? details,
+
+    /// Set when the creator already verified this existing account's own code - see
+    /// [verifyExistingAccount]. Lets the membership activate at once instead of waiting on a code.
+    String? linkGrantId,
   }) {
     return _client.call(
       (dio) => dio.post('/students', data: {
@@ -448,6 +540,7 @@ class EnrolmentApi {
         'state': state,
         'courses': courses,
         'details': details?.toJson(),
+        'linkGrantId': linkGrantId,
       }),
       (data) => StudentRegistrationResult.fromJson(data as Map<String, dynamic>),
     );
@@ -461,6 +554,34 @@ class EnrolmentApi {
     return _client.call(
       (dio) => dio.post('/students/confirm-membership', data: {'membershipId': membershipId, 'code': code}),
       (data) => StudentRegistrationResult.fromJson(data as Map<String, dynamic>),
+    );
+  }
+
+  /// Is there already a NEST account for this email? Says only that, plus a masked name - the
+  /// person's details wait for their own code ([verifyExistingAccount]).
+  Future<ExistingAccountCheck> checkExistingAccount({required String email, required bool trainer}) {
+    return _client.call(
+      (dio) => dio.post('/existing-accounts/check', data: {'email': email, 'role': trainer ? 'TRAINER' : 'STUDENT'}),
+      (data) => ExistingAccountCheck.fromJson(data as Map<String, dynamic>),
+    );
+  }
+
+  /// Posts a confirmation code to that person's own notifications.
+  Future<void> sendExistingAccountCode({required String email, required bool trainer}) {
+    return _client.call(
+      (dio) => dio.post('/existing-accounts/send-code', data: {'email': email, 'role': trainer ? 'TRAINER' : 'STUDENT'}),
+      (_) {},
+    );
+  }
+
+  /// Checks the code they read out. On success returns their details, where they are already mapped,
+  /// and the single-use grant registration must present.
+  Future<ExistingAccountProfile> verifyExistingAccount(
+      {required String email, required bool trainer, required String code}) {
+    return _client.call(
+      (dio) => dio.post('/existing-accounts/verify',
+          data: {'email': email, 'role': trainer ? 'TRAINER' : 'STUDENT', 'code': code}),
+      (data) => ExistingAccountProfile.fromJson(data as Map<String, dynamic>),
     );
   }
 
@@ -493,9 +614,11 @@ class EnrolmentApi {
     /// every batch on it - which is what a trainer assigned to the whole course gets.
     Map<String, Set<String>> courseBatches = const {},
     PersonDetails? details,
+    String? linkGrantId,
   }) {
     return _client.call(
       (dio) => dio.post('/trainers', data: {
+        'linkGrantId': linkGrantId,
         'username': username,
         'fullName': fullName,
         'phone': phone,

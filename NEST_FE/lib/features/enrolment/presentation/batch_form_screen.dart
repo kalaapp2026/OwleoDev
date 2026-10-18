@@ -10,6 +10,7 @@ import 'package:nest_fe/core/design/calendar_modal.dart';
 import 'package:nest_fe/core/design/category_meta.dart';
 import 'package:nest_fe/core/design/course_icons.dart';
 import 'package:nest_fe/core/design/people_picker_sheet.dart';
+import 'package:nest_fe/core/design/app_top_bar.dart' show AppBarBackTile;
 import 'package:nest_fe/core/design/pressable.dart';
 import 'package:nest_fe/core/design/segmented_control.dart';
 import 'package:nest_fe/core/design/time_picker_sheet.dart';
@@ -307,9 +308,7 @@ class _BatchFormScreenState extends ConsumerState<BatchFormScreen> {
       backgroundColor: palette.bg,
       appBar: AppBar(
         backgroundColor: palette.bg,
-        leading: Center(
-          child: AppIconButton(icon: Icons.arrow_back, onTap: () => Navigator.of(context).pop()),
-        ),
+        leading: AppBarBackTile(onTap: () => Navigator.of(context).pop()),
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,

@@ -11,6 +11,7 @@ import 'package:nest_fe/core/design/buttons.dart';
 import 'package:nest_fe/core/design/app_date_picker.dart';
 import 'package:nest_fe/core/design/calendar_modal.dart';
 import 'package:nest_fe/core/design/category_meta.dart';
+import 'package:nest_fe/core/design/app_top_bar.dart' show AppBarBackTile;
 import 'package:nest_fe/core/design/pressable.dart';
 import 'package:nest_fe/core/design/segmented_control.dart';
 import 'package:nest_fe/core/design/sheets.dart';
@@ -22,6 +23,7 @@ import 'package:nest_fe/features/enrolment/data/batch.dart';
 import 'package:nest_fe/features/enrolment/data/enrolment_api.dart';
 import 'package:nest_fe/features/enrolment/data/person_details.dart';
 import 'package:nest_fe/features/enrolment/data/user_tab.dart';
+import 'package:nest_fe/features/enrolment/presentation/widgets/existing_account_dialog.dart';
 import 'package:nest_fe/features/enrolment/presentation/widgets/feature_catalog.dart';
 import 'package:nest_fe/features/enrolment/presentation/widgets/form_fields.dart';
 import 'package:nest_fe/features/enrolment/presentation/widgets/user_dialogs.dart';
@@ -128,6 +130,21 @@ class _UserFormScreenState extends ConsumerState<UserFormScreen> {
   bool _busy = false;
   bool _loadingExisting = false;
 
+  // -- existing NEST account ---------------------------------------------------
+  // Leaving the email field on an address that already has an account opens a dialog: a code goes
+  // to that person's own notifications, they read it out, and only then are their saved details
+  // filled in. Until then the creator learns nothing but that the account exists.
+  final _emailFocus = FocusNode();
+
+  /// The address the creator chose "Enter manually" for - not asked about again until it changes.
+  String _declinedEmail = '';
+  bool _lookingUp = false;
+
+  /// Set once the person's code has been verified. Presented on save so the membership activates
+  /// at once instead of waiting on a second code.
+  ExistingAccountProfile? _link;
+  bool get _linked => _link != null;
+
   /// Set of section keys currently open. The optional sections start closed so the required
   /// fields are not buried under a screenful of address inputs.
   final Set<String> _openSections = {'identity', 'personal'};
@@ -138,6 +155,9 @@ class _UserFormScreenState extends ConsumerState<UserFormScreen> {
   @override
   void initState() {
     super.initState();
+    _emailFocus.addListener(() {
+      if (!_emailFocus.hasFocus) _onEmailBlur();
+    });
     if (widget.initialCourseId != null && !_isTrainer) {
       _studentCourseIds.add(widget.initialCourseId!);
     }
@@ -153,6 +173,7 @@ class _UserFormScreenState extends ConsumerState<UserFormScreen> {
 
   @override
   void dispose() {
+    _emailFocus.dispose();
     for (final c in [
       _emailController,
       _firstNameController,
@@ -226,7 +247,7 @@ class _UserFormScreenState extends ConsumerState<UserFormScreen> {
           ..addAll(detail.courseFees.keys);
       }
     } catch (e) {
-      if (mounted) showAppToast(context, e.toString().replaceFirst('Exception: ', ''));
+      if (mounted) showAppToast(context, e.toString().replaceFirst('Exception: ', ''), error: true);
     } finally {
       if (mounted) setState(() => _loadingExisting = false);
     }
@@ -292,6 +313,120 @@ class _UserFormScreenState extends ConsumerState<UserFormScreen> {
   }
 
   // ---------------------------------------------------------------------------
+  // Existing Owleo account
+  // ---------------------------------------------------------------------------
+
+  void _onEmailChanged() {
+    setState(() {});
+    // Changing the address after a verified auto-fill orphans it: the confirmation was for the old
+    // email's owner, so what was filled in from them goes too.
+    final link = _link;
+    if (link != null &&
+        _emailController.text.trim().toLowerCase() != (link.email ?? '').toLowerCase()) {
+      _dropLink();
+    }
+  }
+
+  /// Looked up when the creator leaves the email field, not as they type: a half-typed address can
+  /// belong to someone else's account, and finding one sends that person a code.
+  Future<void> _onEmailBlur() async {
+    final email = _emailController.text.trim();
+    if (_isEditing || _linked || _lookingUp || _busy || !_emailValid) return;
+    if (email.toLowerCase() == _declinedEmail) return;
+
+    _lookingUp = true;
+    try {
+      final api = ref.read(enrolmentApiProvider);
+      final check = await api.checkExistingAccount(email: email, trainer: _isTrainer);
+      if (!mounted || !check.exists) return;
+      // The field may have moved on while the lookup ran.
+      if (email.toLowerCase() != _emailController.text.trim().toLowerCase()) return;
+
+      final profile = await showExistingAccountOtp(
+        context,
+        maskedName: check.maskedName,
+        onSend: () async {
+          try {
+            await api.sendExistingAccountCode(email: email, trainer: _isTrainer);
+            return null;
+          } catch (e) {
+            return e.toString().replaceFirst('Exception: ', '');
+          }
+        },
+        onVerify: (code) async {
+          try {
+            final verified =
+                await api.verifyExistingAccount(email: email, trainer: _isTrainer, code: code);
+            return (profile: verified, error: null);
+          } catch (e) {
+            return (profile: null, error: e.toString().replaceFirst('Exception: ', ''));
+          }
+        },
+      );
+      if (!mounted) return;
+      if (profile == null) {
+        // "Enter manually" - carry on by hand, and the server asks them to confirm after saving.
+        _declinedEmail = email.toLowerCase();
+        return;
+      }
+      _applyCommon(
+        fullName: profile.fullName,
+        username: profile.username,
+        email: profile.email,
+        phone: profile.phone,
+        dob: profile.dob == null ? null : PersonDetails.isoDate(profile.dob!),
+        details: profile.details,
+      );
+      setState(() => _link = profile);
+    } catch (_) {
+      // A failed lookup just means the old behaviour: fill the form in, and the server asks the
+      // person to confirm after saving. It must never get in the way of registering someone new.
+    } finally {
+      _lookingUp = false;
+    }
+  }
+
+  /// Forgets the verified person and everything filled in from them, so one person's details can't
+  /// carry over into a form that ends up registering someone else.
+  void _dropLink() {
+    for (final c in [
+      _firstNameController,
+      _lastNameController,
+      _usernameController,
+      _phoneController,
+      _altPhoneController,
+      _line1Controller,
+      _line2Controller,
+      _landmarkController,
+      _cityController,
+      _districtController,
+      _stateController,
+      _pinController,
+      _guardianController,
+      _emergencyController,
+      _qualificationController,
+      _salaryController,
+    ]) {
+      c.clear();
+    }
+    setState(() {
+      _link = null;
+      _declinedEmail = '';
+      _usernameTouched = false;
+      _dob = null;
+      _gender = null;
+      _bloodGroup = null;
+    });
+  }
+
+  /// The auto-filled fields belong to the person, not to this academy's counter staff, and the
+  /// server keeps their own profile as it is. Showing them as editable would let someone type a
+  /// change that is silently thrown away, so they are shown filled but not editable.
+  Widget _locked(Widget child) =>
+      _linked ? IgnorePointer(child: Opacity(opacity: 0.8, child: child)) : child;
+
+
+  // ---------------------------------------------------------------------------
   // Validation
   // ---------------------------------------------------------------------------
 
@@ -317,11 +452,17 @@ class _UserFormScreenState extends ConsumerState<UserFormScreen> {
       _phoneController.text.trim().length >= 10 &&
       _addressValid;
 
-  bool get _valid => _isTrainer
-      ? _commonValid && _qualificationController.text.trim().length > 1
-      : _commonValid && _guardianController.text.trim().length > 1;
+  bool get _valid {
+    // A verified existing account brings its own profile, which this form neither edits nor
+    // requires. All that is left to choose is what to add them to (trainers do that on step 2).
+    if (_linked) return _isTrainer || _studentCourseIds.isNotEmpty;
+    return _isTrainer
+        ? _commonValid && _qualificationController.text.trim().length > 1
+        : _commonValid && _guardianController.text.trim().length > 1;
+  }
 
   String _missingRequirement() {
+    if (_linked) return 'Pick at least one course to add them to.';
     if (!_emailValid) return 'Enter a valid email address.';
     if (_firstNameController.text.trim().isEmpty) return 'First name is required.';
     if (_lastNameController.text.trim().isEmpty) return 'Last name is required.';
@@ -437,7 +578,9 @@ class _UserFormScreenState extends ConsumerState<UserFormScreen> {
     final api = ref.read(enrolmentApiProvider);
     final fullName =
         '${_firstNameController.text.trim()} ${_lastNameController.text.trim()}'.trim();
-    final dob = PersonDetails.isoDate(_dob!);
+    // A verified existing account may predate the date-of-birth field. The server doesn't use it
+    // for them (their own profile stands), it only has to be present.
+    final dob = PersonDetails.isoDate(_dob ?? DateTime(2000, 1, 1));
     final phone = _joined(_phoneCode, _phoneController);
 
     try {
@@ -477,6 +620,7 @@ class _UserFormScreenState extends ConsumerState<UserFormScreen> {
           courseFeatures: expanded.features,
           courseBatches: expanded.batches,
           details: _buildDetails(),
+          linkGrantId: _link?.linkGrantId,
         );
         await _finishRegistration(
           userId: result.userId,
@@ -525,6 +669,7 @@ class _UserFormScreenState extends ConsumerState<UserFormScreen> {
         state: _stateController.text.trim(),
         courses: courses,
         details: _buildDetails(),
+        linkGrantId: _link?.linkGrantId,
       );
       await _finishRegistration(
         userId: result.userId,
@@ -540,7 +685,7 @@ class _UserFormScreenState extends ConsumerState<UserFormScreen> {
         afterActive: () => _assignStudentBatches(api, result.membershipId),
       );
     } catch (e) {
-      if (mounted) showAppToast(context, e.toString().replaceFirst('Exception: ', ''));
+      if (mounted) showAppToast(context, e.toString().replaceFirst('Exception: ', ''), error: true);
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -595,6 +740,16 @@ class _UserFormScreenState extends ConsumerState<UserFormScreen> {
       return;
     }
 
+    // Someone who confirmed themselves already has a login and a profile of their own: there is no
+    // temporary password to hand over and no photo to attach to an account that isn't ours.
+    if (_linked) {
+      await afterActive?.call();
+      if (!mounted) return;
+      showAppToast(context, '$fullName added to this academy.');
+      Navigator.of(context).pop(true);
+      return;
+    }
+
     // The photo is a best-effort follow-up, not part of registration: a failure here must not
     // read as "the person was not created", because they were.
     if (_photoBytes != null) {
@@ -640,8 +795,7 @@ class _UserFormScreenState extends ConsumerState<UserFormScreen> {
       backgroundColor: palette.bg,
       appBar: AppBar(
         backgroundColor: palette.bg,
-        leading: AppIconButton(
-          icon: Icons.arrow_back,
+        leading: AppBarBackTile(
           onTap: () {
             if (onMappingStep) {
               setState(() => _step = 1);
@@ -778,7 +932,7 @@ class _UserFormScreenState extends ConsumerState<UserFormScreen> {
       AppPalette palette, Color accent, List<Course> courses, List<Batch> batches) {
     final age = ageFrom(_dob);
     return [
-      _photoHeader(palette, accent),
+      _locked(_photoHeader(palette, accent)),
       const SizedBox(height: AppSpacing.x4l),
       FormSection(
         title: 'Identity',
@@ -791,21 +945,34 @@ class _UserFormScreenState extends ConsumerState<UserFormScreen> {
           LabeledField(
             label: 'Email ID',
             required: true,
-            hint: 'If this email already has a NEST account, registering will ask that '
-                'person to confirm rather than creating a second one.',
+            hint: _linked
+                ? null
+                : "If this email already has an Owleo account, we'll offer to auto-fill the rest "
+                    'of the form.',
             error: _emailController.text.trim().isEmpty || _emailValid
                 ? null
                 : "That doesn't look like an email address.",
             child: AppTextField(
               controller: _emailController,
+              focusNode: _emailFocus,
               hint: 'name@example.com',
               icon: Icons.alternate_email,
               keyboardType: TextInputType.emailAddress,
               hasError: _emailController.text.trim().isNotEmpty && !_emailValid,
-              onChanged: (_) => setState(() {}),
+              onChanged: (_) => _onEmailChanged(),
+              // Enter counts as leaving the field, which is when the account lookup runs.
+              onSubmitted: (_) => _emailFocus.unfocus(),
             ),
           ),
-          Row(
+          if (_linked)
+            Padding(
+              padding: const EdgeInsets.only(bottom: AppSpacing.lg),
+              child: Text(
+                "Details auto-filled from ${_link!.fullName}'s existing Owleo account.",
+                style: TextStyle(fontSize: AppType.sm, color: palette.paidManual),
+              ),
+            ),
+          _locked(Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(
@@ -834,8 +1001,8 @@ class _UserFormScreenState extends ConsumerState<UserFormScreen> {
                 ),
               ),
             ],
-          ),
-          LabeledField(
+          )),
+          _locked(LabeledField(
             label: 'Username (login ID)',
             required: true,
             hint: _isEditing
@@ -859,7 +1026,7 @@ class _UserFormScreenState extends ConsumerState<UserFormScreen> {
                 }
               }),
             ),
-          ),
+          )),
         ],
       ),
       FormSection(
@@ -867,6 +1034,7 @@ class _UserFormScreenState extends ConsumerState<UserFormScreen> {
         subtitle: 'Date of birth, gender, contact numbers',
         icon: Icons.person_outline,
         accent: accent,
+        locked: _linked,
         expanded: _openSections.contains('personal'),
         onToggle: () => _toggleSection('personal'),
         children: [
@@ -960,10 +1128,11 @@ class _UserFormScreenState extends ConsumerState<UserFormScreen> {
       ),
       FormSection(
         title: 'Address',
-        subtitle: _addressValid ? _addressSummary() : 'Required',
+        subtitle: _addressValid ? _addressSummary() : (_linked ? 'Not on their profile' : 'Required'),
         icon: Icons.home_outlined,
         accent: accent,
-        badge: _addressValid ? null : 'INCOMPLETE',
+        locked: _linked,
+        badge: _addressValid || _linked ? null : 'INCOMPLETE',
         expanded: _openSections.contains('address'),
         onToggle: () => _toggleSection('address'),
         children: [
@@ -1085,7 +1254,9 @@ class _UserFormScreenState extends ConsumerState<UserFormScreen> {
           expanded: _openSections.contains('professional'),
           onToggle: () => _toggleSection('professional'),
           children: [
-            LabeledField(
+            // Qualification and experience are the person's own; the salary below is this
+            // academy's agreement with them, so it stays editable.
+            _locked(LabeledField(
               label: 'Qualification / experience summary',
               required: true,
               child: AppTextField(
@@ -1094,12 +1265,12 @@ class _UserFormScreenState extends ConsumerState<UserFormScreen> {
                 textCapitalization: TextCapitalization.sentences,
                 onChanged: (_) => setState(() {}),
               ),
-            ),
+            )),
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Expanded(
-                  child: LabeledField(
+                  child: _locked(LabeledField(
                     label: 'Experience (years)',
                     child: AppTextField(
                       controller: _experienceController,
@@ -1107,7 +1278,7 @@ class _UserFormScreenState extends ConsumerState<UserFormScreen> {
                       keyboardType: TextInputType.number,
                       inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                     ),
-                  ),
+                  )),
                 ),
                 const SizedBox(width: AppSpacing.md),
                 Expanded(
@@ -1133,7 +1304,8 @@ class _UserFormScreenState extends ConsumerState<UserFormScreen> {
           subtitle: 'Who to call, and who to call first',
           icon: Icons.emergency_outlined,
           accent: accent,
-          badge: _guardianController.text.trim().length > 1 ? null : 'INCOMPLETE',
+          locked: _linked,
+          badge: _guardianController.text.trim().length > 1 || _linked ? null : 'INCOMPLETE',
           expanded: _openSections.contains('guardian'),
           onToggle: () => _toggleSection('guardian'),
           children: [

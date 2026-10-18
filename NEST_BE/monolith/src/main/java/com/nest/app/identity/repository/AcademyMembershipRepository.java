@@ -16,7 +16,12 @@ public interface AcademyMembershipRepository extends JpaRepository<AcademyMember
 
     List<AcademyMembership> findByUserId(UUID userId);
 
-    Optional<AcademyMembership> findByUserIdAndAcademyId(UUID userId, UUID academyId);
+    /**
+     * One person's membership at one academy IN ONE ROLE. Role is part of the key because someone can
+     * hold two at the same academy - a student in one course and a trainer for another - and a lookup
+     * by person and academy alone would find both and fail.
+     */
+    Optional<AcademyMembership> findByUserIdAndAcademyIdAndRoleType(UUID userId, UUID academyId, Role roleType);
 
     /** Every membership in an academy - the Super Admin broadcast console's "notify one academy"
      * audience resolves to the distinct user ids behind these rows. */

@@ -233,7 +233,20 @@ public class StudentRegistrationService {
         }
 
         User student = existingUser.get();
-        Optional<AcademyMembership> existingMembership = identityRegistrationService.findMembership(student.getId(), academyId);
+        if (identityRegistrationService.isAcademyAdmin(student.getId(), academyId)) {
+            throw new BadRequestException(student.getFullName() + " runs this academy and can't also be added as a student.");
+        }
+        // The STUDENT membership specifically. Someone who is a trainer here has no student membership
+        // yet, so this falls through to creating one - being both is allowed.
+        Optional<AcademyMembership> existingMembership =
+                identityRegistrationService.findMembership(student.getId(), academyId, Role.STUDENT);
+
+        // The person already agreed - the creator verified their code while filling in the form - so
+        // there is nothing left to wait on: activate and map the courses now.
+        if (request.linkGrantId() != null) {
+            identityRegistrationService.consumeLinkGrant(request.linkGrantId(), student.getId(), academyId, registeredBy);
+            return linkVerifiedStudent(student, existingMembership, request, courseFees, academyId, academyName, registeredBy);
+        }
 
         if (existingMembership.isPresent()) {
             AcademyMembership membership = existingMembership.get();
@@ -253,6 +266,32 @@ public class StudentRegistrationService {
         sendMembershipConfirmationOtp(student, membership.getId(), courseFees, academyName);
 
         return new StudentResponse(student.getId(), membership.getId(), student.getUsername(), student.getFullName(), courseFees, true, null);
+    }
+
+    /**
+     * Maps a student who already confirmed themselves (see ExistingAccountService) to this academy's
+     * courses with no further code. A membership that was waiting on the older confirmation is
+     * activated by the same step. The person's own profile is NOT overwritten from the form: it
+     * belongs to them, and this academy's counter staff are not the authority on it.
+     */
+    private StudentResponse linkVerifiedStudent(User student, Optional<AcademyMembership> existingMembership,
+                                                RegisterStudentRequest request, Map<UUID, BigDecimal> courseFees,
+                                                UUID academyId, String academyName, UUID registeredBy) {
+        AcademyMembership membership;
+        if (existingMembership.isPresent()) {
+            membership = existingMembership.get();
+            if (membership.getStatus() == MembershipStatus.PENDING_CONFIRMATION) {
+                membership = identityRegistrationService.applyConfirmedCourseGrant(membership.getId());
+            }
+        } else {
+            membership = identityRegistrationService.createMembership(
+                    student.getId(), academyId, academyName, Role.STUDENT, MembershipStatus.ACTIVE, registeredBy);
+            identityRegistrationService.setJoiningDate(membership,
+                    request.details() == null ? null : request.details().joiningDate());
+        }
+        identityRegistrationService.addCourseMap(membership.getId(), courseFees);
+        return new StudentResponse(student.getId(), membership.getId(), student.getUsername(), student.getFullName(),
+                courseFees, false, null);
     }
 
     /** Admin "reset password" for a student in the active academy - issues a fresh temp password to

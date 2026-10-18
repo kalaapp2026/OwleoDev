@@ -262,13 +262,17 @@ class _MoreSheetBodyState extends State<_MoreSheetBody> with SingleTickerProvide
                                 onTap: () {
                                   Navigator.of(sheetContext).pop();
                                   final item = widget.items[i];
+                                  // Opened from a More destination, the sheet sits over that
+                                  // screen - clear it first, or the new one stacks on top and Back
+                                  // walks through them instead of landing on the shell.
+                                  widget.shellState.popToShell();
                                   if (item.erpTabIndex != null) {
                                     widget.shellState.goToErpTab(item.erpTabIndex!);
                                   } else if (item.route != null) {
                                     // Park the shell on Dashboard first, so backing out of the
                                     // destination always ends there rather than on the last tab.
                                     widget.shellState.goToErpTab(0);
-                                    sheetContext.push(item.route!);
+                                    GoRouter.of(widget.shellState.context).push(item.route!);
                                   }
                                 },
                               ),

@@ -140,7 +140,7 @@ class StudentRegistrationServiceTest {
         actingAsAdmin();
         User existing = User.builder().id(UUID.randomUUID()).username("bhuvana").fullName("Bhuvana").phone("9000000002").build();
         when(identityRegistrationService.findByEmail("bhuvana@example.com")).thenReturn(Optional.of(existing));
-        when(identityRegistrationService.findMembership(existing.getId(), academyId)).thenReturn(Optional.empty());
+        when(identityRegistrationService.findMembership(existing.getId(), academyId, Role.STUDENT)).thenReturn(Optional.empty());
         UUID membershipId = UUID.randomUUID();
         when(identityRegistrationService.createMembership(eq(existing.getId()), eq(academyId), any(), eq(Role.STUDENT),
                 eq(MembershipStatus.PENDING_CONFIRMATION), any()))
@@ -161,7 +161,7 @@ class StudentRegistrationServiceTest {
         User existing = User.builder().id(UUID.randomUUID()).username("bhuvana").fullName("Bhuvana").phone("9000000002").build();
         when(identityRegistrationService.findByEmail("bhuvana@example.com")).thenReturn(Optional.of(existing));
         AcademyMembership membership = AcademyMembership.builder().id(UUID.randomUUID()).userId(existing.getId()).academyId(academyId).build();
-        when(identityRegistrationService.findMembership(existing.getId(), academyId)).thenReturn(Optional.of(membership));
+        when(identityRegistrationService.findMembership(existing.getId(), academyId, Role.STUDENT)).thenReturn(Optional.of(membership));
 
         var response = service.registerManual(request("bhuvana@example.com"));
 
@@ -178,7 +178,7 @@ class StudentRegistrationServiceTest {
         User existing = User.builder().id(UUID.randomUUID()).username("bhuvana").fullName("Bhuvana").phone("9000000002").build();
         when(identityRegistrationService.findByEmail("bhuvana@example.com")).thenReturn(Optional.of(existing));
         AcademyMembership membership = AcademyMembership.builder().id(UUID.randomUUID()).userId(existing.getId()).academyId(academyId).build();
-        when(identityRegistrationService.findMembership(existing.getId(), academyId)).thenReturn(Optional.of(membership));
+        when(identityRegistrationService.findMembership(existing.getId(), academyId, Role.STUDENT)).thenReturn(Optional.of(membership));
         // Already enrolled in Guitar - the same course this Trainer teaches, so they're visible.
         when(identityRegistrationService.courseIdsForMembership(membership.getId())).thenReturn(List.of(guitarCourseId));
 
@@ -197,7 +197,7 @@ class StudentRegistrationServiceTest {
         User existing = User.builder().id(UUID.randomUUID()).username("bhuvana").fullName("Bhuvana").phone("9000000002").build();
         when(identityRegistrationService.findByEmail("bhuvana@example.com")).thenReturn(Optional.of(existing));
         AcademyMembership membership = AcademyMembership.builder().id(UUID.randomUUID()).userId(existing.getId()).academyId(academyId).build();
-        when(identityRegistrationService.findMembership(existing.getId(), academyId)).thenReturn(Optional.of(membership));
+        when(identityRegistrationService.findMembership(existing.getId(), academyId, Role.STUDENT)).thenReturn(Optional.of(membership));
         // Enrolled in Guitar only - this Trainer (Dance) has no overlap, so they can't already see this person.
         when(identityRegistrationService.courseIdsForMembership(membership.getId())).thenReturn(List.of(courseId));
         when(otpService.requestOtp(eq("9000000002"), eq(OtpPurpose.MEMBERSHIP_CONFIRMATION), eq(membership.getId()))).thenReturn("654321");
@@ -333,6 +333,98 @@ class StudentRegistrationServiceTest {
         assertThat(card.guardianName()).isEqualTo("Radha Rao");
         assertThat(card.courses()).hasSize(1);
         assertThat(card.courses().get(0).courseId()).isEqualTo(courseId);
+    }
+
+    @Test
+    void anExistingAccountWithAVerifiedGrantJoinsAtOnceWithNoCodeAndKeepsItsOwnProfile() {
+        newService();
+        actingAsAdmin();
+        UUID grantId = UUID.randomUUID();
+        User existing = User.builder().id(UUID.randomUUID()).username("meera").fullName("Meera").build();
+        when(identityRegistrationService.findByEmail("meera@example.com")).thenReturn(Optional.of(existing));
+        when(identityRegistrationService.findMembership(eq(existing.getId()), any(), eq(Role.STUDENT))).thenReturn(Optional.empty());
+        when(identityRegistrationService.createMembership(any(), any(), any(), eq(Role.STUDENT),
+                eq(MembershipStatus.ACTIVE), any()))
+                .thenReturn(AcademyMembership.builder().id(UUID.randomUUID()).build());
+
+        var req = new RegisterStudentRequest("meera", "Meera", "9000000001", LocalDate.of(2005, 1, 1),
+                "meera@example.com", null, null, null,
+                List.of(new CourseFeeSelection(courseId, BigDecimal.valueOf(500))), null, grantId);
+
+        var response = service.registerManual(req);
+
+        assertThat(response.pendingConfirmation()).isFalse();
+        assertThat(response.userId()).isEqualTo(existing.getId());
+        assertThat(response.temporaryPassword()).as("they keep their own password").isNull();
+        verify(identityRegistrationService).consumeLinkGrant(eq(grantId), eq(existing.getId()), eq(academyId), any());
+        verify(identityRegistrationService).addCourseMap(any(), any());
+        verify(otpService, never()).requestOtp(any(), any(), any());
+        // Someone else's profile is not rewritten from this academy's form.
+        verify(identityRegistrationService, never()).applyPersonDetails(any(), any());
+    }
+
+    @Test
+    void aVerifiedGrantActivatesAMembershipThatWasWaitingOnTheOlderConfirmation() {
+        newService();
+        actingAsAdmin();
+        UUID grantId = UUID.randomUUID();
+        User existing = User.builder().id(UUID.randomUUID()).username("meera").fullName("Meera").build();
+        AcademyMembership pending = AcademyMembership.builder().id(UUID.randomUUID()).roleType(Role.STUDENT)
+                .status(MembershipStatus.PENDING_CONFIRMATION).build();
+        when(identityRegistrationService.findByEmail("meera@example.com")).thenReturn(Optional.of(existing));
+        when(identityRegistrationService.findMembership(eq(existing.getId()), any(), eq(Role.STUDENT))).thenReturn(Optional.of(pending));
+        when(identityRegistrationService.applyConfirmedCourseGrant(pending.getId()))
+                .thenReturn(AcademyMembership.builder().id(pending.getId()).roleType(Role.STUDENT)
+                        .status(MembershipStatus.ACTIVE).build());
+
+        var req = new RegisterStudentRequest("meera", "Meera", "9000000001", LocalDate.of(2005, 1, 1),
+                "meera@example.com", null, null, null,
+                List.of(new CourseFeeSelection(courseId, BigDecimal.valueOf(500))), null, grantId);
+
+        var response = service.registerManual(req);
+
+        assertThat(response.pendingConfirmation()).isFalse();
+        verify(identityRegistrationService).applyConfirmedCourseGrant(pending.getId());
+        verify(otpService, never()).requestOtp(any(), any(), any());
+    }
+
+    @Test
+    void aTrainerAtThisAcademyCanAlsoBeEnrolledAsAStudentThere() {
+        newService();
+        actingAsAdmin();
+        UUID grantId = UUID.randomUUID();
+        User existing = User.builder().id(UUID.randomUUID()).username("kavya").fullName("Kavya").build();
+        when(identityRegistrationService.findByEmail("kavya@example.com")).thenReturn(Optional.of(existing));
+        // She has a TRAINER membership here, but no STUDENT one - the lookup is by role.
+        when(identityRegistrationService.findMembership(eq(existing.getId()), any(), eq(Role.STUDENT)))
+                .thenReturn(Optional.empty());
+        when(identityRegistrationService.createMembership(any(), any(), any(), eq(Role.STUDENT),
+                eq(MembershipStatus.ACTIVE), any()))
+                .thenReturn(AcademyMembership.builder().id(UUID.randomUUID()).build());
+
+        var req = new RegisterStudentRequest("kavya", "Kavya", "9000000001", LocalDate.of(2005, 1, 1),
+                "kavya@example.com", null, null, null,
+                List.of(new CourseFeeSelection(courseId, BigDecimal.valueOf(500))), null, grantId);
+
+        var response = service.registerManual(req);
+
+        assertThat(response.pendingConfirmation()).isFalse();
+        verify(identityRegistrationService).createMembership(eq(existing.getId()), any(), any(), eq(Role.STUDENT),
+                eq(MembershipStatus.ACTIVE), any());
+    }
+
+    @Test
+    void theAcademysOwnAdminCannotBeEnrolledAsAStudent() {
+        newService();
+        actingAsAdmin();
+        User admin = User.builder().id(UUID.randomUUID()).username("owner").fullName("Owner").build();
+        when(identityRegistrationService.findByEmail("owner@example.com")).thenReturn(Optional.of(admin));
+        when(identityRegistrationService.isAcademyAdmin(eq(admin.getId()), any())).thenReturn(true);
+
+        assertThatThrownBy(() -> service.registerManual(request("owner@example.com")))
+                .isInstanceOf(com.nest.common.exception.BadRequestException.class)
+                .hasMessageContaining("runs this academy");
+        verify(identityRegistrationService, never()).addCourseMap(any(), any());
     }
 
     @Test

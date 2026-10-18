@@ -19,4 +19,7 @@ public interface BatchMemberRepository extends JpaRepository<BatchMember, UUID> 
     boolean existsByBatchIdAndMembershipId(UUID batchId, UUID membershipId);
 
     void deleteByBatchIdAndMembershipId(UUID batchId, UUID membershipId);
+
+    /** The whole roster at once - what deleting a batch does, so nobody has to be unmapped first. */
+    void deleteByBatchId(UUID batchId);
 }
