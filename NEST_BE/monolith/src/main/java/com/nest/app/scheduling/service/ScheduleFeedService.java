@@ -84,10 +84,26 @@ public class ScheduleFeedService {
      */
     @Transactional(readOnly = true)
     public List<ScheduleEntryResponse> feed(LocalDate from, LocalDate to, UUID courseId) {
-        // A Trainer sees only the courses they hold RESCHEDULE on. Without this the feed is
-        // academy-wide for everyone, so a trainer granted one course would still be shown every
+        return feed(from, to, courseId, null);
+    }
+
+    /**
+     * @param feature which permission decides the courses shown: {@code ATTENDANCE} for the
+     *                Attendance screen, anything else (or null) for the Schedule screen's
+     *                {@code RESCHEDULE}. Only those two are honoured - the parameter picks between
+     *                two screens, it is not a way to ask the feed to scope by any permission.
+     */
+    @Transactional(readOnly = true)
+    public List<ScheduleEntryResponse> feed(LocalDate from, LocalDate to, UUID courseId, String feature) {
+        // A Trainer sees only the courses they hold the screen's permission on. Without this the feed
+        // is academy-wide for everyone, so a trainer granted one course would still be shown every
         // other course's classes - and offered the kebab actions on them.
-        var visible = courseFeatureGuard.visibleCourseIds(FeatureKey.RESCHEDULE);
+        //
+        // The permission follows the SCREEN: Attendance is scoped by ATTENDANCE, not RESCHEDULE.
+        // Scoping it by Reschedule left a trainer who marks attendance on a course, but cannot move
+        // its classes, with an empty Attendance calendar.
+        String scopeFeature = FeatureKey.ATTENDANCE.equals(feature) ? FeatureKey.ATTENDANCE : FeatureKey.RESCHEDULE;
+        var visible = courseFeatureGuard.visibleCourseIds(scopeFeature);
 
         Map<UUID, Course> coursesById = courseRepository
                 .findByAcademyIdOrderByNameAsc(TenantContext.currentAcademyId()).stream()

@@ -80,10 +80,11 @@ public class SchedulingController {
     public List<ScheduleEntryResponse> feed(
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
-            @RequestParam(required = false) UUID courseId) {
+            @RequestParam(required = false) UUID courseId,
+            @RequestParam(required = false) String feature) {
         LocalDate start = from != null ? from : LocalDate.now();
         LocalDate end = to != null ? to : start.plusDays(30);
-        return scheduleFeedService.feed(start, end, courseId);
+        return scheduleFeedService.feed(start, end, courseId, feature);
     }
 
     @PostMapping("/class-instances/{id}/cancel")

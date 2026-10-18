@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:nest_fe/app/theme/app_tokens.dart';
 import 'package:nest_fe/app/theme/app_typography.dart';
+import 'package:nest_fe/core/auth/feature_keys.dart';
 import 'package:nest_fe/core/design/attached_select.dart';
 import 'package:nest_fe/core/design/calendar_modal.dart';
 import 'package:nest_fe/core/design/pressable.dart';
@@ -79,7 +80,9 @@ class _FeesLandingScreenState extends ConsumerState<FeesLandingScreen> {
   Widget build(BuildContext context) {
     final palette = context.palette;
     final summaryAsync = ref.watch(_summaryProvider(_key));
-    final coursesAsync = ref.watch(activeCoursesProvider);
+    // Only the courses this person holds Fees entry on. The academy's full course list offered a
+    // trainer mapped to one course every other course too, none of which they could act on.
+    final coursesAsync = ref.watch(coursesForFeatureProvider(FeatureKeys.feesEntry));
 
     // No own Scaffold or AppBar - this renders inside AppShell's IndexedStack as the Fees tab.
     return ColoredBox(

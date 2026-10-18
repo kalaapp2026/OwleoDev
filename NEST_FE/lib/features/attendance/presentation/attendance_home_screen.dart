@@ -52,7 +52,7 @@ class _AttendanceHomeScreenState extends ConsumerState<AttendanceHomeScreen> {
   /// filter, and skips cancelled and vacated slots.
   Future<Map<int, CalendarDayMark>> _monthMarks(DateTime month) async {
     final palette = context.palette;
-    final entries = await ref.read(scheduleFeedProvider((
+    final entries = await ref.read(attendanceFeedProvider((
       from: DateTime(month.year, month.month, 1),
       to: DateTime(month.year, month.month + 1, 0),
       courseId: _courseFilterId,
@@ -85,13 +85,13 @@ class _AttendanceHomeScreenState extends ConsumerState<AttendanceHomeScreen> {
     final marked = await Navigator.of(context).push<bool>(MaterialPageRoute(
       builder: (_) => MarkAttendanceScreen(entry: entry),
     ));
-    if (marked == true) ref.invalidate(scheduleFeedProvider(_feedKey));
+    if (marked == true) ref.invalidate(attendanceFeedProvider(_feedKey));
   }
 
   @override
   Widget build(BuildContext context) {
     final palette = context.palette;
-    final feedAsync = ref.watch(scheduleFeedProvider(_feedKey));
+    final feedAsync = ref.watch(attendanceFeedProvider(_feedKey));
     // Scoped to the courses this caller holds Attendance on, so a Trainer granted one course
     // isn't offered the rest in the filter.
     final coursesAsync = ref.watch(coursesForFeatureProvider(FeatureKeys.attendance));

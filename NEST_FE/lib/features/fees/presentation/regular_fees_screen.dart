@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:nest_fe/core/auth/feature_keys.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:nest_fe/app/theme/app_tokens.dart';
 import 'package:nest_fe/app/theme/app_typography.dart';
@@ -160,7 +161,8 @@ class _RegularFeesScreenState extends ConsumerState<RegularFeesScreen> {
   @override
   Widget build(BuildContext context) {
     final palette = context.palette;
-    final coursesAsync = ref.watch(activeCoursesProvider);
+    // Scoped to Fees entry, like the landing screen - not every course in the academy.
+    final coursesAsync = ref.watch(coursesForFeatureProvider(FeatureKeys.feesEntry));
     final key = _rosterKey;
     final context_ = _courseName != null && _batchName != null
         ? '$_courseName · $_batchName'

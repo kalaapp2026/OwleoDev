@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:nest_fe/core/auth/feature_keys.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:nest_fe/app/theme/app_tokens.dart';
@@ -31,7 +32,8 @@ class _BatchOption {
 
 /// Every active batch across every course, for the fee type's batch picker.
 final _allBatchesProvider = FutureProvider.autoDispose<List<_BatchOption>>((ref) async {
-  final courses = await ref.watch(activeCoursesProvider.future);
+  // Only courses the caller holds Fees entry on - the server refuses a fee type on any other.
+  final courses = await ref.watch(coursesForFeatureProvider(FeatureKeys.feesEntry).future);
   final api = ref.watch(enrolmentApiProvider);
   final options = <_BatchOption>[];
   for (final course in courses) {

@@ -16,6 +16,7 @@ import com.nest.app.scheduling.dto.ScheduleEntryStatus;
 import com.nest.app.scheduling.entity.ClassInstance;
 import com.nest.app.scheduling.entity.ClassInstanceStatus;
 import com.nest.app.scheduling.repository.ClassInstanceRepository;
+import com.nest.common.security.FeatureKey;
 import com.nest.common.security.MembershipClaim;
 import com.nest.common.security.NestPrincipal;
 import com.nest.common.security.Role;
@@ -29,6 +30,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
@@ -97,5 +99,36 @@ class ScheduleFeedServiceTest {
 
         assertThat(movedIn.movedFrom()).isEqualTo(original);
         assertThat(movedOut.movedTo()).isEqualTo(moved);
+    }
+
+    @Test
+    void theAttendanceFeedIsScopedByAttendanceNotReschedule() {
+        UUID membershipId = UUID.randomUUID();
+        TenantContext.set(new NestPrincipal(UUID.randomUUID(), "trainer", Role.TRAINER,
+                List.of(new MembershipClaim(membershipId, academyId, "Natyalaya", Role.TRAINER, Set.of(), Set.of())),
+                membershipId));
+
+        LocalDate day = LocalDate.of(2026, 10, 19);
+        ClassInstance instance = ClassInstance.builder().id(UUID.randomUUID()).batchId(batchId)
+                .date(day).startTime(LocalTime.of(9, 0)).endTime(LocalTime.of(10, 0))
+                .status(ClassInstanceStatus.SCHEDULED).build();
+
+        // This trainer marks attendance on the course but may not reschedule its classes.
+        when(courseFeatureGuard.visibleCourseIds(FeatureKey.ATTENDANCE)).thenReturn(Optional.of(Set.of(courseId)));
+        when(courseFeatureGuard.visibleCourseIds(FeatureKey.RESCHEDULE)).thenReturn(Optional.of(Set.of()));
+        when(courseRepository.findByAcademyIdOrderByNameAsc(academyId))
+                .thenReturn(List.of(Course.builder().id(courseId).academyId(academyId).name("Bharatanatyam").build()));
+        when(batchRepository.findByCourseIdIn(any())).thenReturn(List.of(Batch.builder()
+                .id(batchId).courseId(courseId).name("Beginner").batchType(BatchType.REGULAR).build()));
+        when(classInstanceRepository.findByBatchIdInAndDateBetween(any(), any(), any())).thenReturn(List.of(instance));
+
+        var service = new ScheduleFeedService(classInstanceRepository, batchRepository, batchTrainerRepository,
+                batchMemberRepository, courseRepository, membershipRepository, userRepository,
+                attendanceRepository, courseFeatureGuard);
+
+        // The Attendance screen's calendar: their course's classes are there.
+        assertThat(service.feed(day, day, null, FeatureKey.ATTENDANCE)).hasSize(1);
+        // The Schedule screen, scoped by Reschedule, still shows them nothing - unchanged.
+        assertThat(service.feed(day, day, null)).isEmpty();
     }
 }

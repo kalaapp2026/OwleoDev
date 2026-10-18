@@ -18,6 +18,17 @@ final scheduleFeedProvider =
       .feed(from: key.from, to: key.to, courseId: key.courseId);
 });
 
+/// The same feed, scoped by the Attendance permission - what the Attendance screen and its calendar
+/// read. A separate provider rather than another field on [ScheduleFeedKey], which several other
+/// screens build by hand.
+final attendanceFeedProvider =
+    FutureProvider.autoDispose.family<List<ScheduleEntry>, ScheduleFeedKey>((ref, key) {
+  ref.watch(activeMembershipIdProvider);
+  return ref
+      .watch(schedulingApiProvider)
+      .feed(from: key.from, to: key.to, courseId: key.courseId, feature: 'ATTENDANCE');
+});
+
 /// A batch's current weekly pattern - what the batch form pre-fills its day and time pickers
 /// from when editing.
 final batchScheduleProvider =
@@ -112,6 +123,10 @@ class SchedulingApi {
     required DateTime from,
     required DateTime to,
     String? courseId,
+
+    /// Which permission scopes the courses shown - `ATTENDANCE` for the Attendance screen. Omitted
+    /// for the Schedule screen, which is scoped by Reschedule.
+    String? feature,
   }) {
     return _client.call(
       (dio) => dio.get('/schedule/feed', queryParameters: {
@@ -119,6 +134,7 @@ class SchedulingApi {
         'to': isoDate(to),
         // Omitted rather than sent as null - the backend reads absence as "every course".
         'courseId': ?courseId,
+        'feature': ?feature,
       }),
       (data) => (data as List)
           .map((e) => ScheduleEntry.fromJson(e as Map<String, dynamic>))
