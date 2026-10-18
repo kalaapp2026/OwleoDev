@@ -4,6 +4,7 @@ import com.nest.common.exception.ForbiddenException;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
 import org.aspectj.lang.annotation.Aspect;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 
@@ -22,6 +23,12 @@ import java.util.Arrays;
 @Order(10)
 public class FeatureAuthorizationAspect {
 
+    private final ObjectProvider<LiveFeatureLookup> liveFeatures;
+
+    public FeatureAuthorizationAspect(ObjectProvider<LiveFeatureLookup> liveFeatures) {
+        this.liveFeatures = liveFeatures;
+    }
+
     @Around("@annotation(requiresFeature)")
     public Object enforce(ProceedingJoinPoint joinPoint, RequiresFeature requiresFeature) throws Throwable {
         NestPrincipal principal = TenantContext.require();
@@ -31,9 +38,13 @@ public class FeatureAuthorizationAspect {
         // access within their own academy by role alone (PRD 2.2) - feature_grants only gate
         // Trainers (PRD 2.3). Neither needs an explicit feature_grants row to pass this check.
         if (!principal.isSuperAdmin() && !isAcademyAdmin) {
+            // Live grants when the service can supply them; the token only as a fallback. The token
+            // was issued at login, so a feature granted since then would otherwise 403 until the
+            // trainer signed in again - while the app, which reads their profile fresh, offered it.
+            java.util.function.Predicate<String> holds = heldNow(principal);
             boolean satisfied = requiresFeature.requireAll()
-                    ? Arrays.stream(requiresFeature.value()).allMatch(principal::hasFeature)
-                    : Arrays.stream(requiresFeature.value()).anyMatch(principal::hasFeature);
+                    ? Arrays.stream(requiresFeature.value()).allMatch(holds)
+                    : Arrays.stream(requiresFeature.value()).anyMatch(holds);
 
             if (!satisfied) {
                 throw new ForbiddenException(
@@ -42,5 +53,15 @@ public class FeatureAuthorizationAspect {
         }
 
         return joinPoint.proceed();
+    }
+
+    private java.util.function.Predicate<String> heldNow(NestPrincipal principal) {
+        LiveFeatureLookup lookup = liveFeatures.getIfAvailable();
+        java.util.Optional<MembershipClaim> active = principal.activeMembership();
+        if (lookup == null || active.isEmpty()) {
+            return principal::hasFeature;
+        }
+        java.util.Set<String> live = lookup.featuresOf(active.get().membershipId());
+        return live::contains;
     }
 }
