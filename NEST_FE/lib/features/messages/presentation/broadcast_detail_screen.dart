@@ -126,15 +126,29 @@ class _Body extends StatelessWidget {
                 children: [
                   PersonAvatar(name: r.name, seed: r.membershipId, size: 32),
                   const SizedBox(width: AppSpacing.lg),
-                  Flexible(
-                    child: Text(r.name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(fontSize: AppType.lg, color: palette.text)),
+                  // The name side takes all the remaining width, and the tick sits in a fixed
+                  // slot - so every tick lands in the same column however long the name is.
+                  Expanded(
+                    child: Row(
+                      children: [
+                        Flexible(
+                          child: Text(r.name,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(fontSize: AppType.lg, color: palette.text)),
+                        ),
+                        if (r.isTrainer) ...[const SizedBox(width: 6), const TrainerTag()],
+                      ],
+                    ),
                   ),
-                  if (r.isTrainer) ...[const SizedBox(width: 6), const TrainerTag()],
-                  const Spacer(),
-                  Icon(r.read ? Icons.done_all : Icons.check, size: 16, color: r.read ? palette.primary : palette.textFaint),
+                  SizedBox(
+                    width: 22,
+                    child: Align(
+                      alignment: Alignment.centerRight,
+                      child: Icon(r.read ? Icons.done_all : Icons.done,
+                          size: 16, color: r.read ? palette.primary : palette.textFaint),
+                    ),
+                  ),
                 ],
               ),
             ),
