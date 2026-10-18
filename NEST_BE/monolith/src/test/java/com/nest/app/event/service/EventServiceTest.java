@@ -243,4 +243,78 @@ class EventServiceTest {
 
         assertThatThrownBy(() -> eventService.delete(eventId)).isInstanceOf(ResourceNotFoundException.class);
     }
+
+    private Event trainersEvent(UUID eventId, UUID eventAcademy, EventAudienceType type, Set<UUID> individuals) {
+        return Event.builder().id(eventId).academyId(eventAcademy).audienceType(type)
+                .individualIds(new java.util.HashSet<>(individuals)).build();
+    }
+
+    private com.nest.app.identity.entity.AcademyMembership trainer(UUID membershipId, UUID userId) {
+        return com.nest.app.identity.entity.AcademyMembership.builder().id(membershipId).userId(userId)
+                .academyId(academyId).roleType(Role.TRAINER).status(MembershipStatus.ACTIVE).build();
+    }
+
+    @Test
+    void anAdminSeesTheTrainersAnAllTrainersEventNotifies() {
+        UUID eventId = UUID.randomUUID();
+        UUID trainerMembership = UUID.randomUUID();
+        UUID trainerUser = UUID.randomUUID();
+        when(interestRepository.findByEventId(eventId)).thenReturn(List.of());
+        when(eventRepository.findById(eventId)).thenReturn(java.util.Optional.of(
+                trainersEvent(eventId, academyId, EventAudienceType.ALL_TRAINERS, Set.of())));
+        when(membershipRepository.findByAcademyIdAndRoleTypeAndStatus(academyId, Role.TRAINER, MembershipStatus.ACTIVE))
+                .thenReturn(List.of(trainer(trainerMembership, trainerUser)));
+        when(userRepository.findAllById(any())).thenReturn(List.of(
+                com.nest.app.identity.entity.User.builder().id(trainerUser).fullName("Rahul Nair").build()));
+
+        var response = eventService.interestsFor(eventId);
+
+        assertThat(response.trainers()).extracting("fullName").containsExactly("Rahul Nair");
+    }
+
+    @Test
+    void anIndividualsEventListsOnlyTheTrainersAmongTheNamedPeople() {
+        UUID eventId = UUID.randomUUID();
+        UUID trainerMembership = UUID.randomUUID();
+        UUID studentMembership = UUID.randomUUID();
+        UUID trainerUser = UUID.randomUUID();
+        when(interestRepository.findByEventId(eventId)).thenReturn(List.of());
+        when(eventRepository.findById(eventId)).thenReturn(java.util.Optional.of(
+                trainersEvent(eventId, academyId, EventAudienceType.INDIVIDUALS, Set.of(trainerMembership, studentMembership))));
+        when(membershipRepository.findAllById(Set.of(trainerMembership, studentMembership))).thenReturn(List.of(
+                trainer(trainerMembership, trainerUser),
+                com.nest.app.identity.entity.AcademyMembership.builder().id(studentMembership).userId(UUID.randomUUID())
+                        .academyId(academyId).roleType(Role.STUDENT).status(MembershipStatus.ACTIVE).build()));
+        when(userRepository.findAllById(any())).thenReturn(List.of(
+                com.nest.app.identity.entity.User.builder().id(trainerUser).fullName("Divya Menon").build()));
+
+        var response = eventService.interestsFor(eventId);
+
+        assertThat(response.trainers()).extracting("fullName").containsExactly("Divya Menon");
+    }
+
+    @Test
+    void aStudentDoesNotSeeWhichTrainersAnEventNotifies() {
+        UUID studentMembershipId = UUID.randomUUID();
+        MembershipClaim claim = new MembershipClaim(studentMembershipId, academyId, "Natyalaya", Role.STUDENT, Set.of(), Set.of());
+        TenantContext.set(new NestPrincipal(UUID.randomUUID(), "kavya", Role.STUDENT, List.of(claim), studentMembershipId));
+        UUID eventId = UUID.randomUUID();
+        when(interestRepository.findByEventId(eventId)).thenReturn(List.of());
+        when(eventRepository.findById(eventId)).thenReturn(java.util.Optional.of(
+                trainersEvent(eventId, academyId, EventAudienceType.ALL_TRAINERS, Set.of())));
+
+        assertThat(eventService.interestsFor(eventId).trainers()).isEmpty();
+        verify(membershipRepository, never()).findByAcademyIdAndRoleTypeAndStatus(any(), any(), any());
+    }
+
+    @Test
+    void anotherAcademysEventNeverListsItsTrainers() {
+        UUID eventId = UUID.randomUUID();
+        when(interestRepository.findByEventId(eventId)).thenReturn(List.of());
+        when(eventRepository.findById(eventId)).thenReturn(java.util.Optional.of(
+                trainersEvent(eventId, UUID.randomUUID(), EventAudienceType.ALL_TRAINERS, Set.of())));
+
+        assertThat(eventService.interestsFor(eventId).trainers()).isEmpty();
+        verify(membershipRepository, never()).findByAcademyIdAndRoleTypeAndStatus(any(), any(), any());
+    }
 }

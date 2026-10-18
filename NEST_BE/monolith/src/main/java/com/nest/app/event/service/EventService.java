@@ -13,6 +13,7 @@ import com.nest.app.event.entity.EventAudienceType;
 import com.nest.app.event.entity.EventStatus;
 import com.nest.app.event.entity.EventVisibility;
 import com.nest.app.event.repository.EventRepository;
+import com.nest.app.identity.entity.AcademyMembership;
 import com.nest.app.identity.entity.MembershipStatus;
 import com.nest.app.identity.entity.User;
 import com.nest.app.identity.repository.AcademyMembershipRepository;
@@ -228,8 +229,9 @@ public class EventService {
     @Transactional(readOnly = true)
     public EventInterestResponse interestsFor(UUID eventId) {
         List<Interest> interests = interestRepository.findByEventId(eventId);
+        List<EventInterestResponse.NotifiedTrainer> trainers = notifiedTrainers(eventId);
         if (interests.isEmpty()) {
-            return new EventInterestResponse(0, List.of());
+            return new EventInterestResponse(0, List.of(), trainers);
         }
         Set<UUID> userIds = interests.stream().map(Interest::getUserId).collect(Collectors.toSet());
         var usersById = userRepository.findAllById(userIds).stream()
@@ -241,7 +243,45 @@ public class EventService {
                             u == null ? null : u.getProfileImageUrl());
                 })
                 .collect(Collectors.toList());
-        return new EventInterestResponse(people.size(), people);
+        return new EventInterestResponse(people.size(), people, trainers);
+    }
+
+    /**
+     * The trainers an event reaches: every active trainer for ALL_TRAINERS, or the trainers among
+     * the named individuals. Only for a caller who can manage events in the event's own academy -
+     * this endpoint is otherwise open, and who a staff event notifies is not for everyone.
+     */
+    private List<EventInterestResponse.NotifiedTrainer> notifiedTrainers(UUID eventId) {
+        var principal = TenantContext.get();
+        var membership = principal == null ? null : principal.activeMembership().orElse(null);
+        Event event = eventRepository.findById(eventId).orElse(null);
+        if (membership == null || event == null || !event.getAcademyId().equals(membership.academyId())) {
+            return List.of();
+        }
+        boolean canManage = membership.roleType() == Role.ACADEMY_ADMIN || TenantContext.hasFeature(FeatureKey.EVENT_MANAGEMENT);
+        if (!canManage) {
+            return List.of();
+        }
+        List<AcademyMembership> trainers = switch (event.getAudienceType()) {
+            case ALL_TRAINERS -> membershipRepository.findByAcademyIdAndRoleTypeAndStatus(
+                    event.getAcademyId(), Role.TRAINER, MembershipStatus.ACTIVE);
+            case INDIVIDUALS -> event.getIndividualIds().isEmpty() ? List.<AcademyMembership>of()
+                    : membershipRepository.findAllById(event.getIndividualIds()).stream()
+                            .filter(m -> m.getRoleType() == Role.TRAINER && event.getAcademyId().equals(m.getAcademyId())
+                                    && m.getStatus() == MembershipStatus.ACTIVE)
+                            .toList();
+            default -> List.of();
+        };
+        if (trainers.isEmpty()) {
+            return List.of();
+        }
+        var usersById = userRepository.findAllById(trainers.stream().map(AcademyMembership::getUserId).collect(Collectors.toSet()))
+                .stream().collect(Collectors.toMap(User::getId, u -> u));
+        return trainers.stream()
+                .filter(m -> usersById.containsKey(m.getUserId()))
+                .map(m -> new EventInterestResponse.NotifiedTrainer(m.getId(), usersById.get(m.getUserId()).getFullName()))
+                .sorted(java.util.Comparator.comparing(t -> t.fullName() == null ? "" : t.fullName().toLowerCase()))
+                .toList();
     }
 
     private Event findInActiveAcademyOrThrow(UUID id) {

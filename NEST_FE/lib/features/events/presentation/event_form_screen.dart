@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:nest_fe/app/theme/app_tokens.dart';
 import 'package:nest_fe/app/theme/app_typography.dart';
 import 'package:nest_fe/core/auth/feature_keys.dart';
+import 'package:nest_fe/core/design/app_top_bar.dart';
 import 'package:nest_fe/core/design/buttons.dart';
 import 'package:nest_fe/core/design/calendar_modal.dart';
 import 'package:nest_fe/core/design/people_picker_sheet.dart';
@@ -17,7 +18,19 @@ import 'package:nest_fe/features/curriculum/data/curriculum_api.dart';
 import 'package:nest_fe/features/enrolment/data/batch.dart';
 import 'package:nest_fe/features/enrolment/data/enrolment_api.dart';
 import 'package:nest_fe/features/events/data/event.dart';
+import 'package:nest_fe/features/events/presentation/event_common.dart';
 import 'package:nest_fe/features/social/presentation/events_tab.dart' show eventsApiProvider;
+
+/// What the form resolves to when it closes, so the screen that opened it knows whether to
+/// refresh, or - after a delete - to close itself too.
+const eventFormSaved = 'saved';
+const eventFormDeleted = 'deleted';
+
+/// Opens the event form. Resolves to [eventFormSaved] or [eventFormDeleted], or null if the user
+/// backed out. Pass [existing] to edit, or an event with an empty id to create from a copy.
+Future<String?> openEventForm(BuildContext context, {Event? existing}) {
+  return Navigator.of(context).push<String>(MaterialPageRoute(builder: (_) => EventFormScreen(existing: existing)));
+}
 
 const _audienceOptions = [
   ('ALL_STUDENTS', 'All students', Icons.groups_outlined),
@@ -75,7 +88,10 @@ class _EventFormScreenState extends ConsumerState<EventFormScreen> {
   List<PickablePerson>? _peopleOptions;
   bool _loadingAudienceOptions = false;
 
-  bool get _isEditing => widget.existing != null;
+  /// A duplicate arrives as an event with no id: it seeds the fields but is created, not updated.
+  bool get _isEditing => widget.existing != null && widget.existing!.id.isNotEmpty;
+
+  late bool _showMapsLink = (widget.existing?.venueMapsUrl ?? '').isNotEmpty;
 
   static DateTime? _parseDatePart(String? iso) {
     if (iso == null) return null;
@@ -162,8 +178,25 @@ class _EventFormScreenState extends ConsumerState<EventFormScreen> {
   }
 
   Future<void> _pickTime({required bool isEnd}) async {
-    final picked = await showAppTimePicker(context: context, title: isEnd ? 'End time' : 'Start time', initial: isEnd ? _endTime : _startTime);
+    final picked = await showAppTimePicker(
+      context: context,
+      title: isEnd ? 'End time' : 'Start time',
+      initial: isEnd ? _endTime : _startTime,
+      accentColor: isEnd ? context.palette.gold : null,
+      // The end of a one-day event must come after its start; a multi-day event ends on another
+      // day, so the start time says nothing about it.
+      minTime: isEnd && !_isMultiDay ? _startTime : null,
+    );
+    if (!mounted) return;
     setState(() => isEnd ? _endTime = picked : _startTime = picked);
+    // Setting a start leads straight into the end, as the prototype does.
+    if (!isEnd && picked != null && _endTime == null) await _pickTime(isEnd: true);
+  }
+
+  Future<void> _deleteEvent() async {
+    final event = widget.existing;
+    if (event == null || !await confirmAndDeleteEvent(context, ref, event)) return;
+    if (mounted) Navigator.of(context).pop(eventFormDeleted);
   }
 
   Future<void> _pickInterestDeadline() async {
@@ -221,7 +254,7 @@ class _EventFormScreenState extends ConsumerState<EventFormScreen> {
       }
       if (mounted) {
         AppNotice.success(context, _isEditing ? 'Event updated.' : 'Event created.');
-        Navigator.of(context).pop(true);
+        Navigator.of(context).pop(eventFormSaved);
       }
     } on ApiException catch (e) {
       if (mounted) AppNotice.error(context, e.message);
@@ -237,8 +270,12 @@ class _EventFormScreenState extends ConsumerState<EventFormScreen> {
 
     return Scaffold(
       backgroundColor: palette.bg,
-      appBar: AppBar(title: Text(_isEditing ? 'Edit Event' : 'Add Event')),
-      body: ListView(
+      body: SafeArea(
+        child: Column(
+          children: [
+            AppTopBar(title: _isEditing ? 'Edit Event' : 'Add Event'),
+            Expanded(
+              child: ListView(
         padding: const EdgeInsets.all(AppSpacing.page),
         children: [
           _label('Event title'),
@@ -291,9 +328,30 @@ class _EventFormScreenState extends ConsumerState<EventFormScreen> {
           ),
           const SizedBox(height: AppSpacing.md),
           _label('Venue'),
-          _textField(_locationController, 'e.g. Academy Auditorium'),
+          _textField(_locationController, 'e.g. Academy Auditorium', icon: Icons.place_outlined),
           const SizedBox(height: AppSpacing.md),
-          _textField(_mapsController, 'Google Maps link (optional)'),
+          // The map link is optional, so it stays out of the way until asked for - and clearing
+          // it with the X puts it away again.
+          if (_showMapsLink)
+            _textField(
+              _mapsController,
+              'Paste Google Maps link',
+              icon: Icons.link,
+              onClear: () => setState(() {
+                _mapsController.clear();
+                _showMapsLink = false;
+              }),
+            )
+          else
+            GestureDetector(
+              onTap: () => setState(() => _showMapsLink = true),
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                Icon(Icons.link, size: 13, color: palette.primary),
+                const SizedBox(width: 6),
+                Text('Add Google Maps link (optional)',
+                    style: TextStyle(fontSize: AppType.base, fontWeight: AppType.bold, color: palette.primary)),
+              ]),
+            ),
           const SizedBox(height: AppSpacing.xxl),
           _label('Date'),
           _pickerRow(icon: Icons.calendar_today_outlined, label: formatFeeDate(_date), onTap: () => _pickDate(isEnd: false)),
@@ -337,7 +395,7 @@ class _EventFormScreenState extends ConsumerState<EventFormScreen> {
           ),
           _pickerRow(
             icon: Icons.hourglass_bottom,
-            label: _interestDeadline == null ? 'Open until the event' : formatFeeDate(_interestDeadline!),
+            label: _interestDeadline == null ? 'No deadline - open until the event' : formatFeeDate(_interestDeadline!),
             onTap: _pickInterestDeadline,
             accent: palette.gold,
           ),
@@ -355,15 +413,32 @@ class _EventFormScreenState extends ConsumerState<EventFormScreen> {
               child: Text('Use Cancel/Restore from the event list to change status once created.',
                   style: TextStyle(fontSize: AppType.sm, color: palette.textFaint)),
             ),
-          const SizedBox(height: AppSpacing.x5l),
-          AppPrimaryButton(
-            label: _isEditing ? 'Save changes' : 'Create event',
-            icon: Icons.check,
-            busy: _isSaving,
-            onPressed: _canSave ? _submit : null,
-          ),
-          const SizedBox(height: AppSpacing.x5l),
         ],
+      ),
+            ),
+            // Pinned, so Save is always one tap away however long the form has grown.
+            Container(
+              padding: const EdgeInsets.fromLTRB(AppSpacing.page, AppSpacing.lg, AppSpacing.page, AppSpacing.x3l),
+              decoration: BoxDecoration(border: Border(top: BorderSide(color: palette.borderSoft))),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  AppPrimaryButton(
+                    label: _isEditing ? 'Save changes' : 'Create event',
+                    icon: Icons.check,
+                    busy: _isSaving,
+                    onPressed: _canSave ? _submit : null,
+                  ),
+                  if (_isEditing)
+                    TextButton(
+                      onPressed: _isSaving ? null : _deleteEvent,
+                      child: Text('Delete event', style: TextStyle(color: palette.notPaid, fontWeight: AppType.semi)),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -523,11 +598,14 @@ class _EventFormScreenState extends ConsumerState<EventFormScreen> {
             style: TextStyle(fontSize: AppType.xs, fontWeight: AppType.bold, color: context.palette.textMuted, letterSpacing: 0.5)),
       );
 
-  Widget _textField(TextEditingController controller, String hint) => TextField(
+  Widget _textField(TextEditingController controller, String hint, {IconData? icon, VoidCallback? onClear}) => TextField(
         controller: controller,
         onChanged: (_) => setState(() {}),
         style: TextStyle(color: context.palette.text),
-        decoration: _decoration(hint),
+        decoration: _decoration(hint).copyWith(
+          prefixIcon: icon == null ? null : Icon(icon, size: 16, color: context.palette.gold),
+          suffixIcon: onClear == null ? null : IconButton(icon: Icon(Icons.close, size: 14, color: context.palette.textFaint), onPressed: onClear),
+        ),
       );
 
   InputDecoration _decoration(String hint) {

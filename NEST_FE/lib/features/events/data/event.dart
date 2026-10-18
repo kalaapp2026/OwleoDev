@@ -102,14 +102,30 @@ class InterestedPerson {
       );
 }
 
+/// A trainer a staff-facing event notifies. The server only fills these in for someone who can
+/// manage events, so an empty list can mean "none" or "not yours to see".
+class NotifiedTrainer {
+  final String membershipId;
+  final String fullName;
+
+  const NotifiedTrainer({required this.membershipId, required this.fullName});
+
+  factory NotifiedTrainer.fromJson(Map<String, dynamic> json) => NotifiedTrainer(
+        membershipId: json['membershipId'] as String,
+        fullName: json['fullName'] as String? ?? '',
+      );
+}
+
 class EventInterests {
   final int count;
   final List<InterestedPerson> interested;
+  final List<NotifiedTrainer> trainers;
 
-  const EventInterests({required this.count, required this.interested});
+  const EventInterests({required this.count, required this.interested, this.trainers = const []});
 
   factory EventInterests.fromJson(Map<String, dynamic> json) => EventInterests(
         count: json['count'] as int? ?? 0,
         interested: (json['interested'] as List? ?? []).map((e) => InterestedPerson.fromJson(e as Map<String, dynamic>)).toList(),
+        trainers: (json['trainers'] as List? ?? []).map((e) => NotifiedTrainer.fromJson(e as Map<String, dynamic>)).toList(),
       );
 }

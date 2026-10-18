@@ -51,6 +51,7 @@ Future<DateTime?> showAppCalendar({
   DateTime? latestMonth,
   CalendarMarksLoader? marksLoader,
   List<CalendarKeyEntry> marksKey = const [],
+  CalendarDayDetailBuilder? dayDetailBuilder,
 }) {
   return showDialog<DateTime>(
     context: context,
@@ -61,9 +62,15 @@ Future<DateTime?> showAppCalendar({
       latestMonth: latestMonth,
       marksLoader: marksLoader,
       marksKey: marksKey,
+      dayDetailBuilder: dayDetailBuilder,
     ),
   );
 }
+
+/// What to show under the grid once a day is tapped - the Events calendar lists that day's events
+/// here. Return null for a day with nothing to show. The dialog's own context is passed so the
+/// panel can close the calendar (for example before opening an event).
+typedef CalendarDayDetailBuilder = Widget? Function(BuildContext dialogContext, DateTime day);
 
 class _CalendarDialog extends StatefulWidget {
   const _CalendarDialog({
@@ -73,6 +80,7 @@ class _CalendarDialog extends StatefulWidget {
     this.latestMonth,
     this.marksLoader,
     this.marksKey = const [],
+    this.dayDetailBuilder,
   });
 
   final DateTime initialMonth;
@@ -81,6 +89,7 @@ class _CalendarDialog extends StatefulWidget {
   final DateTime? latestMonth;
   final CalendarMarksLoader? marksLoader;
   final List<CalendarKeyEntry> marksKey;
+  final CalendarDayDetailBuilder? dayDetailBuilder;
 
   @override
   State<_CalendarDialog> createState() => _CalendarDialogState();
@@ -199,7 +208,9 @@ class _CalendarDialogState extends State<_CalendarDialog> {
           border: Border.all(color: palette.border),
           boxShadow: AppShadows.dialog,
         ),
-        child: Column(
+        // Scrolls so the optional day-detail panel can never push the dialog past the screen.
+        child: SingleChildScrollView(
+          child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Row(
@@ -388,6 +399,12 @@ class _CalendarDialogState extends State<_CalendarDialog> {
                   ],
                 ),
               ],
+              if (_day != null && widget.dayDetailBuilder != null) ...[
+                if (widget.dayDetailBuilder!(context, DateTime(_month.year, _month.month, _day!)) case final detail?) ...[
+                  const SizedBox(height: AppSpacing.lg),
+                  detail,
+                ],
+              ],
               const SizedBox(height: AppSpacing.lg),
               AppPrimaryButton(
                 label: 'Done',
@@ -398,6 +415,7 @@ class _CalendarDialogState extends State<_CalendarDialog> {
               ),
             ],
           ],
+        ),
         ),
       ),
     );
