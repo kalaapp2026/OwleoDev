@@ -24,23 +24,16 @@ String audienceLabelOf(Broadcast b) => b.audienceLabel ?? _fallbackAudienceLabel
       _ => (color: palette.gold, soft: palette.goldSoft),
     };
 
-/// "now", "5m", "3h", "2d" - the compact stamp on a chat row.
-String shortAgo(String iso) {
+/// "just now", "5m ago", "3h ago", "2d ago" - the stamp on a broadcast.
+String longAgo(String iso) {
   final at = DateTime.tryParse(iso)?.toLocal();
   if (at == null) return '';
   final diff = DateTime.now().difference(at);
-  if (diff.inMinutes < 1) return 'now';
-  if (diff.inMinutes < 60) return '${diff.inMinutes}m';
-  if (diff.inHours < 24) return '${diff.inHours}h';
-  if (diff.inDays < 30) return '${diff.inDays}d';
-  return '${(diff.inDays / 30).floor()}mo';
-}
-
-/// "just now", "5m ago" - the stamp under a bubble and on a broadcast.
-String longAgo(String iso) {
-  final short = shortAgo(iso);
-  if (short.isEmpty) return '';
-  return short == 'now' ? 'just now' : '$short ago';
+  if (diff.inMinutes < 1) return 'just now';
+  if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
+  if (diff.inHours < 24) return '${diff.inHours}h ago';
+  if (diff.inDays < 30) return '${diff.inDays}d ago';
+  return '${(diff.inDays / 30).floor()}mo ago';
 }
 
 /// The gold TRAINER tag beside a name.
@@ -54,73 +47,6 @@ class TrainerTag extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
       decoration: BoxDecoration(color: palette.goldSoft, borderRadius: AppRadii.all(AppRadii.sm)),
       child: Text('TRAINER', style: TextStyle(fontSize: 9, fontWeight: AppType.heavy, color: palette.gold)),
-    );
-  }
-}
-
-/// A small count pill - unread messages.
-class CountBadge extends StatelessWidget {
-  const CountBadge({super.key, required this.count, this.background, this.foreground});
-
-  final int count;
-  final Color? background;
-  final Color? foreground;
-
-  @override
-  Widget build(BuildContext context) {
-    final palette = context.palette;
-    return Container(
-      constraints: const BoxConstraints(minWidth: 18, minHeight: 18),
-      padding: const EdgeInsets.symmetric(horizontal: 5),
-      alignment: Alignment.center,
-      decoration: BoxDecoration(color: background ?? palette.primary, borderRadius: BorderRadius.circular(9)),
-      child: Text('$count',
-          style: TextStyle(fontSize: 10.5, fontWeight: AppType.heavy, color: foreground ?? palette.onPrimary)),
-    );
-  }
-}
-
-/// The search box used at the top of the chat list and the new-chat sheet.
-class MessagesSearchField extends StatelessWidget {
-  const MessagesSearchField({super.key, required this.hint, required this.onChanged, this.autofocus = false});
-
-  final String hint;
-  final ValueChanged<String> onChanged;
-  final bool autofocus;
-
-  @override
-  Widget build(BuildContext context) {
-    final palette = context.palette;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
-      decoration: BoxDecoration(
-        color: palette.surfaceRaised,
-        borderRadius: AppRadii.all(AppRadii.lg),
-        border: Border.all(color: palette.border),
-      ),
-      child: Row(
-        children: [
-          Icon(Icons.search, size: 16, color: palette.textFaint),
-          const SizedBox(width: AppSpacing.md),
-          Expanded(
-            child: TextField(
-              autofocus: autofocus,
-              onChanged: onChanged,
-              style: TextStyle(fontSize: AppType.xl, color: palette.text),
-              decoration: InputDecoration(
-                hintText: hint,
-                hintStyle: TextStyle(color: palette.textFaint),
-                border: InputBorder.none,
-                enabledBorder: InputBorder.none,
-                focusedBorder: InputBorder.none,
-                filled: false,
-                isDense: true,
-                contentPadding: const EdgeInsets.symmetric(vertical: 12),
-              ),
-            ),
-          ),
-        ],
-      ),
     );
   }
 }
