@@ -76,9 +76,8 @@ class _MarkAttendanceScreenState extends ConsumerState<MarkAttendanceScreen> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
-        );
+        // The app's toast, not a SnackBar - that docks behind the nav bar and went unseen.
+        showAppToast(context, e.toString().replaceFirst('Exception: ', ''), error: true);
         setState(() => _busy = false);
       }
     }

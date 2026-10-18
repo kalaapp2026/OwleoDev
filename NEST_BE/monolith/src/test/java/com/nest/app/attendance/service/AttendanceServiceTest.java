@@ -36,6 +36,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /** Covers PRD 3.8: same-day edit window for Trainers, Admin can always correct. */
@@ -88,20 +90,39 @@ class AttendanceServiceTest {
     }
 
     @Test
-    void trainerCannotEditYesterdaysAttendance() {
+    void trainerCanCorrectAnEarlierDaysAttendance() {
         newService();
         actingAs(Role.TRAINER);
 
-        Attendance yesterday = Attendance.builder().id(UUID.randomUUID()).classInstanceId(classInstanceId)
+        // Marked on an earlier day - the case that used to be refused, so some dates in a student's
+        // history flipped and others did not.
+        Attendance older = Attendance.builder().id(UUID.randomUUID()).classInstanceId(classInstanceId)
                 .membershipId(membershipId).status(AttendanceStatus.PRESENT)
-                .markedAt(Instant.now().minus(1, ChronoUnit.DAYS)).build();
+                .markedAt(Instant.now().minus(10, ChronoUnit.DAYS)).build();
         when(attendanceRepository.findByClassInstanceIdAndMembershipId(classInstanceId, membershipId))
-                .thenReturn(Optional.of(yesterday));
+                .thenReturn(Optional.of(older));
+        when(attendanceRepository.save(any(Attendance.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        var sheet = new SubmitAttendanceSheetRequest(List.of(new AttendanceEntry(membershipId, AttendanceStatus.ABSENT, null)));
+
+        assertThatCode(() -> attendanceService.submitSheet(classInstanceId, sheet)).doesNotThrowAnyException();
+        assertThat(older.getStatus()).isEqualTo(AttendanceStatus.ABSENT);
+        // The correction is stamped as made now, by the person who made it.
+        assertThat(older.getMarkedAt()).isAfter(Instant.now().minus(1, ChronoUnit.MINUTES));
+    }
+
+    @Test
+    void aTrainerWithoutAttendanceOnThisCourseStillCannotEdit() {
+        newService();
+        actingAs(Role.TRAINER);
+        doThrow(new ForbiddenException("nope")).when(courseFeatureGuard)
+                .assertCourseFeature(courseId, FeatureKey.ATTENDANCE);
 
         var sheet = new SubmitAttendanceSheetRequest(List.of(new AttendanceEntry(membershipId, AttendanceStatus.ABSENT, null)));
 
         assertThatThrownBy(() -> attendanceService.submitSheet(classInstanceId, sheet))
                 .isInstanceOf(ForbiddenException.class);
+        verify(attendanceRepository, never()).save(any());
     }
 
     @Test

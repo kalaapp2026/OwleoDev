@@ -68,11 +68,10 @@ class _StudentAttendanceScreenState extends ConsumerState<StudentAttendanceScree
       }
     } catch (e) {
       if (mounted) {
-        // The backend refuses a Trainer's edit outside the same-day window, and says so - that
-        // message is the useful one, so it is shown as-is.
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
-        );
+        // The server's reason (no Attendance permission on this course, say) is the useful message,
+        // so it is shown as-is - in the app's own toast. A Material SnackBar docks to the very bottom
+        // of the Scaffold, behind the nav bar, so refusals used to appear to do nothing at all.
+        showAppToast(context, e.toString().replaceFirst('Exception: ', ''), error: true);
       }
     } finally {
       if (mounted) setState(() => _busy = false);

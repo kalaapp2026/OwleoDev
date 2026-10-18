@@ -16,17 +16,13 @@ import com.nest.app.scheduling.entity.ClassInstance;
 import com.nest.app.scheduling.repository.ClassInstanceRepository;
 import com.nest.app.notification.service.NotificationTriggers;
 import com.nest.common.audit.Auditable;
-import com.nest.common.exception.ForbiddenException;
 import com.nest.common.exception.ResourceNotFoundException;
 import com.nest.common.security.FeatureKey;
-import com.nest.common.security.Role;
 import com.nest.common.security.TenantContext;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
-import java.time.LocalDate;
-import java.time.ZoneId;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -202,7 +198,11 @@ public class AttendanceService {
         var existing = attendanceRepository.findByClassInstanceIdAndMembershipId(classInstanceId, entry.membershipId());
 
         if (existing.isPresent()) {
-            assertEditable(existing.get());
+            // No same-day window: a trainer who holds ATTENDANCE on this course (checked in submitSheet)
+            // may correct any date's record, as an academy admin can. The window refused every record
+            // marked on an earlier day, so some dates in a student's history flipped and others did not
+            // - and it measured "today" in the server's own zone, not the academy's. Every correction
+            // still stamps who made it and when (markedBy/markedAt) and goes through the audit log.
             Attendance record = existing.get();
             record.setStatus(entry.status());
             record.setNote(entry.note());
@@ -220,18 +220,6 @@ public class AttendanceService {
                 .markedAt(Instant.now())
                 .build();
         return toResponse(attendanceRepository.save(record));
-    }
-
-    /** "Immutable to the Trainer beyond a short edit window (e.g., same day) - Admin can always correct." */
-    private void assertEditable(Attendance existing) {
-        Role callerRole = TenantContext.currentMembership().roleType();
-        if (callerRole == Role.ACADEMY_ADMIN) {
-            return;
-        }
-        LocalDate markedDate = existing.getMarkedAt().atZone(ZoneId.systemDefault()).toLocalDate();
-        if (!markedDate.equals(LocalDate.now())) {
-            throw new ForbiddenException("This attendance record is outside the same-day edit window - ask an Academy Admin to correct it.");
-        }
     }
 
     private AttendanceResponse toResponse(Attendance a) {
