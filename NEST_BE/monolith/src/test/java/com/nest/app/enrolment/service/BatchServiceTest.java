@@ -172,7 +172,7 @@ class BatchServiceTest {
         Batch batch = Batch.builder().id(UUID.randomUUID()).courseId(courseId).batchType(BatchType.REGULAR).build();
         when(batchRepository.findById(batch.getId())).thenReturn(java.util.Optional.of(batch));
         doThrow(new ForbiddenException("nope")).when(courseFeatureGuard)
-                .assertCourseFeature(courseId, FeatureKey.BATCH_CREATION);
+                .assertAnyCourseFeature(courseId, FeatureKey.BATCH_CREATION, FeatureKey.STUDENT_REGISTRATION);
 
         assertThatThrownBy(() -> batchService.addMember(batch.getId(), membershipId))
                 .isInstanceOf(ForbiddenException.class);
@@ -248,6 +248,27 @@ class BatchServiceTest {
                 .hasMessageContaining("cannot have an end date");
 
         verify(batchRepository, never()).save(any());
+    }
+
+    @Test
+    void aBatchWithNoTrainerYetCanBeCreatedAndReturned() {
+        when(batchRepository.save(any(Batch.class))).thenAnswer(inv -> {
+            Batch b = inv.getArgument(0);
+            b.setId(UUID.randomUUID());
+            return b;
+        });
+        when(batchTrainerRepository.findByBatchIdIn(any())).thenReturn(List.of());
+        when(batchMemberRepository.findByBatchIdIn(any())).thenReturn(List.of());
+
+        // No trainers at all: the response used to throw a NullPointerException (a null key looked up
+        // in an immutable empty map), so creating or listing a trainerless batch was a 500.
+        var response = batchService.create(new com.nest.app.enrolment.dto.CreateBatchRequest(
+                courseId, "Batch A", null, BatchType.REGULAR, null, List.of(),
+                java.time.LocalDate.of(2026, 9, 1), null, List.of()));
+
+        assertThat(response.name()).isEqualTo("Batch A");
+        assertThat(response.trainerMembershipId()).isNull();
+        assertThat(response.trainerName()).isNull();
     }
 
     @Test

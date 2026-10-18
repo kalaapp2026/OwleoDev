@@ -92,7 +92,10 @@ public class CourseService {
      */
     @Transactional(readOnly = true)
     public List<CourseResponse> listActiveForFeature(String featureKey) {
-        var visible = courseFeatureGuard.visibleCourseIds(featureKey);
+        // One key, or several separated by commas: a screen that more than one permission opens (the
+        // Schedule screen: Batch scheduling or Reschedule) lists the courses of whichever the person holds.
+        String[] keys = java.util.Arrays.stream(featureKey.split(",")).map(String::trim).filter(k -> !k.isEmpty()).toArray(String[]::new);
+        var visible = courseFeatureGuard.visibleCourseIdsAny(keys);
         return courseRepository.findByAcademyIdAndStatusOrderByNameAsc(TenantContext.currentAcademyId(), CourseStatus.ACTIVE)
                 .stream()
                 .filter(c -> visible.isEmpty() || visible.get().contains(c.getId()))

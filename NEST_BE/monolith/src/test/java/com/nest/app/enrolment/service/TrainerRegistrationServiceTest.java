@@ -152,7 +152,7 @@ class TrainerRegistrationServiceTest {
         actingAsAcademyAdmin();
         UUID courseId = UUID.randomUUID();
         org.mockito.Mockito.doThrow(new ForbiddenException("nope")).when(courseFeatureGuard)
-                .assertCourseFeature(courseId, FeatureKey.BATCH_CREATION);
+                .assertAnyCourseFeature(courseId, FeatureKey.BATCH_CREATION, FeatureKey.TRAINER_REGISTRATION);
 
         assertThatThrownBy(() -> trainerRegistrationService.listTrainersForCourse(courseId, false))
                 .isInstanceOf(ForbiddenException.class);

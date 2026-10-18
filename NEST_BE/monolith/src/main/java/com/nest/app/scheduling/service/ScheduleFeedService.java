@@ -88,10 +88,12 @@ public class ScheduleFeedService {
     }
 
     /**
-     * @param feature which permission decides the courses shown: {@code ATTENDANCE} for the
-     *                Attendance screen, anything else (or null) for the Schedule screen's
-     *                {@code RESCHEDULE}. Only those two are honoured - the parameter picks between
-     *                two screens, it is not a way to ask the feed to scope by any permission.
+     * @param feature which permissions decide the courses shown, by screen: {@code ATTENDANCE} for
+     *                the Attendance screen; {@code ALL} for the Dashboard's "today" card (a class
+     *                is shown if the person holds Attendance, Reschedule or Batch scheduling on its
+     *                course); anything else (or null) for the Schedule screen, which is Reschedule or
+     *                Batch scheduling. The parameter picks between screens - it is not a way to ask
+     *                the feed to scope by any permission.
      */
     @Transactional(readOnly = true)
     public List<ScheduleEntryResponse> feed(LocalDate from, LocalDate to, UUID courseId, String feature) {
@@ -102,8 +104,16 @@ public class ScheduleFeedService {
         // The permission follows the SCREEN: Attendance is scoped by ATTENDANCE, not RESCHEDULE.
         // Scoping it by Reschedule left a trainer who marks attendance on a course, but cannot move
         // its classes, with an empty Attendance calendar.
-        String scopeFeature = FeatureKey.ATTENDANCE.equals(feature) ? FeatureKey.ATTENDANCE : FeatureKey.RESCHEDULE;
-        var visible = courseFeatureGuard.visibleCourseIds(scopeFeature);
+        //
+        // The Schedule screen is opened by Reschedule OR Batch scheduling, so it lists the courses of
+        // whichever the person holds. Scoping it by Reschedule alone showed a trainer who only sets
+        // timings a Schedule screen with nothing on it.
+        var visible = switch (feature == null ? "" : feature) {
+            case FeatureKey.ATTENDANCE -> courseFeatureGuard.visibleCourseIds(FeatureKey.ATTENDANCE);
+            case "ALL" -> courseFeatureGuard.visibleCourseIdsAny(
+                    FeatureKey.ATTENDANCE, FeatureKey.RESCHEDULE, FeatureKey.BATCH_SCHEDULING);
+            default -> courseFeatureGuard.visibleCourseIdsAny(FeatureKey.RESCHEDULE, FeatureKey.BATCH_SCHEDULING);
+        };
 
         Map<UUID, Course> coursesById = courseRepository
                 .findByAcademyIdOrderByNameAsc(TenantContext.currentAcademyId()).stream()
@@ -117,8 +127,13 @@ public class ScheduleFeedService {
         // An inactive batch's classes are excluded rather than greyed out: deactivating a batch
         // means it has stopped running, and leaving its sessions on the feed would have people
         // turning up to them.
+        // A trainer given only some batches of a course sees only those batches' classes: the course
+        // permission above says which course, this says which batches within it.
+        Map<UUID, java.util.Optional<java.util.Set<UUID>>> scopeByCourse = new HashMap<>();
         List<Batch> batches = batchRepository.findByCourseIdIn(coursesById.keySet()).stream()
                 .filter(b -> b.getStatus() == BatchStatus.ACTIVE)
+                .filter(b -> CourseFeatureGuard.inScope(
+                        scopeByCourse.computeIfAbsent(b.getCourseId(), courseFeatureGuard::batchScope), b.getId()))
                 .toList();
         if (batches.isEmpty()) {
             return List.of();

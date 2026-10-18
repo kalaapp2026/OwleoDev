@@ -283,7 +283,7 @@ class StudentRegistrationServiceTest {
         newService();
         actingAsAdmin();
         doThrow(new ForbiddenException("nope")).when(courseFeatureGuard)
-                .assertCourseFeature(courseId, FeatureKey.BATCH_CREATION);
+                .assertAnyCourseFeature(courseId, FeatureKey.BATCH_CREATION, FeatureKey.STUDENT_REGISTRATION);
 
         assertThatThrownBy(() -> service.listStudentsForCourse(courseId, false))
                 .isInstanceOf(ForbiddenException.class);

@@ -59,7 +59,7 @@ class _StudentDashboardBody extends ConsumerWidget {
         if (membershipId != null) {
           ref.invalidate(studentAttendanceProvider(membershipId));
         }
-        ref.invalidate(scheduleFeedProvider((from: today, to: today, courseId: null)));
+        ref.invalidate(dashboardFeedProvider((from: today, to: today, courseId: null)));
       },
       child: ListView(
         padding: EdgeInsets.zero,

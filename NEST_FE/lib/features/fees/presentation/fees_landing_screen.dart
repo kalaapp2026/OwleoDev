@@ -80,9 +80,11 @@ class _FeesLandingScreenState extends ConsumerState<FeesLandingScreen> {
   Widget build(BuildContext context) {
     final palette = context.palette;
     final summaryAsync = ref.watch(_summaryProvider(_key));
-    // Only the courses this person holds Fees entry on. The academy's full course list offered a
-    // trainer mapped to one course every other course too, none of which they could act on.
-    final coursesAsync = ref.watch(coursesForFeatureProvider(FeatureKeys.feesEntry));
+    // Only the courses this person holds a Fees permission on - Fees entry or Fees dashboard, since
+    // either opens this tab. The academy's full course list offered a trainer mapped to one course
+    // every other course too, none of which they could act on.
+    final coursesAsync =
+        ref.watch(coursesForFeatureProvider('${FeatureKeys.feesEntry},${FeatureKeys.feesDashboard}'));
 
     // No own Scaffold or AppBar - this renders inside AppShell's IndexedStack as the Fees tab.
     return ColoredBox(

@@ -25,7 +25,7 @@ public class FeesDashboardController {
     }
 
     @GetMapping("/fees/summary")
-    @RequiresFeature(FeatureKey.FEES_ENTRY)
+    @RequiresFeature({FeatureKey.FEES_ENTRY, FeatureKey.FEES_DASHBOARD})
     public FeeSummaryResponse summary(@RequestParam String period,
                                       @RequestParam(required = false) UUID courseId,
                                       @RequestParam(required = false) UUID batchId) {

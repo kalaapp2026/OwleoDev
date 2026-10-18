@@ -18,6 +18,17 @@ final scheduleFeedProvider =
       .feed(from: key.from, to: key.to, courseId: key.courseId);
 });
 
+/// The same feed for the Dashboard's "today" card: a class is shown if the person holds Attendance,
+/// Reschedule or Batch scheduling on its course - whichever of the three they were given - rather
+/// than only the Schedule screen's pair. A trainer who only marks attendance still sees their classes.
+final dashboardFeedProvider =
+    FutureProvider.autoDispose.family<List<ScheduleEntry>, ScheduleFeedKey>((ref, key) {
+  ref.watch(activeMembershipIdProvider);
+  return ref
+      .watch(schedulingApiProvider)
+      .feed(from: key.from, to: key.to, courseId: key.courseId, feature: 'ALL');
+});
+
 /// The same feed, scoped by the Attendance permission - what the Attendance screen and its calendar
 /// read. A separate provider rather than another field on [ScheduleFeedKey], which several other
 /// screens build by hand.

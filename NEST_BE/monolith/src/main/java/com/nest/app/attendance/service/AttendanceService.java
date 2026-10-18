@@ -55,7 +55,7 @@ public class AttendanceService {
     public List<AttendanceResponse> submitSheet(UUID classInstanceId, SubmitAttendanceSheetRequest request) {
         // Per-course enforcement: a Trainer must hold ATTENDANCE on the course this class belongs to
         // (class -> batch -> course), not merely on some course. Admins bypass inside the guard.
-        courseFeatureGuard.assertCourseFeature(courseIdOf(classInstanceId), FeatureKey.ATTENDANCE);
+        assertCanAccessClass(classInstanceId);
         UUID markedBy = TenantContext.currentUserId();
         // Only newly-absent students are told: re-saving a sheet, or editing a note on someone
         // already marked absent, must not send the same alert twice.
@@ -72,12 +72,15 @@ public class AttendanceService {
         return saved;
     }
 
-    private UUID courseIdOf(UUID classInstanceId) {
+    /** The caller must hold ATTENDANCE on this class's course AND have this class's batch within the
+     * batches they were given for it. The first alone lets a trainer limited to Batch A mark Batch B. */
+    private void assertCanAccessClass(UUID classInstanceId) {
         ClassInstance instance = classInstanceRepository.findById(classInstanceId)
                 .orElseThrow(() -> new ResourceNotFoundException("Class not found: " + classInstanceId));
         Batch batch = batchRepository.findById(instance.getBatchId())
                 .orElseThrow(() -> new ResourceNotFoundException("Batch not found: " + instance.getBatchId()));
-        return batch.getCourseId();
+        courseFeatureGuard.assertCourseFeature(batch.getCourseId(), FeatureKey.ATTENDANCE);
+        courseFeatureGuard.assertBatchInScope(batch.getCourseId(), batch.getId());
     }
 
     @Transactional(readOnly = true)
@@ -85,7 +88,7 @@ public class AttendanceService {
         // This is a full-roster view (every student's mark for one class) - unlike the
         // student-facing history below there is no "it's my own record" case, so only Admins and
         // a Trainer holding ATTENDANCE on this class's course may see it.
-        courseFeatureGuard.assertCourseFeature(courseIdOf(classInstanceId), FeatureKey.ATTENDANCE);
+        assertCanAccessClass(classInstanceId);
         return attendanceRepository.findByClassInstanceId(classInstanceId).stream()
                 .map(this::toResponse).collect(Collectors.toList());
     }
@@ -97,9 +100,10 @@ public class AttendanceService {
             return records.stream().map(this::toResponse).collect(Collectors.toList());
         }
 
-        Map<UUID, UUID> courseIdByClassInstance = resolveCourseIds(records);
+        Map<UUID, ClassScope> scopeByClassInstance = resolveScopes(records);
+        Map<UUID, java.util.Optional<java.util.Set<UUID>>> batchScopes = new java.util.HashMap<>();
         return records.stream()
-                .filter(r -> isVisible(courseIdByClassInstance.get(r.getClassInstanceId())))
+                .filter(r -> isVisible(scopeByClassInstance.get(r.getClassInstanceId()), batchScopes))
                 .map(this::toResponse)
                 .collect(Collectors.toList());
     }
@@ -108,14 +112,22 @@ public class AttendanceService {
         return membershipId.equals(TenantContext.currentMembershipId());
     }
 
-    /** A caller who isn't looking at their own record needs ATTENDANCE on that record's course
-     * (Admins pass automatically inside the guard). A record whose class/batch/course can no
-     * longer be resolved - e.g. a hard-deleted reschedule - is hidden rather than guessed at. */
-    private boolean isVisible(UUID courseId) {
-        return courseId != null && courseFeatureGuard.hasCourseFeature(courseId, FeatureKey.ATTENDANCE);
+    /** Where one class sits: its course, and the batch within it. */
+    private record ClassScope(UUID courseId, UUID batchId) {
     }
 
-    private Map<UUID, UUID> resolveCourseIds(List<Attendance> records) {
+    /** A caller who isn't looking at their own record needs ATTENDANCE on that record's course AND that
+     * record's batch within the batches they were given (Admins pass automatically inside the guard).
+     * A record whose class/batch/course can no longer be resolved - e.g. a hard-deleted reschedule -
+     * is hidden rather than guessed at. [batchScopes] caches the per-course lookup across a list. */
+    private boolean isVisible(ClassScope scope, Map<UUID, java.util.Optional<java.util.Set<UUID>>> batchScopes) {
+        return scope != null && scope.courseId() != null
+                && courseFeatureGuard.hasCourseFeature(scope.courseId(), FeatureKey.ATTENDANCE)
+                && CourseFeatureGuard.inScope(
+                        batchScopes.computeIfAbsent(scope.courseId(), courseFeatureGuard::batchScope), scope.batchId());
+    }
+
+    private Map<UUID, ClassScope> resolveScopes(List<Attendance> records) {
         Map<UUID, ClassInstance> instancesById = classInstanceRepository
                 .findAllById(records.stream().map(Attendance::getClassInstanceId).collect(Collectors.toSet()))
                 .stream().collect(Collectors.toMap(ClassInstance::getId, c -> c));
@@ -123,11 +135,11 @@ public class AttendanceService {
                 .findAllById(instancesById.values().stream().map(ClassInstance::getBatchId).collect(Collectors.toSet()))
                 .stream().collect(Collectors.toMap(Batch::getId, Batch::getCourseId));
 
-        Map<UUID, UUID> result = new java.util.HashMap<>();
+        Map<UUID, ClassScope> result = new java.util.HashMap<>();
         for (ClassInstance instance : instancesById.values()) {
             UUID courseId = courseIdByBatch.get(instance.getBatchId());
             if (courseId != null) {
-                result.put(instance.getId(), courseId);
+                result.put(instance.getId(), new ClassScope(courseId, instance.getBatchId()));
             }
         }
         return result;
@@ -149,6 +161,7 @@ public class AttendanceService {
             return List.of();
         }
         boolean isSelf = isSelf(membershipId);
+        Map<UUID, java.util.Optional<java.util.Set<UUID>>> batchScopes = new java.util.HashMap<>();
 
         Map<UUID, ClassInstance> instancesById = classInstanceRepository
                 .findAllById(records.stream().map(Attendance::getClassInstanceId).collect(Collectors.toSet()))
@@ -177,7 +190,7 @@ public class AttendanceService {
                 continue;
             }
             Course course = batch == null ? null : coursesById.get(batch.getCourseId());
-            if (!isSelf && !isVisible(course == null ? null : course.getId())) {
+            if (!isSelf && !isVisible(course == null ? null : new ClassScope(course.getId(), instance.getBatchId()), batchScopes)) {
                 continue;
             }
 

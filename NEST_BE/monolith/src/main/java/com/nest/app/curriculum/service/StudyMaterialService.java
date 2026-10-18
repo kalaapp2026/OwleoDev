@@ -144,7 +144,12 @@ public class StudyMaterialService {
                     .filter(b -> resolved.containsKey(b.getCourseId()))
                     .toList();
         } else {
-            batches = batchRepository.findByCourseIdIn(coursesById.keySet());
+            // Only the batches this editor was given within each course.
+            Map<UUID, java.util.Optional<java.util.Set<UUID>>> scopes = new HashMap<>();
+            batches = batchRepository.findByCourseIdIn(coursesById.keySet()).stream()
+                    .filter(b -> com.nest.app.identity.service.CourseFeatureGuard.inScope(
+                            scopes.computeIfAbsent(b.getCourseId(), courseFeatureGuard::batchScope), b.getId()))
+                    .toList();
         }
 
         if (batches.isEmpty()) {
@@ -393,6 +398,7 @@ public class StudyMaterialService {
         Batch batch = batchRepository.findById(batchId)
                 .orElseThrow(() -> new ResourceNotFoundException("Batch not found: " + batchId));
         courseFeatureGuard.assertCourseFeature(batch.getCourseId(), FeatureKey.SYLLABUS_EDIT);
+        courseFeatureGuard.assertBatchInScope(batch.getCourseId(), batch.getId());
     }
 
     /**
@@ -428,6 +434,8 @@ public class StudyMaterialService {
                 .orElseThrow(() -> new ResourceNotFoundException("Batch not found: " + batchId));
 
         if (courseFeatureGuard.hasCourseFeature(batch.getCourseId(), FeatureKey.SYLLABUS_EDIT)) {
+            // An editor limited to some batches of the course may only open those.
+            courseFeatureGuard.assertBatchInScope(batch.getCourseId(), batch.getId());
             return;
         }
         var principal = TenantContext.require();

@@ -65,7 +65,7 @@ public class BatchController {
      * rather than drilled into course by course. Distinct path from the membership-scoped
      * {@code /batches} below, which answers a different question. */
     @GetMapping("/batches/all")
-    @RequiresFeature(FeatureKey.BATCH_CREATION)
+    @RequiresFeature({FeatureKey.BATCH_CREATION, FeatureKey.STUDENT_REGISTRATION})
     public List<BatchResponse> listAll() {
         return batchService.listForActiveAcademy();
     }
@@ -79,7 +79,7 @@ public class BatchController {
     }
 
     @PostMapping("/batches/{id}/members")
-    @RequiresFeature(FeatureKey.BATCH_CREATION)
+    @RequiresFeature({FeatureKey.BATCH_CREATION, FeatureKey.STUDENT_REGISTRATION})
     public void addMember(@PathVariable UUID id, @RequestParam UUID membershipId) {
         batchService.addMember(id, membershipId);
     }

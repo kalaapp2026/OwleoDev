@@ -14,6 +14,9 @@ public interface TrainerCourseBatchRepository
 
     List<TrainerCourseBatch> findByMembershipId(UUID membershipId);
 
+    /** The batches one trainer was limited to on one course - empty means "not limited". */
+    List<TrainerCourseBatch> findByMembershipIdAndCourseId(UUID membershipId, UUID courseId);
+
     /**
      * Bulk delete rather than a derived deleteBy: the derived form loads each row and queues a
      * remove, and Hibernate flushes INSERTs before DELETEs regardless of call order - so a

@@ -9,6 +9,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import com.fasterxml.jackson.databind.exc.InvalidFormatException;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -98,6 +100,19 @@ public class GlobalExceptionHandler {
             }
         }
         return "Request body could not be read - check the JSON and field types";
+    }
+
+    /** A required query parameter left out, or one that isn't the right type (a bad date, say). The
+     * caller's request was wrong, so it is a 400 that names the parameter - not the 500 it fell
+     * through to, which sent people looking for a server fault. */
+    @ExceptionHandler({MissingServletRequestParameterException.class, MethodArgumentTypeMismatchException.class})
+    public ResponseEntity<ErrorResponse> handleBadParameter(Exception ex, HttpServletRequest request) {
+        String message = ex instanceof MissingServletRequestParameterException missing
+                ? "Required parameter '" + missing.getParameterName() + "' is missing"
+                : "Parameter '" + ((MethodArgumentTypeMismatchException) ex).getName() + "' has an invalid value";
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(ErrorResponse.of(HttpStatus.BAD_REQUEST.value(), "Bad Request", "BAD_PARAMETER",
+                        message, request.getRequestURI()));
     }
 
     @ExceptionHandler(Exception.class)

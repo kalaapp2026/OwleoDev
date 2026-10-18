@@ -115,7 +115,7 @@ class ScheduleFeedServiceTest {
 
         // This trainer marks attendance on the course but may not reschedule its classes.
         when(courseFeatureGuard.visibleCourseIds(FeatureKey.ATTENDANCE)).thenReturn(Optional.of(Set.of(courseId)));
-        when(courseFeatureGuard.visibleCourseIds(FeatureKey.RESCHEDULE)).thenReturn(Optional.of(Set.of()));
+        when(courseFeatureGuard.visibleCourseIdsAny(FeatureKey.RESCHEDULE, FeatureKey.BATCH_SCHEDULING)).thenReturn(Optional.of(Set.of()));
         when(courseRepository.findByAcademyIdOrderByNameAsc(academyId))
                 .thenReturn(List.of(Course.builder().id(courseId).academyId(academyId).name("Bharatanatyam").build()));
         when(batchRepository.findByCourseIdIn(any())).thenReturn(List.of(Batch.builder()

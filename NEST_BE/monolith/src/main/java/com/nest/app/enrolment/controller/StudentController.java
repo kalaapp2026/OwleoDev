@@ -75,7 +75,7 @@ public class StudentController {
      * drops course-deactivated students; true (management view) keeps them so they can be flipped
      * back on. */
     @GetMapping("/courses/{courseId}/students")
-    @RequiresFeature(FeatureKey.BATCH_CREATION)
+    @RequiresFeature({FeatureKey.BATCH_CREATION, FeatureKey.STUDENT_REGISTRATION})
     public List<StudentSummaryResponse> studentsForCourse(@PathVariable UUID courseId,
                                                           @RequestParam(defaultValue = "false") boolean includeInactive) {
         return studentRegistrationService.listStudentsForCourse(courseId, includeInactive);

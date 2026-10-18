@@ -20,6 +20,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.when;
 
@@ -30,6 +31,8 @@ class CourseFeatureGuardTest {
 
     @Mock
     private CourseFeatureGrantRepository repo;
+    @Mock
+    private com.nest.app.identity.repository.TrainerCourseBatchRepository batchRepo;
 
     private CourseFeatureGuard guard;
 
@@ -50,7 +53,7 @@ class CourseFeatureGuardTest {
 
     @Test
     void trainerWithTheFeatureOnThisCoursePasses() {
-        guard = new CourseFeatureGuard(repo);
+        guard = new CourseFeatureGuard(repo, batchRepo);
         UUID membershipId = actingAsTrainer();
         when(repo.existsByMembershipIdAndCourseIdAndFeatureKey(membershipId, guitar, FeatureKey.ATTENDANCE)).thenReturn(true);
 
@@ -59,7 +62,7 @@ class CourseFeatureGuardTest {
 
     @Test
     void trainerWithTheFeatureOnlyOnAnotherCourseIsBlocked() {
-        guard = new CourseFeatureGuard(repo);
+        guard = new CourseFeatureGuard(repo, batchRepo);
         UUID membershipId = actingAsTrainer();
         // Has Attendance on Guitar, asks to act on Dance - the per-course check says no.
         when(repo.existsByMembershipIdAndCourseIdAndFeatureKey(membershipId, dance, FeatureKey.ATTENDANCE)).thenReturn(false);
@@ -70,7 +73,7 @@ class CourseFeatureGuardTest {
 
     @Test
     void academyAdminBypassesTheCourseCheckEntirely() {
-        guard = new CourseFeatureGuard(repo);
+        guard = new CourseFeatureGuard(repo, batchRepo);
         UUID membershipId = UUID.randomUUID();
         MembershipClaim claim = new MembershipClaim(membershipId, UUID.randomUUID(), "Natyalaya", Role.ACADEMY_ADMIN, Set.of(), Set.of());
         TenantContext.set(new NestPrincipal(UUID.randomUUID(), "meera", Role.ACADEMY_ADMIN, List.of(claim), membershipId));
@@ -91,7 +94,7 @@ class CourseFeatureGuardTest {
 
     @Test
     void aTrainerSeesOnlyTheCoursesTheyHoldTheFeatureOn() {
-        guard = new CourseFeatureGuard(repo);
+        guard = new CourseFeatureGuard(repo, batchRepo);
         UUID membershipId = actingAsTrainer();
         when(repo.findByMembershipId(membershipId)).thenReturn(List.of(
                 grant(membershipId, guitar, FeatureKey.ATTENDANCE),
@@ -108,7 +111,7 @@ class CourseFeatureGuardTest {
     void aTrainerWithNoGrantForTheFeatureSeesNothing() {
         // The dangerous failure mode: an empty grant list must mean an empty screen, never an
         // unrestricted one.
-        guard = new CourseFeatureGuard(repo);
+        guard = new CourseFeatureGuard(repo, batchRepo);
         UUID membershipId = actingAsTrainer();
         when(repo.findByMembershipId(membershipId)).thenReturn(List.of());
 
@@ -122,11 +125,85 @@ class CourseFeatureGuardTest {
     void anAdminIsUnrestrictedRatherThanGivenAnExplicitList() {
         // Empty Optional means "no filter" - distinct from an empty Set, which means "nothing".
         // Conflating the two is precisely how this leaks or blanks.
-        guard = new CourseFeatureGuard(repo);
+        guard = new CourseFeatureGuard(repo, batchRepo);
         UUID membershipId = UUID.randomUUID();
         MembershipClaim claim = new MembershipClaim(membershipId, UUID.randomUUID(), "Natyalaya", Role.ACADEMY_ADMIN, Set.of(), Set.of());
         TenantContext.set(new NestPrincipal(UUID.randomUUID(), "meera", Role.ACADEMY_ADMIN, List.of(claim), membershipId));
 
         assertThat(guard.visibleCourseIds(FeatureKey.ATTENDANCE)).isEmpty();
+    }
+
+    // ---------------------------------------------------------------- any-of
+
+    @Test
+    void holdingEitherOfTwoFeaturesOnTheCoursePassesAnAnyOfCheck() {
+        guard = new CourseFeatureGuard(repo, batchRepo);
+        UUID membershipId = actingAsTrainer();
+        when(repo.existsByMembershipIdAndCourseIdAndFeatureKey(membershipId, guitar, FeatureKey.BATCH_CREATION)).thenReturn(false);
+        when(repo.existsByMembershipIdAndCourseIdAndFeatureKey(membershipId, guitar, FeatureKey.STUDENT_REGISTRATION)).thenReturn(true);
+
+        assertThatCode(() -> guard.assertAnyCourseFeature(guitar, FeatureKey.BATCH_CREATION, FeatureKey.STUDENT_REGISTRATION))
+                .doesNotThrowAnyException();
+    }
+
+    @Test
+    void holdingNeitherFailsAnAnyOfCheck() {
+        guard = new CourseFeatureGuard(repo, batchRepo);
+        UUID membershipId = actingAsTrainer();
+        when(repo.existsByMembershipIdAndCourseIdAndFeatureKey(any(), any(), any())).thenReturn(false);
+
+        assertThatThrownBy(() -> guard.assertAnyCourseFeature(guitar, FeatureKey.BATCH_CREATION, FeatureKey.STUDENT_REGISTRATION))
+                .isInstanceOf(ForbiddenException.class);
+    }
+
+    @Test
+    void theVisibleCoursesForSeveralFeaturesAreTheirUnion() {
+        guard = new CourseFeatureGuard(repo, batchRepo);
+        UUID membershipId = actingAsTrainer();
+        when(repo.findByMembershipId(membershipId)).thenReturn(List.of(
+                com.nest.app.identity.entity.CourseFeatureGrant.builder().membershipId(membershipId).courseId(guitar).featureKey(FeatureKey.RESCHEDULE).build(),
+                com.nest.app.identity.entity.CourseFeatureGrant.builder().membershipId(membershipId).courseId(dance).featureKey(FeatureKey.BATCH_SCHEDULING).build(),
+                com.nest.app.identity.entity.CourseFeatureGrant.builder().membershipId(membershipId).courseId(UUID.randomUUID()).featureKey(FeatureKey.FEES_ENTRY).build()));
+
+        var visible = guard.visibleCourseIdsAny(FeatureKey.RESCHEDULE, FeatureKey.BATCH_SCHEDULING);
+
+        assertThat(visible).isPresent();
+        assertThat(visible.get()).containsExactlyInAnyOrder(guitar, dance);
+    }
+
+    // ------------------------------------------------------------ batch scope
+
+    @Test
+    void aTrainerGivenNoSpecificBatchesIsNotLimited() {
+        guard = new CourseFeatureGuard(repo, batchRepo);
+        UUID membershipId = actingAsTrainer();
+        when(batchRepo.findByMembershipIdAndCourseId(membershipId, guitar)).thenReturn(List.of());
+
+        assertThat(guard.batchScope(guitar)).isEmpty();
+    }
+
+    @Test
+    void aTrainerGivenSomeBatchesIsLimitedToThem() {
+        guard = new CourseFeatureGuard(repo, batchRepo);
+        UUID membershipId = actingAsTrainer();
+        UUID batchA = UUID.randomUUID();
+        UUID batchB = UUID.randomUUID();
+        when(batchRepo.findByMembershipIdAndCourseId(membershipId, guitar)).thenReturn(List.of(
+                com.nest.app.identity.entity.TrainerCourseBatch.builder().membershipId(membershipId).courseId(guitar).batchId(batchA).build()));
+
+        assertThat(guard.batchScope(guitar)).contains(java.util.Set.of(batchA));
+        assertThatCode(() -> guard.assertBatchInScope(guitar, batchA)).doesNotThrowAnyException();
+        assertThatThrownBy(() -> guard.assertBatchInScope(guitar, batchB)).isInstanceOf(ForbiddenException.class);
+    }
+
+    @Test
+    void anAdminIsNeverLimitedToBatches() {
+        guard = new CourseFeatureGuard(repo, batchRepo);
+        UUID membershipId = UUID.randomUUID();
+        MembershipClaim claim = new MembershipClaim(membershipId, UUID.randomUUID(), "Natyalaya", Role.ACADEMY_ADMIN, Set.of(), Set.of());
+        TenantContext.set(new NestPrincipal(UUID.randomUUID(), "meera", Role.ACADEMY_ADMIN, List.of(claim), membershipId));
+
+        assertThat(guard.batchScope(guitar)).isEmpty();
+        assertThatCode(() -> guard.assertBatchInScope(guitar, UUID.randomUUID())).doesNotThrowAnyException();
     }
 }

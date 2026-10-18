@@ -68,7 +68,7 @@ class _TodaysScheduleCardState extends ConsumerState<TodaysScheduleCard> {
     final user = ref.watch(sessionControllerProvider).user;
     final canOpenAttendance =
         user != null && (user.isActiveAcademyAdmin || user.hasFeature(FeatureKeys.attendance));
-    final feedAsync = ref.watch(scheduleFeedProvider(_feedKey));
+    final feedAsync = ref.watch(dashboardFeedProvider(_feedKey));
 
     return Container(
       padding: const EdgeInsets.all(AppSpacing.xxl),

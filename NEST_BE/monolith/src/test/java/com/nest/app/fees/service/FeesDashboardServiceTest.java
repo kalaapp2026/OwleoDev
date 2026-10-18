@@ -99,7 +99,7 @@ class FeesDashboardServiceTest {
     @Test
     void summaryIsRejectedWhenCallerLacksFeesEntryOnTheNamedCourse() {
         doThrow(new ForbiddenException("nope")).when(courseFeatureGuard)
-                .assertCourseFeature(hiddenCourseId, FeatureKey.FEES_ENTRY);
+                .assertAnyCourseFeature(hiddenCourseId, FeatureKey.FEES_ENTRY, FeatureKey.FEES_DASHBOARD);
 
         assertThatThrownBy(() -> dashboardService.summary("2026-07", hiddenCourseId, null))
                 .isInstanceOf(ForbiddenException.class);
@@ -107,7 +107,7 @@ class FeesDashboardServiceTest {
 
     @Test
     void wholeAcademySummaryOnlyCountsCoursesTheCallerCanSee() {
-        when(courseFeatureGuard.visibleCourseIds(FeatureKey.FEES_ENTRY))
+        when(courseFeatureGuard.visibleCourseIdsAny(FeatureKey.FEES_ENTRY, FeatureKey.FEES_DASHBOARD))
                 .thenReturn(Optional.of(Set.of(visibleCourseId)));
 
         Course visible = Course.builder().id(visibleCourseId).academyId(academyId).name("Visible").build();

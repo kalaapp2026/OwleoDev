@@ -147,7 +147,12 @@ public class BatchService {
 
     @Transactional(readOnly = true)
     public List<BatchResponse> listForCourse(UUID courseId) {
-        return buildResponses(batchRepository.findByCourseId(courseId));
+        // A trainer given only some of this course's batches is offered only those. (No permission check
+        // here: students and every kind of staff list a course's batches for their pickers.)
+        var scope = courseFeatureGuard.batchScope(courseId);
+        return buildResponses(batchRepository.findByCourseId(courseId).stream()
+                .filter(b -> CourseFeatureGuard.inScope(scope, b.getId()))
+                .toList());
     }
 
     /** Every batch in the active academy, across all its courses - the batch list screen's source,
@@ -157,7 +162,9 @@ public class BatchService {
     public List<BatchResponse> listForActiveAcademy() {
         // Scoped to the caller's own courses. A Trainer granted Batch Creation on Guitar has no
         // business seeing - let alone editing - the Bharatanatyam batches listed beside it.
-        var visible = courseFeatureGuard.visibleCourseIds(FeatureKey.BATCH_CREATION);
+        // Batch creation OR student registration: the registration form offers batches to place a new
+        // student in, so someone who registers students but does not build batches still needs them.
+        var visible = courseFeatureGuard.visibleCourseIdsAny(FeatureKey.BATCH_CREATION, FeatureKey.STUDENT_REGISTRATION);
 
         Set<UUID> courseIds = courseRepository.findByAcademyIdOrderByNameAsc(TenantContext.currentAcademyId())
                 .stream().map(Course::getId)
@@ -166,7 +173,11 @@ public class BatchService {
         if (courseIds.isEmpty()) {
             return List.of();
         }
-        return buildResponses(batchRepository.findByCourseIdIn(courseIds));
+        Map<UUID, java.util.Optional<Set<UUID>>> scopeByCourse = new java.util.HashMap<>();
+        return buildResponses(batchRepository.findByCourseIdIn(courseIds).stream()
+                .filter(b -> CourseFeatureGuard.inScope(
+                        scopeByCourse.computeIfAbsent(b.getCourseId(), courseFeatureGuard::batchScope), b.getId()))
+                .toList());
     }
 
     /** Just the batch(es) ONE membership actually belongs to, across every course - e.g. a
@@ -201,7 +212,9 @@ public class BatchService {
         // Per-course enforcement: the controller's @RequiresFeature only checks the union across
         // all courses - without this, a Trainer granted BATCH_CREATION on Guitar could enrol
         // students into a Bharatanatyam batch.
-        courseFeatureGuard.assertCourseFeature(batch.getCourseId(), FeatureKey.BATCH_CREATION);
+        // Placing a student in a batch is part of registering them, so Student registration is enough
+        // on this course too - not only Batch creation.
+        courseFeatureGuard.assertAnyCourseFeature(batch.getCourseId(), FeatureKey.BATCH_CREATION, FeatureKey.STUDENT_REGISTRATION);
 
         if (batch.getBatchType() == BatchType.REGULAR && isAlreadyInAnotherRegularBatchForCourse(membershipId, batch)) {
             throw new ConflictException(
@@ -217,6 +230,7 @@ public class BatchService {
 
     @Transactional(readOnly = true)
     public List<UUID> listMemberIds(UUID batchId) {
+        assertCanSeeRoster(findOrThrow(batchId));
         return batchMemberRepository.findByBatchId(batchId).stream().map(BatchMember::getMembershipId).collect(Collectors.toList());
     }
 
@@ -224,6 +238,7 @@ public class BatchService {
      * membership UUID (mirrors StudentRegistrationService.listStudentsForCourse's shape). */
     @Transactional(readOnly = true)
     public List<BatchMemberSummaryResponse> listMemberSummaries(UUID batchId) {
+        assertCanSeeRoster(findOrThrow(batchId));
         List<UUID> membershipIds = batchMemberRepository.findByBatchId(batchId).stream()
                 .map(BatchMember::getMembershipId).toList();
         if (membershipIds.isEmpty()) {
@@ -283,6 +298,25 @@ public class BatchService {
         // orphan rows nothing can ever reach or clean up.
         studyMaterialRepository.deleteByBatchId(batchId);
         batchRepository.delete(batch);
+    }
+
+    /**
+     * Who may read a batch's roster (names and photos of its students): someone IN the batch, its own
+     * trainer, or staff who hold any permission on this course and have this batch within the batches
+     * they were given. Previously any signed-in trainer could list any batch's students, including those
+     * of courses they have nothing to do with.
+     */
+    private void assertCanSeeRoster(Batch batch) {
+        UUID me = TenantContext.currentMembershipId();
+        if (batchMemberRepository.existsByBatchIdAndMembershipId(batch.getId(), me)) {
+            return;
+        }
+        if (batchTrainerRepository.findByBatchId(batch.getId()).stream()
+                .anyMatch(t -> me.equals(t.getTrainerMembershipId()))) {
+            return;
+        }
+        courseFeatureGuard.assertAnyCourseFeature(batch.getCourseId(), FeatureKey.ALL_DELEGABLE.toArray(String[]::new));
+        courseFeatureGuard.assertBatchInScope(batch.getCourseId(), batch.getId());
     }
 
     private Batch findOrThrow(UUID batchId) {
@@ -446,7 +480,11 @@ public class BatchService {
 
             result.add(new BatchResponse(
                     b.getId(), b.getCourseId(), b.getName(), b.getDescription(), b.getBatchType(),
-                    b.getTrainerMembershipId(), namesByMembership.get(b.getTrainerMembershipId()),
+                    // A batch with no trainer yet has no primary trainer to name. The lookup map can be an
+                    // immutable empty Map.of(), whose get(null) throws instead of returning null - which
+                    // made creating or listing a trainerless batch a 500.
+                    b.getTrainerMembershipId(),
+                    b.getTrainerMembershipId() == null ? null : namesByMembership.get(b.getTrainerMembershipId()),
                     b.getStatus(), b.getStartDate(), b.getEndDate(), trainers,
                     rosterSizes.getOrDefault(b.getId(), 0),
                     slots.isEmpty() ? null : slots.get(0).getStartTime().toString(),

@@ -154,9 +154,10 @@ public class StudentRegistrationService {
      * flagged, so an admin can reactivate them. */
     @Transactional(readOnly = true)
     public List<StudentSummaryResponse> listStudentsForCourse(UUID courseId, boolean includeInactive) {
-        // Per-course enforcement: the controller's @RequiresFeature(BATCH_CREATION) only checks
-        // the union across all courses.
-        courseFeatureGuard.assertCourseFeature(courseId, FeatureKey.BATCH_CREATION);
+        // Per-course enforcement: the controller's @RequiresFeature only checks the union across all
+        // courses. Two features legitimately need this list - Batch creation (the roster picker) and
+        // Student registration (the Users screen) - so holding either on THIS course is enough.
+        courseFeatureGuard.assertAnyCourseFeature(courseId, FeatureKey.BATCH_CREATION, FeatureKey.STUDENT_REGISTRATION);
         UUID academyId = TenantContext.currentAcademyId();
 
         Map<UUID, Boolean> activeByMembership = courseMapRepository.findByCourseId(courseId).stream()
@@ -210,6 +211,10 @@ public class StudentRegistrationService {
         UUID academyId = TenantContext.currentAcademyId();
         UUID registeredBy = TenantContext.currentUserId();
         String academyName = TenantContext.currentMembership().academyName();
+
+        // Per-course enforcement: @RequiresFeature only proves the caller holds Student registration on
+        // SOME course. Without this check a trainer with it on Guitar could enrol anyone into Dance.
+        request.courses().forEach(c -> courseFeatureGuard.assertCourseFeature(c.courseId(), FeatureKey.STUDENT_REGISTRATION));
 
         Optional<User> existingUser = identityRegistrationService.findByEmail(request.email());
         Map<UUID, BigDecimal> courseFees = resolveCourseFees(request.courses());
@@ -340,8 +345,13 @@ public class StudentRegistrationService {
         assertCanManageStudent(membershipId);
         User student = userRepository.findById(membership.getUserId())
                 .orElseThrow(() -> new ResourceNotFoundException("No account for this membership"));
+        // Only the courses the caller manages: a trainer editing a student must not be shown (or be able
+        // to send back) that student's enrolments in courses they have no permission on.
+        Optional<Set<UUID>> manageable = courseFeatureGuard.visibleCourseIds(FeatureKey.STUDENT_REGISTRATION);
         Map<UUID, BigDecimal> courseFees = new HashMap<>();
-        courseMapRepository.findByMembershipId(membershipId).forEach(cm -> courseFees.put(cm.getCourseId(), cm.getAgreedFee()));
+        courseMapRepository.findByMembershipId(membershipId).stream()
+                .filter(cm -> manageable.isEmpty() || manageable.get().contains(cm.getCourseId()))
+                .forEach(cm -> courseFees.put(cm.getCourseId(), cm.getAgreedFee()));
         return new StudentDetailResponse(student.getId(), membership.getId(), student.getUsername(), student.getFullName(),
                 student.getPhone(), student.getEmail(), student.getDob(), student.getAddress(), student.getCity(),
                 student.getState(), courseFees,
@@ -356,8 +366,18 @@ public class StudentRegistrationService {
         identityRegistrationService.updateStudentProfile(membership.getUserId(), request.fullName(), request.phone(),
                 request.email(), request.dob(), request.address(), request.city(), request.state());
 
+        request.courses().forEach(c -> courseFeeGuardAssert(c.courseId()));
         Map<UUID, BigDecimal> courseFees = resolveCourseFees(request.courses());
-        identityRegistrationService.reconcileCourseMap(membershipId, courseFees);
+        // Reconciling drops every course not in the list. A trainer only ever sees the courses they
+        // manage, so their list omits the student's others - which must be kept, not silently removed.
+        Optional<Set<UUID>> manageable = courseFeatureGuard.visibleCourseIds(FeatureKey.STUDENT_REGISTRATION);
+        Map<UUID, BigDecimal> toKeep = new HashMap<>(courseFees);
+        if (manageable.isPresent()) {
+            courseMapRepository.findByMembershipId(membershipId).stream()
+                    .filter(cm -> !manageable.get().contains(cm.getCourseId()))
+                    .forEach(cm -> toKeep.put(cm.getCourseId(), cm.getAgreedFee()));
+        }
+        identityRegistrationService.reconcileCourseMap(membershipId, toKeep);
 
         User student = userRepository.findById(membership.getUserId()).orElseThrow();
         // After the re-read, not before: updateStudentProfile saved its own copy of the entity, and
@@ -368,6 +388,10 @@ public class StudentRegistrationService {
         }
         return new StudentResponse(student.getId(), membership.getId(), student.getUsername(), student.getFullName(),
                 courseFees, false, null);
+    }
+
+    private void courseFeeGuardAssert(UUID courseId) {
+        courseFeatureGuard.assertCourseFeature(courseId, FeatureKey.STUDENT_REGISTRATION);
     }
 
     private AcademyMembership studentInActiveAcademy(UUID membershipId) {

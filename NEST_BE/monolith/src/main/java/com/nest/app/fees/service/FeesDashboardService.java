@@ -109,9 +109,11 @@ public class FeesDashboardService {
         // (the whole-academy card) is instead narrowed to whichever courses that is, so a Trainer
         // never sees collection totals for a course they don't work on.
         if (courseId != null) {
-            courseFeatureGuard.assertCourseFeature(courseId, FeatureKey.FEES_ENTRY);
+            courseFeatureGuard.assertAnyCourseFeature(courseId, FeatureKey.FEES_ENTRY, FeatureKey.FEES_DASHBOARD);
         }
-        Optional<Set<UUID>> visibleCourseIds = courseFeatureGuard.visibleCourseIds(FeatureKey.FEES_ENTRY);
+        // The summary is the Fees tab's landing, which Fees entry AND Fees dashboard both open: a person who
+        // holds only the dashboard still needs it to load, scoped to the courses they hold either on.
+        Optional<Set<UUID>> visibleCourseIds = courseFeatureGuard.visibleCourseIdsAny(FeatureKey.FEES_ENTRY, FeatureKey.FEES_DASHBOARD);
 
         List<Course> courses = courseRepository.findByAcademyIdOrderByNameAsc(academyId).stream()
                 .filter(c -> courseId == null || c.getId().equals(courseId))
@@ -191,9 +193,11 @@ public class FeesDashboardService {
             return FeeSummaryResponse.CategorySummary.empty();
         }
         if (courseId != null) {
-            courseFeatureGuard.assertCourseFeature(courseId, FeatureKey.FEES_ENTRY);
+            courseFeatureGuard.assertAnyCourseFeature(courseId, FeatureKey.FEES_ENTRY, FeatureKey.FEES_DASHBOARD);
         }
-        Optional<Set<UUID>> visibleCourseIds = courseFeatureGuard.visibleCourseIds(FeatureKey.FEES_ENTRY);
+        // The summary is the Fees tab's landing, which Fees entry AND Fees dashboard both open: a person who
+        // holds only the dashboard still needs it to load, scoped to the courses they hold either on.
+        Optional<Set<UUID>> visibleCourseIds = courseFeatureGuard.visibleCourseIdsAny(FeatureKey.FEES_ENTRY, FeatureKey.FEES_DASHBOARD);
 
         Map<UUID, List<FeeTypeBatch>> bindingsByType = feeTypeBatchRepository
                 .findByFeeTypeIdIn(types.stream().map(FeeType::getId).toList()).stream()

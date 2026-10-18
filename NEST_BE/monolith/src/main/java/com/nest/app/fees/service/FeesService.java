@@ -145,6 +145,8 @@ public class FeesService {
     @Transactional(readOnly = true)
     public FeeRosterResponse roster(UUID courseId, UUID batchId, String period) {
         courseFeatureGuard.assertCourseFeature(courseId, FeatureKey.FEES_ENTRY);
+        // A trainer given only some batches of the course collects fees for those batches only.
+        courseFeatureGuard.assertBatchInScope(courseId, batchId);
 
         List<UUID> batchMemberIds = batchMemberRepository.findByBatchId(batchId).stream()
                 .map(BatchMember::getMembershipId).toList();

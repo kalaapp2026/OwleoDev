@@ -72,7 +72,7 @@ public class TrainerController {
     /** Batch default-trainer picker + Users management screen. includeInactive=false (default,
      * picker) drops course-deactivated trainers; true (management view) keeps them, flagged. */
     @GetMapping("/courses/{courseId}/trainers")
-    @RequiresFeature(FeatureKey.BATCH_CREATION)
+    @RequiresFeature({FeatureKey.BATCH_CREATION, FeatureKey.TRAINER_REGISTRATION})
     public List<TrainerSummaryResponse> trainersForCourse(@PathVariable UUID courseId,
                                                           @RequestParam(defaultValue = "false") boolean includeInactive) {
         return trainerRegistrationService.listTrainersForCourse(courseId, includeInactive);

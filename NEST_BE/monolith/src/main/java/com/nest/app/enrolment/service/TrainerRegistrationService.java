@@ -200,9 +200,10 @@ public class TrainerRegistrationService {
      * keeps them, flagged. */
     @Transactional(readOnly = true)
     public List<TrainerSummaryResponse> listTrainersForCourse(UUID courseId, boolean includeInactive) {
-        // Per-course enforcement: the controller's @RequiresFeature(BATCH_CREATION) only checks
-        // the union across all courses.
-        courseFeatureGuard.assertCourseFeature(courseId, FeatureKey.BATCH_CREATION);
+        // Per-course enforcement: the controller's @RequiresFeature only checks the union across all
+        // courses. Batch creation (the trainer picker) and Trainer registration (the Users screen) both
+        // need this list, so holding either on THIS course is enough.
+        courseFeatureGuard.assertAnyCourseFeature(courseId, FeatureKey.BATCH_CREATION, FeatureKey.TRAINER_REGISTRATION);
         UUID academyId = TenantContext.currentAcademyId();
 
         Map<UUID, Boolean> activeByMembership = courseMapRepository.findByCourseId(courseId).stream()

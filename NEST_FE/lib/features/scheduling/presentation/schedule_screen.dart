@@ -211,7 +211,10 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
     final feedAsync = ref.watch(scheduleFeedProvider(_feedKey));
     // Scoped to the caller's own courses - a Trainer granted one course must not be offered
     // the rest in this picker.
-    final coursesAsync = ref.watch(coursesForFeatureProvider(FeatureKeys.reschedule));
+    // The Schedule screen is opened by Batch scheduling OR Reschedule, so it offers the courses of whichever
+    // the person holds - not only the Reschedule ones.
+    final coursesAsync = ref.watch(
+        coursesForFeatureProvider('${FeatureKeys.batchScheduling},${FeatureKeys.reschedule}'));
 
     return Scaffold(
       backgroundColor: palette.bg,
