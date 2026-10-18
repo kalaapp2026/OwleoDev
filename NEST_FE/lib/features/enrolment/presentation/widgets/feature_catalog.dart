@@ -11,8 +11,10 @@ import 'package:nest_fe/core/auth/feature_keys.dart';
 /// non-delegable, so listing them would only produce a 403 at save time.
 const trainerGrantableFeatures = <String>[
   FeatureKeys.attendance,
+  // Scheduling the weekly time and rescheduling one class are a single box: they were two, and a
+  // trainer holding only one got an access error on the other half of the same screen. The box is
+  // keyed batchScheduling and stores RESCHEDULE alongside it on save (see the user form).
   FeatureKeys.batchScheduling,
-  FeatureKeys.reschedule,
   FeatureKeys.syllabusEdit,
   FeatureKeys.feesEntry,
   FeatureKeys.feesDashboard,
@@ -24,7 +26,7 @@ const trainerGrantableFeatures = <String>[
 
 const _labels = <String, String>{
   FeatureKeys.attendance: 'Attendance',
-  FeatureKeys.batchScheduling: 'Batch scheduling',
+  FeatureKeys.batchScheduling: 'Batch scheduling & reschedule',
   FeatureKeys.reschedule: 'Reschedule',
   FeatureKeys.syllabusEdit: 'Syllabus & study material',
   FeatureKeys.feesEntry: 'Fees entry',
@@ -40,7 +42,7 @@ const _labels = <String, String>{
 /// exposes the whole academy's revenue.
 const _descriptions = <String, String>{
   FeatureKeys.attendance: 'Mark and view attendance',
-  FeatureKeys.batchScheduling: 'Set and edit the weekly recurring timing',
+  FeatureKeys.batchScheduling: 'Set the weekly timing, and cancel or move a specific class',
   FeatureKeys.reschedule: 'Cancel or move a specific class',
   FeatureKeys.syllabusEdit: 'Add and update syllabus, songs and study material',
   FeatureKeys.feesEntry: 'Record a payment for a student',

@@ -228,6 +228,12 @@ class _UserFormScreenState extends ConsumerState<UserFormScreen> {
           final group = _AccessGroup('g${i++}');
           group.courseIds.add(entry.key);
           group.featureKeys.addAll(entry.value);
+          // Scheduling the weekly time and moving a single class are one permission on the form. Older
+          // grants may hold only one of the two keys; either shows the combined box as ticked.
+          if (entry.value.contains(FeatureKeys.reschedule)) {
+            group.featureKeys.add(FeatureKeys.batchScheduling);
+          }
+          group.featureKeys.remove(FeatureKeys.reschedule);
           group.batchIds.addAll(detail.courseBatches[entry.key] ?? const <String>{});
           _groups.add(group);
         }
@@ -559,6 +565,10 @@ class _UserFormScreenState extends ConsumerState<UserFormScreen> {
     for (final group in _groups) {
       for (final courseId in group.courseIds) {
         features[courseId] = {...group.featureKeys};
+        // The combined box stores both keys, so either screen works whichever one the server checks.
+        if (group.featureKeys.contains(FeatureKeys.batchScheduling)) {
+          features[courseId]!.add(FeatureKeys.reschedule);
+        }
         final own = group.batchIds
             .where((id) =>
                 allBatches.any((b) => b.id == id && b.courseId == courseId))
@@ -1572,7 +1582,9 @@ class _UserFormScreenState extends ConsumerState<UserFormScreen> {
     final grantable = isAdmin
         ? trainerGrantableFeatures
         : trainerGrantableFeatures
-            .where((f) => user?.hasFeature(f) ?? false)
+            .where((f) =>
+                (user?.hasFeature(f) ?? false) ||
+                (f == FeatureKeys.batchScheduling && (user?.hasFeature(FeatureKeys.reschedule) ?? false)))
             .toList();
 
     return [

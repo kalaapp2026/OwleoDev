@@ -16,6 +16,7 @@ import com.nest.app.identity.repository.UserRepository;
 import com.nest.common.crypto.PiiHasher;
 import com.nest.common.exception.BadRequestException;
 import com.nest.common.exception.ConflictException;
+import com.nest.common.security.FeatureKey;
 import com.nest.common.exception.ResourceNotFoundException;
 import com.nest.common.security.Role;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -324,9 +325,22 @@ public class IdentityRegistrationService {
     @Transactional
     public void replaceCourseFeatureGrants(UUID membershipId, Map<UUID, Set<String>> courseFeatures, UUID grantedBy) {
         courseFeatureGrantRepository.deleteByMembershipId(membershipId);
-        courseFeatures.forEach((courseId, features) -> features.forEach(key ->
+        courseFeatures.forEach((courseId, features) -> pairScheduling(features).forEach(key ->
                 courseFeatureGrantRepository.save(CourseFeatureGrant.builder()
                         .membershipId(membershipId).courseId(courseId).featureKey(key).grantedBy(grantedBy).build())));
+    }
+
+    /** Scheduling the weekly time and moving one class are a single permission on the form, so holding
+     * either key means holding both - otherwise a trainer reaches the Schedule screen and is refused
+     * on half of it. */
+    static Set<String> pairScheduling(Set<String> features) {
+        if (!features.contains(FeatureKey.BATCH_SCHEDULING) && !features.contains(FeatureKey.RESCHEDULE)) {
+            return features;
+        }
+        Set<String> paired = new java.util.HashSet<>(features);
+        paired.add(FeatureKey.BATCH_SCHEDULING);
+        paired.add(FeatureKey.RESCHEDULE);
+        return paired;
     }
 
     /** @param courseFees courseId -> agreed fee (null for Trainer mappings, which have no fee concept) */
