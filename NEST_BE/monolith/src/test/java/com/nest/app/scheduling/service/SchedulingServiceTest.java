@@ -60,7 +60,7 @@ class SchedulingServiceTest {
     void settingAScheduleIsRejectedWhenCallerLacksBatchSchedulingOnThisCourse() {
         newService();
         doThrow(new ForbiddenException("nope")).when(courseFeatureGuard)
-                .assertCourseFeature(courseId, FeatureKey.BATCH_SCHEDULING);
+                .assertAnyCourseFeature(courseId, FeatureKey.BATCH_CREATION, FeatureKey.BATCH_SCHEDULING);
 
         var request = new SetScheduleRequest(batchId,
                 List.of(new SlotRequest(DayOfWeek.MONDAY, LocalTime.of(17, 0), LocalTime.of(18, 0))),

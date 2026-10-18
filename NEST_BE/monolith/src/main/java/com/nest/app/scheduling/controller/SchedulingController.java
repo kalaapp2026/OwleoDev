@@ -43,7 +43,7 @@ public class SchedulingController {
     }
 
     @PostMapping("/schedules")
-    @RequiresFeature(FeatureKey.BATCH_SCHEDULING)
+    @RequiresFeature({FeatureKey.BATCH_CREATION, FeatureKey.BATCH_SCHEDULING})
     public List<ScheduleResponse> setSchedule(@Valid @RequestBody SetScheduleRequest request) {
         return schedulingService.setSchedule(request);
     }

@@ -70,9 +70,11 @@ public class SchedulingService {
     @Transactional
     @Auditable(action = "SCHEDULE_SET", entityType = "schedule")
     public List<ScheduleResponse> setSchedule(SetScheduleRequest request) {
-        // Per-course enforcement: the controller's @RequiresFeature(BATCH_SCHEDULING) only checks
+        // Batch creation OR Batch scheduling: a batch is created together with its weekly time, so someone
+        // who may create the batch may set its schedule. Per-course enforcement: the controller only checks
         // the union across all courses.
-        courseFeatureGuard.assertCourseFeature(courseIdOfBatch(request.batchId()), FeatureKey.BATCH_SCHEDULING);
+        courseFeatureGuard.assertAnyCourseFeature(courseIdOfBatch(request.batchId()),
+                FeatureKey.BATCH_CREATION, FeatureKey.BATCH_SCHEDULING);
         supersedeExistingSchedule(request.batchId(), request.effectiveFrom());
 
         List<Schedule> saved = new ArrayList<>();
