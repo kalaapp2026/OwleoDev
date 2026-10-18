@@ -56,7 +56,7 @@ class _EventFormScreenState extends ConsumerState<EventFormScreen> {
   late final _mapsController = TextEditingController(text: widget.existing?.venueMapsUrl);
 
   late String _type = widget.existing?.type ?? 'PROGRAMME';
-  late String _visibility = widget.existing?.visibility ?? 'PUBLIC';
+  late String _visibility = widget.existing?.visibility ?? 'INHOUSE';
   late String _status = widget.existing?.status == 'DRAFT' ? 'DRAFT' : 'PUBLISHED';
   late String _audienceType = widget.existing?.audienceType ?? 'ALL_STUDENTS';
   late Set<String> _courseIds = {...?widget.existing?.courseIds};
@@ -250,6 +250,10 @@ class _EventFormScreenState extends ConsumerState<EventFormScreen> {
             labelOf: (v) => v == 'PROGRAMME' ? 'Programme' : 'Looking for Artist',
             isSelected: (v) => v == _type,
             onTap: (v) => setState(() => _type = v),
+            // Looking for Artist is not open yet. An existing event that already uses it keeps it
+            // selected (and saves unchanged); nothing new can pick it.
+            isEnabled: (v) => v == 'PROGRAMME',
+            hintOf: (v) => v == 'PROGRAMME' ? null : 'Coming soon',
           ),
           const SizedBox(height: AppSpacing.xxl),
           _label('Event type'),
@@ -258,6 +262,10 @@ class _EventFormScreenState extends ConsumerState<EventFormScreen> {
             labelOf: (v) => v == 'INHOUSE' ? 'In-house' : 'Public',
             isSelected: (v) => v == _visibility,
             onTap: (v) => setState(() => _visibility = v),
+            // Public events (and their auto-published Social post) are not open yet - same rule as
+            // Category above.
+            isEnabled: (v) => v == 'INHOUSE',
+            hintOf: (v) => v == 'INHOUSE' ? null : 'Coming soon',
           ),
           if (_visibility == 'PUBLIC')
             Padding(

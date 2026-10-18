@@ -21,6 +21,8 @@ class AppSegmentedControl<T> extends StatelessWidget {
     required this.onTap,
     this.activeColorOf,
     this.activeTextColorOf,
+    this.isEnabled,
+    this.hintOf,
   });
 
   final List<T> options;
@@ -36,6 +38,12 @@ class AppSegmentedControl<T> extends StatelessWidget {
   /// surface, payment methods use gold.
   final Color Function(BuildContext, T)? activeColorOf;
   final Color Function(BuildContext, T)? activeTextColorOf;
+
+  /// An option that is shown but cannot be chosen yet. Null means every option is enabled.
+  final bool Function(T)? isEnabled;
+
+  /// A small line under an option's label - "Coming soon" on a disabled one.
+  final String? Function(T)? hintOf;
 
   @override
   Widget build(BuildContext context) {
@@ -77,6 +85,8 @@ class AppSegmentedControl<T> extends StatelessWidget {
                   // Divider on every segment but the last, so the pill's own rounded edge isn't
                   // cut by a stray vertical line.
                   showDivider: i < options.length - 1,
+                  enabled: isEnabled?.call(options[i]) ?? true,
+                  hint: hintOf?.call(options[i]),
                   onTap: () => onTap(options[i]),
                 ),
               ),
@@ -95,6 +105,8 @@ class _Segment extends StatelessWidget {
     required this.activeTextColor,
     required this.showDivider,
     required this.onTap,
+    this.enabled = true,
+    this.hint,
   });
 
   final String label;
@@ -103,13 +115,15 @@ class _Segment extends StatelessWidget {
   final Color activeTextColor;
   final bool showDivider;
   final VoidCallback onTap;
+  final bool enabled;
+  final String? hint;
 
   @override
   Widget build(BuildContext context) {
     final palette = context.palette;
 
     return Pressable(
-      onTap: onTap,
+      onTap: enabled ? onTap : null,
       child: AnimatedContainer(
         duration: AppMotion.fade,
         padding: const EdgeInsets.symmetric(vertical: 13),
@@ -129,15 +143,33 @@ class _Segment extends StatelessWidget {
               const SizedBox(width: AppSpacing.xs),
             ],
             Flexible(
-              child: Text(
-                label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: AppType.md,
-                  fontWeight: AppType.bold,
-                  color: selected ? activeTextColor : palette.text,
-                ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: AppType.md,
+                      fontWeight: AppType.bold,
+                      color: selected
+                          ? activeTextColor
+                          : (enabled ? palette.text : palette.textFaint),
+                    ),
+                  ),
+                  if (hint != null)
+                    Text(
+                      hint!,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: AppType.tiny,
+                        fontWeight: AppType.semi,
+                        color: selected ? activeTextColor : palette.gold,
+                      ),
+                    ),
+                ],
               ),
             ),
           ],
