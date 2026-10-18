@@ -29,6 +29,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -121,6 +122,38 @@ class RescheduleServiceTest {
         assertThat(saved.get(1).getStatus()).isEqualTo(ClassInstanceStatus.SCHEDULED);
         assertThat(saved.get(1).getOriginalInstanceId()).isEqualTo(originalId);
         assertThat(response.date()).isEqualTo(LocalDate.of(2026, 7, 11));
+    }
+
+    private ClassInstance scheduledNineToEleven(UUID id) {
+        return ClassInstance.builder()
+                .id(id).batchId(UUID.randomUUID()).date(LocalDate.of(2026, 10, 25))
+                .startTime(LocalTime.of(9, 0)).endTime(LocalTime.of(11, 0))
+                .status(ClassInstanceStatus.SCHEDULED)
+                .build();
+    }
+
+    @Test
+    void theSameDayIsAllowedWhenOnlyTheHoursMove() {
+        UUID id = UUID.randomUUID();
+        when(classInstanceRepository.findById(id)).thenReturn(Optional.of(scheduledNineToEleven(id)));
+        when(classInstanceRepository.save(any(ClassInstance.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        var response = rescheduleService.reschedule(id, new RescheduleRequest(
+                LocalDate.of(2026, 10, 25), LocalTime.of(9, 0), LocalTime.of(10, 0), "Instructor unavailable"));
+
+        assertThat(response.date()).isEqualTo(LocalDate.of(2026, 10, 25));
+        assertThat(response.endTime()).isEqualTo(LocalTime.of(10, 0));
+    }
+
+    @Test
+    void theSameDayAndSameHoursIsRefusedAsNothingToReschedule() {
+        UUID id = UUID.randomUUID();
+        when(classInstanceRepository.findById(id)).thenReturn(Optional.of(scheduledNineToEleven(id)));
+
+        assertThatThrownBy(() -> rescheduleService.reschedule(id, new RescheduleRequest(
+                LocalDate.of(2026, 10, 25), LocalTime.of(9, 0), LocalTime.of(11, 0), "Instructor unavailable")))
+                .isInstanceOf(BadRequestException.class);
+        verify(classInstanceRepository, never()).save(any(ClassInstance.class));
     }
 
     @Test

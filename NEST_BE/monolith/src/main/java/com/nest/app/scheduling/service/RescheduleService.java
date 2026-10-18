@@ -69,6 +69,14 @@ public class RescheduleService {
         }
         assertCanReschedule(original.getBatchId());
 
+        // Same day is allowed - the hours may be what moves - but the same day AND the same hours is
+        // nothing to reschedule, and would only leave an audit entry and a moved badge behind.
+        if (request.newDate().equals(original.getDate())
+                && request.newStartTime().equals(original.getStartTime())
+                && request.newEndTime().equals(original.getEndTime())) {
+            throw new BadRequestException("That is the class's current date and time - choose a different date or time.");
+        }
+
         original.setStatus(ClassInstanceStatus.RESCHEDULED_CANCELLED);
         original.setRescheduleReason(request.reason());
         classInstanceRepository.save(original);

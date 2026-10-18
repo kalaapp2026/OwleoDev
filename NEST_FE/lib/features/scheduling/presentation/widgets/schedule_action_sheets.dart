@@ -62,10 +62,18 @@ class _RescheduleSheetState extends State<_RescheduleSheet> {
       !_changeTime ||
       (_startTime != null && _endTime != null && _startTime! < _endTime!);
 
-  /// Moving a class to the day it is already on is a no-op that would still write an audit entry
-  /// and a "rescheduled" badge, so it is refused rather than silently accepted.
+  /// The same day is fine when the time moves - changing 9-11 to 9-10 is a reschedule. What is refused
+  /// is the true no-op (same day, same hours), which would still write an audit entry and a
+  /// "rescheduled" badge for nothing.
+  bool get _timeChanged {
+    if (!_changeTime) return false;
+    final oldStart = ClockTime.tryParse(widget.entry.startTime);
+    final oldEnd = ClockTime.tryParse(widget.entry.endTime);
+    return _startTime?.wire != oldStart?.wire || _endTime?.wire != oldEnd?.wire;
+  }
+
   bool get _valid =>
-      !_sameDay(_newDate, widget.entry.date) && _timeValid;
+      _timeValid && (!_sameDay(_newDate, widget.entry.date) || _timeChanged);
 
   static bool _sameDay(DateTime a, DateTime b) =>
       a.year == b.year && a.month == b.month && a.day == b.day;
@@ -160,7 +168,9 @@ class _RescheduleSheetState extends State<_RescheduleSheet> {
         ),
       ],
       footer: AppPrimaryButton(
-        label: 'Reschedule to ${formatFeeDate(_newDate)}',
+        label: _sameDay(_newDate, widget.entry.date)
+            ? 'Change time on ${formatFeeDate(_newDate)}'
+            : 'Reschedule to ${formatFeeDate(_newDate)}',
         icon: Icons.refresh,
         onPressed: _valid
             ? () => Navigator.of(context).pop(RescheduleOutcome(
@@ -177,7 +187,7 @@ class _RescheduleSheetState extends State<_RescheduleSheet> {
       footerNote: _valid
           ? null
           : _sameDay(_newDate, widget.entry.date)
-              ? 'Pick a different date to move this class to.'
+              ? 'Pick a different date, or turn on "Also change the time" and pick new hours.'
               : 'End time must be after start time.',
     );
   }
