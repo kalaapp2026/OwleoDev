@@ -145,6 +145,13 @@ class _UserFormScreenState extends ConsumerState<UserFormScreen> {
   ExistingAccountProfile? _link;
   bool get _linked => _link != null;
 
+  /// The person once the server has created them. If a step AFTER creation fails (placing the student in
+  /// a batch, say) the form stays open; pressing Create again must carry on from here, not register a
+  /// second time - which for a verified account fails with "confirmation has expired", because that
+  /// confirmation is single-use and the first attempt already spent it.
+  StudentRegistrationResult? _createdStudent;
+  TrainerRegistrationResult? _createdTrainer;
+
   /// Set of section keys currently open. The optional sections start closed so the required
   /// fields are not buried under a screenful of address inputs.
   final Set<String> _openSections = {'identity', 'personal'};
@@ -617,7 +624,7 @@ class _UserFormScreenState extends ConsumerState<UserFormScreen> {
           }
           return;
         }
-        final result = await api.registerTrainer(
+        final result = _createdTrainer ??= await api.registerTrainer(
           username: _usernameController.text.trim(),
           fullName: fullName,
           phone: phone,
@@ -668,7 +675,7 @@ class _UserFormScreenState extends ConsumerState<UserFormScreen> {
         }
         return;
       }
-      final result = await api.registerStudent(
+      final result = _createdStudent ??= await api.registerStudent(
         username: _usernameController.text.trim(),
         fullName: fullName,
         phone: phone,
@@ -702,8 +709,20 @@ class _UserFormScreenState extends ConsumerState<UserFormScreen> {
   }
 
   Future<void> _assignStudentBatches(EnrolmentApi api, String membershipId) async {
+    // One batch refusing must not strand the student: they exist now, and the rest can still be
+    // placed. Say which failed so it can be fixed from the batch screen.
+    final failures = <String>[];
     for (final batchId in _studentBatchIds) {
-      await api.addMember(batchId, membershipId);
+      try {
+        await api.addMember(batchId, membershipId);
+      } catch (e) {
+        failures.add(e.toString().replaceFirst('Exception: ', ''));
+      }
+    }
+    if (failures.isNotEmpty && mounted) {
+      showAppToast(context,
+          'Student added, but could not be placed in ${failures.length} batch(es): ${failures.first}',
+          error: true);
     }
   }
 
