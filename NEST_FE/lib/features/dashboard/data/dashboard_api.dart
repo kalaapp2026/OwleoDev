@@ -12,13 +12,20 @@ final dashboardStatsProvider = FutureProvider.autoDispose((ref) {
   return ref.watch(dashboardApiProvider).stats();
 });
 
+/// The Dashboard row's figures: only the courses the caller holds a feature on (an admin's are the whole
+/// academy). [dashboardStatsProvider] stays academy-wide for the About page.
+final myDashboardStatsProvider = FutureProvider.autoDispose((ref) {
+  ref.watch(activeMembershipIdProvider);
+  return ref.watch(dashboardApiProvider).stats(mine: true);
+});
+
 class DashboardApi {
   DashboardApi(this._client);
   final DioClient _client;
 
-  Future<DashboardStats> stats() {
+  Future<DashboardStats> stats({bool mine = false}) {
     return _client.call(
-      (dio) => dio.get('/dashboard/stats'),
+      (dio) => dio.get('/dashboard/stats', queryParameters: {if (mine) 'scope': 'mine'}),
       (data) => DashboardStats.fromJson(data as Map<String, dynamic>),
     );
   }

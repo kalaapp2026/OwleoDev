@@ -85,7 +85,8 @@ const kErpActions = <ErpAction>[
       anyOfFeatures: [FeatureKeys.studentRegistration, FeatureKeys.trainerRegistration]),
   // No requiredFeature - visibility of *content* lives inside the screen (course picker only
   // ever offers courses the caller can see), matching how Study Material's tile already works.
-  ErpAction(icon: Icons.school_outlined, label: 'Students', route: '/erp/students'),
+  ErpAction(icon: Icons.school_outlined, label: 'Students', route: '/erp/students',
+      anyOfFeatures: [FeatureKeys.batchCreation, FeatureKeys.studentRegistration]),
   // No adminOnly - every Student/Trainer/Admin can open this to view; the screen itself gates
   // editing on ABOUT_US_EDIT internally (see AcademyInfoScreen's canEdit).
   ErpAction(icon: Icons.apartment_outlined, label: 'Academy Profile', route: '/erp/academy'),
@@ -98,5 +99,6 @@ const kErpActions = <ErpAction>[
   // More grid - erpTabIndex-bound entries are filtered out there on purpose.
   ErpAction(icon: Icons.grid_view_outlined, label: 'Dashboard', erpTabIndex: 0),
   ErpAction(icon: Icons.fact_check_outlined, label: 'Attendance', erpTabIndex: 1, requiredFeature: FeatureKeys.attendance),
-  ErpAction(icon: Icons.account_balance_wallet_outlined, label: 'Fees', erpTabIndex: 3, requiredFeature: FeatureKeys.feesEntry),
+  ErpAction(icon: Icons.account_balance_wallet_outlined, label: 'Fees', erpTabIndex: 3,
+      anyOfFeatures: [FeatureKeys.feesEntry, FeatureKeys.feesDashboard]),
 ];

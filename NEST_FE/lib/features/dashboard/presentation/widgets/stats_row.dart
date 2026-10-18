@@ -4,16 +4,18 @@ import 'package:go_router/go_router.dart';
 import 'package:nest_fe/app/theme/app_tokens.dart';
 import 'package:nest_fe/app/theme/app_typography.dart';
 import 'package:nest_fe/core/design/pressable.dart';
-import 'package:nest_fe/features/curriculum/data/curriculum_api.dart';
+import 'package:nest_fe/core/auth/feature_keys.dart';
+import 'package:nest_fe/core/auth/session_controller.dart';
 import 'package:nest_fe/features/dashboard/data/dashboard_api.dart';
+import 'package:nest_fe/features/dashboard/data/dashboard_stats.dart';
 
-/// Courses / Batches / Students / Trainers, in that order to match the reference layout.
+/// Students / Trainers / Courses / Batches.
 ///
-/// Courses reads from [activeCoursesProvider] - the count the rest of the app already shows -
-/// rather than the new stats endpoint's own course count, so the two numbers can never disagree
-/// on screen. Students/Trainers have no roster screen to drill into yet, so those two tiles are
-/// informational only; Courses only navigates for an Academy Admin, since Course Creation itself
-/// is admin-only.
+/// Every figure comes from [myDashboardStatsProvider], which the server narrows to the courses the
+/// caller holds a feature on - a trainer granted Attendance on Guitar sees Guitar's headcount, not
+/// the academy's. Which tiles appear is narrowed the same way: a count of people or batches the
+/// caller's features never touch is noise. Courses only navigates for an Academy Admin, since
+/// Course Creation itself is admin-only.
 class DashboardStatsRow extends ConsumerWidget {
   const DashboardStatsRow({super.key, required this.isAdmin});
 
@@ -21,58 +23,71 @@ class DashboardStatsRow extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final coursesAsync = ref.watch(activeCoursesProvider);
-    final statsAsync = ref.watch(dashboardStatsProvider);
-
-    final courseCount = coursesAsync.maybeWhen(data: (c) => '${c.length}', orElse: () => '—');
-    final batchCount = statsAsync.maybeWhen(data: (s) => '${s.activeBatches}', orElse: () => '—');
-    final studentCount = statsAsync.maybeWhen(data: (s) => '${s.totalStudents}', orElse: () => '—');
-    final trainerCount = statsAsync.maybeWhen(data: (s) => '${s.totalTrainers}', orElse: () => '—');
+    final user = ref.watch(sessionControllerProvider).user;
+    final statsAsync = ref.watch(myDashboardStatsProvider);
+    bool holdsAny(List<String> keys) => isAdmin || (user != null && keys.any(user.hasFeature));
+    String stat(int Function(DashboardStats) pick) =>
+        statsAsync.maybeWhen(data: (s) => '${pick(s)}', orElse: () => '—');
 
     final palette = context.palette;
+    final tiles = <Widget>[
+      if (holdsAny([
+        FeatureKeys.attendance,
+        FeatureKeys.feesEntry,
+        FeatureKeys.feesDashboard,
+        FeatureKeys.studentRegistration,
+        FeatureKeys.batchCreation,
+      ]))
+        _StatTile(
+          icon: Icons.people_alt_outlined,
+          label: 'Students',
+          value: stat((s) => s.totalStudents),
+          color: palette.primary,
+          softColor: palette.primarySoft,
+        ),
+      if (holdsAny([
+        FeatureKeys.trainerRegistration,
+        FeatureKeys.batchCreation,
+        FeatureKeys.batchScheduling,
+        FeatureKeys.reschedule,
+      ]))
+        _StatTile(
+          icon: Icons.school_outlined,
+          label: 'Trainers',
+          value: stat((s) => s.totalTrainers),
+          color: palette.gold,
+          softColor: palette.goldSoft,
+        ),
+      _StatTile(
+        icon: Icons.auto_stories_outlined,
+        label: 'Courses',
+        value: stat((s) => s.activeCourses),
+        color: palette.violet,
+        softColor: palette.violetSoft,
+        onTap: isAdmin ? () => context.push('/erp/courses') : null,
+      ),
+      if (holdsAny([
+        FeatureKeys.batchCreation,
+        FeatureKeys.batchScheduling,
+        FeatureKeys.reschedule,
+        FeatureKeys.attendance,
+      ]))
+        _StatTile(
+          icon: Icons.groups_2_outlined,
+          label: 'Batches',
+          value: stat((s) => s.activeBatches),
+          color: palette.gateway,
+          softColor: palette.gatewaySoft,
+          onTap: holdsAny([FeatureKeys.batchCreation]) ? () => context.push('/erp/batches') : null,
+        ),
+    ];
+
     return Row(
       children: [
-        Expanded(
-          child: _StatTile(
-            icon: Icons.people_alt_outlined,
-            label: 'Students',
-            value: studentCount,
-            color: palette.primary,
-            softColor: palette.primarySoft,
-          ),
-        ),
-        const SizedBox(width: AppSpacing.sm),
-        Expanded(
-          child: _StatTile(
-            icon: Icons.school_outlined,
-            label: 'Trainers',
-            value: trainerCount,
-            color: palette.gold,
-            softColor: palette.goldSoft,
-          ),
-        ),
-        const SizedBox(width: AppSpacing.sm),
-        Expanded(
-          child: _StatTile(
-            icon: Icons.auto_stories_outlined,
-            label: 'Courses',
-            value: courseCount,
-            color: palette.violet,
-            softColor: palette.violetSoft,
-            onTap: isAdmin ? () => context.push('/erp/courses') : null,
-          ),
-        ),
-        const SizedBox(width: AppSpacing.sm),
-        Expanded(
-          child: _StatTile(
-            icon: Icons.groups_2_outlined,
-            label: 'Batches',
-            value: batchCount,
-            color: palette.gateway,
-            softColor: palette.gatewaySoft,
-            onTap: () => context.push('/erp/batches'),
-          ),
-        ),
+        for (var i = 0; i < tiles.length; i++) ...[
+          if (i > 0) const SizedBox(width: AppSpacing.sm),
+          Expanded(child: tiles[i]),
+        ],
       ],
     );
   }

@@ -106,8 +106,18 @@ class _AdminTrainerDashboardBody extends ConsumerWidget {
 
     final membership = user.activeMembership;
     final academyId = membership?.academyId;
-    final canSeeFees =
-        user.isActiveAcademyAdmin || user.hasFeature(FeatureKeys.feesEntry);
+    final isAdmin = user.isActiveAcademyAdmin;
+    bool holdsAny(List<String> keys) => isAdmin || keys.any(user.hasFeature);
+    // Each card appears only for someone holding a feature it belongs to - a trainer granted Fees
+    // entry on one course shouldn't be shown people-search or a schedule they have no business with.
+    final canSeeFees = holdsAny([FeatureKeys.feesEntry, FeatureKeys.feesDashboard]);
+    final canSeeSchedule =
+        holdsAny([FeatureKeys.attendance, FeatureKeys.reschedule, FeatureKeys.batchScheduling]);
+    final canSearchPeople = holdsAny([
+      FeatureKeys.studentRegistration,
+      FeatureKeys.trainerRegistration,
+      FeatureKeys.batchCreation,
+    ]);
 
     return RefreshIndicator(
       onRefresh: () => ref.refresh(activeCoursesProvider.future),
@@ -120,11 +130,13 @@ class _AdminTrainerDashboardBody extends ConsumerWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                DashboardStatsRow(isAdmin: user.isActiveAcademyAdmin),
+                DashboardStatsRow(isAdmin: isAdmin),
                 const SizedBox(height: AppSpacing.xl),
-                const _GlobalSearchBar(),
-                const SizedBox(height: AppSpacing.xxl),
-                const TodaysScheduleCard(),
+                if (canSearchPeople) ...[
+                  const _GlobalSearchBar(),
+                  const SizedBox(height: AppSpacing.xxl),
+                ],
+                if (canSeeSchedule) const TodaysScheduleCard(),
                 if (canSeeFees) ...[
                   const SizedBox(height: AppSpacing.xxl),
                   const RevenueDuesCard(),

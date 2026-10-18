@@ -72,9 +72,10 @@ class _StudentSearchScreenState extends ConsumerState<StudentSearchScreen> {
   Widget build(BuildContext context) {
     final palette = context.palette;
     final academyName = ref.watch(sessionControllerProvider).user?.activeMembership?.academyName;
-    // BATCH_CREATION, not STUDENT_REGISTRATION: that's what /courses/{id}/students is actually
-    // gated on server-side, so this never asks for a course the call would 403 on.
-    final coursesAsync = ref.watch(coursesForFeatureProvider(FeatureKeys.batchCreation));
+    // /courses/{id}/students is open to Batch creation OR Student registration, so the picker offers
+    // the courses of whichever the person holds - and never a course the call would 403 on.
+    final coursesAsync = ref.watch(
+        coursesForFeatureProvider('${FeatureKeys.batchCreation},${FeatureKeys.studentRegistration}'));
 
     return Scaffold(
       backgroundColor: palette.bg,
