@@ -13,7 +13,9 @@ import 'package:nest_fe/core/format/money.dart';
 import 'package:nest_fe/features/curriculum/data/study_material.dart';
 import 'package:nest_fe/features/curriculum/data/study_material_api.dart';
 import 'package:nest_fe/features/curriculum/presentation/file_viewer_screen.dart';
+import 'package:nest_fe/features/curriculum/presentation/material_library_screen.dart';
 import 'package:nest_fe/features/curriculum/presentation/upload_material_screen.dart';
+import 'package:nest_fe/features/curriculum/presentation/widgets/permission_badge.dart';
 
 enum MaterialSort {
   newest('Newest first'),
@@ -58,9 +60,13 @@ class _BatchMaterialScreenState extends ConsumerState<BatchMaterialScreen> {
   /// The second half became load-bearing when Course Materials merged in: the tile used to be
   /// gated on SYLLABUS_EDIT, so only editors ever arrived here. Everyone reads it now, and an
   /// upload button that 403s is worse than no button.
-  bool get _readOnly {
+  bool get _readOnly => _readOnlyFor(ref.watch(sessionControllerProvider).user);
+
+  /// The same rule for event handlers, which must read rather than watch.
+  bool _readOnlyNow() => _readOnlyFor(ref.read(sessionControllerProvider).user);
+
+  bool _readOnlyFor(dynamic user) {
     if (widget.studentPreview) return true;
-    final user = ref.watch(sessionControllerProvider).user;
     if (user == null) return true;
     if (user.isSuperAdmin || user.isActiveAcademyAdmin) return false;
     return !user.hasFeature(FeatureKeys.syllabusEdit);
@@ -84,9 +90,29 @@ class _BatchMaterialScreenState extends ConsumerState<BatchMaterialScreen> {
   /// Opens a file: the player for audio, a preview for documents and images.
   void _open(StudyMaterial material) {
     setState(() => _kebabFor = null);
-    Navigator.of(
-      context,
-    ).push(MaterialPageRoute(builder: (_) => FileViewerScreen(material: material)));
+    final editable = !_readOnlyNow();
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (viewerContext) => FileViewerScreen(
+          material: material,
+          onOpenLibrary: () => Navigator.of(viewerContext).push(
+            MaterialPageRoute(
+              builder: (_) => MaterialLibraryScreen(
+                fileType: material.fileType,
+                currentMaterialId: material.id,
+              ),
+            ),
+          ),
+          // Closes the viewer first, so saving lands back on this list rather than on a stale file.
+          onEdit: editable
+              ? () {
+                  Navigator.of(viewerContext).pop();
+                  _openUpload(existing: material);
+                }
+              : null,
+        ),
+      ),
+    );
   }
 
   Future<void> _openUpload({StudyMaterial? existing}) async {
@@ -660,7 +686,16 @@ class _MaterialRow extends StatelessWidget {
                     style: TextStyle(fontSize: AppType.sm, color: palette.textFaint),
                   ),
                   const SizedBox(height: 7),
-                  _permissionBadge(palette),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 4,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      PermissionBadge(permission: material.permission),
+                      if (!studentPreview && material.visibility == StudyMaterialVisibility.selected)
+                        _studentsBadge(palette),
+                    ],
+                  ),
                 ],
               ),
             ),
@@ -676,26 +711,27 @@ class _MaterialRow extends StatelessWidget {
     );
   }
 
-  Widget _permissionBadge(AppPalette palette) {
-    final permission = material.permission;
+  /// "3 students" - the file is restricted to a handful of people rather than the whole batch.
+  Widget _studentsBadge(AppPalette palette) {
+    final count = material.studentIds.length;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: 3),
       decoration: BoxDecoration(
-        color: permission.softColor(palette),
+        color: palette.goldSoft,
         borderRadius: AppRadii.all(AppRadii.pill),
-        border: Border.all(color: permission.color(palette).withValues(alpha: 0.33)),
+        border: Border.all(color: palette.gold.withValues(alpha: 0.33)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(permission.icon, size: 10.5, color: permission.color(palette)),
+          Icon(Icons.how_to_reg_outlined, size: 10, color: palette.gold),
           const SizedBox(width: AppSpacing.xxs),
           Text(
-            permission.label,
+            '$count student${count == 1 ? '' : 's'}',
             style: TextStyle(
               fontSize: AppType.tiny,
               fontWeight: AppType.heavy,
-              color: permission.color(palette),
+              color: palette.gold,
             ),
           ),
         ],
@@ -705,6 +741,7 @@ class _MaterialRow extends StatelessWidget {
 
   Widget _kebab(AppPalette palette) {
     final actions = <(String, bool, VoidCallback)>[
+      ('View file', false, onOpen),
       ('Edit details', false, onEdit),
       (
         material.isDownloadable ? 'Mark as view only' : 'Mark as downloadable',

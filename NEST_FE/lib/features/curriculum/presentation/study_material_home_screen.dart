@@ -10,7 +10,9 @@ import 'package:nest_fe/core/design/pressable.dart';
 import 'package:nest_fe/core/format/money.dart';
 import 'package:nest_fe/features/curriculum/data/study_material.dart';
 import 'package:nest_fe/features/curriculum/data/study_material_api.dart';
+import 'package:nest_fe/core/design/toast.dart';
 import 'package:nest_fe/features/curriculum/presentation/batch_material_screen.dart';
+import 'package:nest_fe/features/curriculum/presentation/file_viewer_screen.dart';
 import 'package:nest_fe/features/curriculum/presentation/material_library_screen.dart';
 import 'package:nest_fe/features/curriculum/presentation/playlists_screen.dart';
 import 'package:nest_fe/core/auth/session_controller.dart';
@@ -210,7 +212,13 @@ class _StudyMaterialHomeScreenState extends ConsumerState<StudyMaterialHomeScree
             )),
           const SizedBox(width: AppSpacing.lg),
           Pressable(
-            onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const PlaylistsScreen())),
+            onTap: () => Navigator.of(context).push(MaterialPageRoute(
+              builder: (_) => PlaylistsScreen(
+                onOpenLibrary: () => Navigator.of(context).push(MaterialPageRoute(
+                  builder: (_) => const MaterialLibraryScreen(fileType: StudyMaterialType.audio),
+                )),
+              ),
+            )),
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl, vertical: AppSpacing.md),
               decoration: BoxDecoration(
@@ -531,25 +539,57 @@ class _BatchRow extends StatelessWidget {
   }
 }
 
-/// A shortcut into one of the cross-batch libraries.
+/// A shortcut into one of the cross-batch libraries - or, for audio, straight into the player.
 ///
 /// Icon-only: three of them sit in a row beside the category filter, and labelled buttons would
 /// crowd out the filter itself on a phone.
-class _LibraryButton extends StatelessWidget {
+class _LibraryButton extends ConsumerWidget {
   const _LibraryButton({required this.type});
 
   final StudyMaterialType type;
 
+  /// Opens the newest song. The player has its own library button, so the way to the full list
+  /// is one tap further in - and the song you were most likely after is already playing.
+  Future<void> _playLatest(BuildContext context, WidgetRef ref) async {
+    try {
+      final songs = await ref.read(materialLibraryProvider(StudyMaterialType.audio).future);
+      if (!context.mounted) return;
+      if (songs.isEmpty) {
+        showAppToast(context, 'No audio files yet');
+        return;
+      }
+      final latest = ([...songs]..sort((a, b) => b.uploadedAt.compareTo(a.uploadedAt))).first;
+      await Navigator.of(context).push(MaterialPageRoute(
+        builder: (viewerContext) => FileViewerScreen(
+          material: latest,
+          onOpenLibrary: () => Navigator.of(viewerContext).push(MaterialPageRoute(
+            builder: (_) => MaterialLibraryScreen(
+              fileType: StudyMaterialType.audio,
+              currentMaterialId: latest.id,
+            ),
+          )),
+        ),
+      ));
+    } catch (e) {
+      if (context.mounted) {
+        showAppToast(context, e.toString().replaceFirst('Exception: ', ''), error: true);
+      }
+    }
+  }
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final palette = context.palette;
     final accent = type.color(palette);
+    final isAudio = type == StudyMaterialType.audio;
     return Tooltip(
-      message: '${type.label} library',
+      message: isAudio ? 'Play latest audio' : '${type.label} library',
       child: Pressable(
-        onTap: () => Navigator.of(context).push(MaterialPageRoute(
-          builder: (_) => MaterialLibraryScreen(fileType: type),
-        )),
+        onTap: () => isAudio
+            ? _playLatest(context, ref)
+            : Navigator.of(context).push(MaterialPageRoute(
+                builder: (_) => MaterialLibraryScreen(fileType: type),
+              )),
         child: Container(
           height: 34,
           width: 34,

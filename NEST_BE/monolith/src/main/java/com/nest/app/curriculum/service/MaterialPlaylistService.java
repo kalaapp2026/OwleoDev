@@ -80,7 +80,7 @@ public class MaterialPlaylistService {
         if (name == null || name.isBlank()) {
             throw new BadRequestException("Give this playlist a name");
         }
-        MaterialPlaylist playlist = playlistRepository.save(MaterialPlaylist.builder()
+        MaterialPlaylist playlist = playlistRepository.saveAndFlush(MaterialPlaylist.builder()
                 .membershipId(currentMembershipId())
                 .academyId(TenantContext.currentAcademyId())
                 .name(name.trim())

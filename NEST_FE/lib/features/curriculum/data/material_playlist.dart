@@ -25,7 +25,8 @@ class MaterialPlaylist {
   factory MaterialPlaylist.fromJson(Map<String, dynamic> json) => MaterialPlaylist(
         id: json['id'] as String,
         name: json['name'] as String? ?? 'Untitled',
-        createdAt: DateTime.parse(json['createdAt'] as String),
+        // Absent on a playlist that has only just been created, before its row is flushed.
+        createdAt: DateTime.tryParse(json['createdAt'] as String? ?? '') ?? DateTime.now(),
         entries: ((json['entries'] as List?) ?? const [])
             .map((e) => PlaylistEntry.fromJson(e as Map<String, dynamic>))
             .toList(),
