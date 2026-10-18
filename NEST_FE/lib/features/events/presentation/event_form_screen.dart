@@ -7,7 +7,7 @@ import 'package:nest_fe/core/design/app_top_bar.dart';
 import 'package:nest_fe/core/design/buttons.dart';
 import 'package:nest_fe/core/design/calendar_modal.dart';
 import 'package:nest_fe/core/design/people_picker_sheet.dart';
-import 'package:nest_fe/core/design/segmented_control.dart';
+import 'package:nest_fe/core/design/choice_chips.dart';
 import 'package:nest_fe/core/design/sheets.dart';
 import 'package:nest_fe/core/design/time_picker_sheet.dart';
 import 'package:nest_fe/core/error/api_exception.dart';
@@ -68,7 +68,7 @@ class _EventFormScreenState extends ConsumerState<EventFormScreen> {
   late final _locationController = TextEditingController(text: widget.existing?.location);
   late final _mapsController = TextEditingController(text: widget.existing?.venueMapsUrl);
 
-  late String _type = widget.existing?.type ?? 'PROGRAMME';
+  late final String _type = widget.existing?.type ?? 'PROGRAMME';
   late String _visibility = widget.existing?.visibility ?? 'INHOUSE';
   late String _status = widget.existing?.status == 'DRAFT' ? 'DRAFT' : 'PUBLISHED';
   late String _audienceType = widget.existing?.audienceType ?? 'ALL_STUDENTS';
@@ -281,26 +281,17 @@ class _EventFormScreenState extends ConsumerState<EventFormScreen> {
           _label('Event title'),
           _textField(_titleController, 'e.g. Annual Day 2026'),
           const SizedBox(height: AppSpacing.xxl),
-          _label('Category'),
-          AppSegmentedControl<String>(
-            options: const ['PROGRAMME', 'LOOKING_FOR_ARTIST'],
-            labelOf: (v) => v == 'PROGRAMME' ? 'Programme' : 'Looking for Artist',
-            isSelected: (v) => v == _type,
-            onTap: (v) => setState(() => _type = v),
-            // Looking for Artist is not open yet. An existing event that already uses it keeps it
-            // selected (and saves unchanged); nothing new can pick it.
-            isEnabled: (v) => v == 'PROGRAMME',
-            hintOf: (v) => v == 'PROGRAMME' ? null : 'Coming soon',
-          ),
-          const SizedBox(height: AppSpacing.xxl),
+          // There is no Category row: a new event is always a Programme (Looking for Artist is not
+          // open yet), and an existing event keeps whatever type it already has via [_type].
           _label('Event type'),
-          AppSegmentedControl<String>(
+          AppChoiceChips<String>(
             options: const ['INHOUSE', 'PUBLIC'],
             labelOf: (v) => v == 'INHOUSE' ? 'In-house' : 'Public',
+            iconOf: (v) => v == 'INHOUSE' ? Icons.home_outlined : Icons.public,
             isSelected: (v) => v == _visibility,
             onTap: (v) => setState(() => _visibility = v),
-            // Public events (and their auto-published Social post) are not open yet - same rule as
-            // Category above.
+            // Public events (and their auto-published Social post) are not open yet. An existing
+            // public event stays selected and saves unchanged until it is switched to In-house.
             isEnabled: (v) => v == 'INHOUSE',
             hintOf: (v) => v == 'INHOUSE' ? null : 'Coming soon',
           ),
@@ -401,11 +392,13 @@ class _EventFormScreenState extends ConsumerState<EventFormScreen> {
           ),
           const SizedBox(height: AppSpacing.xxl),
           _label('Status'),
-          AppSegmentedControl<String>(
+          AppChoiceChips<String>(
             options: const ['PUBLISHED', 'DRAFT'],
             labelOf: (v) => v == 'PUBLISHED' ? 'Published' : 'Draft',
             isSelected: (v) => v == _status,
-            onTap: _isEditing ? (_) {} : (v) => setState(() => _status = v),
+            onTap: (v) => setState(() => _status = v),
+            // Status only changes through Cancel/Restore once an event exists.
+            isEnabled: (_) => !_isEditing,
           ),
           if (_isEditing)
             Padding(
@@ -594,7 +587,7 @@ class _EventFormScreenState extends ConsumerState<EventFormScreen> {
 
   Widget _label(String text) => Padding(
         padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-        child: Text(text,
+        child: Text(text.toUpperCase(),
             style: TextStyle(fontSize: AppType.xs, fontWeight: AppType.bold, color: context.palette.textMuted, letterSpacing: 0.5)),
       );
 

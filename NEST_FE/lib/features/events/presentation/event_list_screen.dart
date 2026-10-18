@@ -6,7 +6,7 @@ import 'package:nest_fe/core/auth/session_controller.dart';
 import 'package:nest_fe/core/design/app_top_bar.dart';
 import 'package:nest_fe/core/design/calendar_modal.dart';
 import 'package:nest_fe/core/design/pressable.dart';
-import 'package:nest_fe/core/design/segmented_control.dart';
+import 'package:nest_fe/core/design/choice_chips.dart';
 import 'package:nest_fe/core/design/status_badge.dart';
 import 'package:nest_fe/core/format/money.dart';
 import 'package:nest_fe/core/widgets/async_value_view.dart';
@@ -219,7 +219,7 @@ class _EventListScreenState extends ConsumerState<EventListScreen> {
                       ),
                     ),
                     const SizedBox(height: AppSpacing.md),
-                    AppSegmentedControl<String>(
+                    AppChoiceChips<String>(
                       options: const ['upcoming', 'past'],
                       labelOf: (v) => v == 'upcoming' ? 'Upcoming' : 'Past',
                       isSelected: (v) => v == _tab,
