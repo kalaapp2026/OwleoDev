@@ -6,6 +6,7 @@ import 'package:nest_fe/features/messages/data/broadcast.dart';
 const _fallbackAudienceLabels = {
   'ALL_STUDENTS': 'All students',
   'ALL_TRAINERS': 'All trainers',
+  'EVERYONE': 'Everyone',
   'BY_COURSE': 'By course',
   'BY_BATCH': 'By batch',
   'INDIVIDUALS': 'Individuals',
@@ -18,6 +19,7 @@ String audienceLabelOf(Broadcast b) => b.audienceLabel ?? _fallbackAudienceLabel
 /// Each audience keeps one colour so a glance down the list shows who a message went to.
 ({Color color, Color soft}) audienceTone(AppPalette palette, String audienceType) => switch (audienceType) {
       'ALL_TRAINERS' => (color: palette.gateway, soft: palette.gatewaySoft),
+      'EVERYONE' => (color: palette.coral, soft: palette.coralSoft),
       'BY_COURSE' => (color: palette.primary, soft: palette.primarySoft),
       'BY_BATCH' => (color: palette.gold, soft: palette.goldSoft),
       'INDIVIDUALS' => (color: palette.violet, soft: palette.violetSoft),

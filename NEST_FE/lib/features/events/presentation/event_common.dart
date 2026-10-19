@@ -27,6 +27,7 @@ final courseCategoriesProvider = Provider.autoDispose<Map<String, CourseCategory
 const audienceLabels = {
   'ALL_STUDENTS': 'All students',
   'ALL_TRAINERS': 'All trainers',
+  'EVERYONE': 'Everyone',
   'BY_COURSE': 'By course',
   'BY_BATCH': 'By batch',
   'INDIVIDUALS': 'Individuals',
@@ -40,6 +41,8 @@ Color audienceColor(AppPalette palette, Event event, Map<String, CourseCategory>
       return palette.gold;
     case 'ALL_TRAINERS':
       return palette.gateway;
+    case 'EVERYONE':
+      return palette.coral;
     case 'INDIVIDUALS':
       return palette.violet;
     case 'BY_COURSE':
@@ -171,4 +174,39 @@ List<PopupMenuEntry<EventMenuAction>> eventMenuItems(BuildContext context, {requ
           item(EventMenuAction.cancel, 'Cancel event', isDanger: true),
           item(EventMenuAction.delete, 'Delete event', isDanger: true),
         ];
+}
+
+/// The three-dots button on an event: a small bordered square sitting flush at the card's right
+/// edge, as in the reference. (A bare [PopupMenuButton] reserves a 48px tap area with no frame, which
+/// is what pushed the button away from the edge and left it looking unfinished.)
+class EventMenuButton extends StatelessWidget {
+  const EventMenuButton({super.key, required this.cancelled, required this.onSelected, this.includeEdit = true});
+
+  final bool cancelled;
+  final bool includeEdit;
+  final ValueChanged<EventMenuAction> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.palette;
+    return PopupMenuButton<EventMenuAction>(
+      padding: EdgeInsets.zero,
+      tooltip: 'More',
+      color: palette.surface,
+      offset: const Offset(0, 34),
+      shape: RoundedRectangleBorder(borderRadius: AppRadii.all(AppRadii.xl), side: BorderSide(color: palette.border)),
+      onSelected: onSelected,
+      itemBuilder: (context) => eventMenuItems(context, cancelled: cancelled, includeEdit: includeEdit),
+      child: Container(
+        width: 30,
+        height: 30,
+        decoration: BoxDecoration(
+          color: palette.surfaceRaised,
+          borderRadius: AppRadii.all(AppRadii.md),
+          border: Border.all(color: palette.border),
+        ),
+        child: Icon(Icons.more_vert, size: 15, color: palette.textMuted),
+      ),
+    );
+  }
 }

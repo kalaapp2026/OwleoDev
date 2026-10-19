@@ -76,7 +76,7 @@ public class EventService {
 
     /** A per-course delegable feature only means something when the event actually names a
      * course - BY_COURSE directly, BY_BATCH indirectly through the batch's own course. The other
-     * audience types (ALL_STUDENTS/ALL_TRAINERS/INDIVIDUALS) are academy-wide by construction, so
+     * audience types (ALL_STUDENTS/ALL_TRAINERS/EVERYONE/INDIVIDUALS) are academy-wide by construction, so
      * there is no specific course to check beyond the controller's own coarse
      * @RequiresFeature(EVENT_MANAGEMENT) union gate. */
     private void assertCanTargetAudience(EventAudienceType audienceType, Set<UUID> courseIds, Set<UUID> batchIds) {
@@ -205,7 +205,7 @@ public class EventService {
         if (e.getStatus() == EventStatus.DRAFT) return false;
         UUID me = claim.membershipId();
         return switch (e.getAudienceType()) {
-            case ALL_STUDENTS -> true;
+            case ALL_STUDENTS, EVERYONE -> true;
             case ALL_TRAINERS -> false;
             case INDIVIDUALS -> e.getIndividualIds().contains(me)
                     || e.getIndividualIds().contains(TenantContext.currentUserId());
@@ -247,7 +247,7 @@ public class EventService {
     }
 
     /**
-     * The trainers an event reaches: every active trainer for ALL_TRAINERS, or the trainers among
+     * The trainers an event reaches: every active trainer for ALL_TRAINERS or EVERYONE, or the trainers among
      * the named individuals. Only for a caller who can manage events in the event's own academy -
      * this endpoint is otherwise open, and who a staff event notifies is not for everyone.
      */
@@ -263,7 +263,7 @@ public class EventService {
             return List.of();
         }
         List<AcademyMembership> trainers = switch (event.getAudienceType()) {
-            case ALL_TRAINERS -> membershipRepository.findByAcademyIdAndRoleTypeAndStatus(
+            case ALL_TRAINERS, EVERYONE -> membershipRepository.findByAcademyIdAndRoleTypeAndStatus(
                     event.getAcademyId(), Role.TRAINER, MembershipStatus.ACTIVE);
             case INDIVIDUALS -> event.getIndividualIds().isEmpty() ? List.<AcademyMembership>of()
                     : membershipRepository.findAllById(event.getIndividualIds()).stream()
@@ -313,6 +313,9 @@ public class EventService {
                     .countByAcademyIdAndRoleTypeAndStatus(event.getAcademyId(), Role.STUDENT, MembershipStatus.ACTIVE);
             case ALL_TRAINERS -> (int) membershipRepository
                     .countByAcademyIdAndRoleTypeAndStatus(event.getAcademyId(), Role.TRAINER, MembershipStatus.ACTIVE);
+            case EVERYONE -> (int) (membershipRepository
+                    .countByAcademyIdAndRoleTypeAndStatus(event.getAcademyId(), Role.STUDENT, MembershipStatus.ACTIVE)
+                    + membershipRepository.countByAcademyIdAndRoleTypeAndStatus(event.getAcademyId(), Role.TRAINER, MembershipStatus.ACTIVE));
             case BY_COURSE -> {
                 if (event.getCourseIds().isEmpty()) yield 0;
                 Set<UUID> batchIds = batchRepository.findByCourseIdIn(event.getCourseIds()).stream()

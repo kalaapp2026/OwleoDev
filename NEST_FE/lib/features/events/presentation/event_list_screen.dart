@@ -87,6 +87,7 @@ class _EventListScreenState extends ConsumerState<EventListScreen> {
       marksKey: [
         CalendarKeyEntry('All students', palette.gold),
         CalendarKeyEntry('All trainers', palette.gateway),
+        CalendarKeyEntry('Everyone', palette.coral),
         CalendarKeyEntry('Course / Batch', palette.primary),
         CalendarKeyEntry('Individuals', palette.violet),
       ],
@@ -399,14 +400,7 @@ class _EventRow extends StatelessWidget {
                   ],
                 ),
               ),
-              PopupMenuButton<EventMenuAction>(
-                icon: Icon(Icons.more_vert, size: 18, color: palette.textMuted),
-                padding: EdgeInsets.zero,
-                color: palette.surface,
-                shape: RoundedRectangleBorder(borderRadius: AppRadii.all(AppRadii.xl), side: BorderSide(color: palette.border)),
-                onSelected: onMenu,
-                itemBuilder: (context) => eventMenuItems(context, cancelled: cancelled),
-              ),
+              EventMenuButton(cancelled: cancelled, onSelected: onMenu),
             ],
           ),
         ),

@@ -317,4 +317,33 @@ class EventServiceTest {
         assertThat(eventService.interestsFor(eventId).trainers()).isEmpty();
         verify(membershipRepository, never()).findByAcademyIdAndRoleTypeAndStatus(any(), any(), any());
     }
+
+    @Test
+    void everyoneInvitesTheStudentsAndTheTrainers() {
+        stubSaveToEcho();
+        when(membershipRepository.countByAcademyIdAndRoleTypeAndStatus(academyId, Role.STUDENT, MembershipStatus.ACTIVE)).thenReturn(22L);
+        when(membershipRepository.countByAcademyIdAndRoleTypeAndStatus(academyId, Role.TRAINER, MembershipStatus.ACTIVE)).thenReturn(5L);
+        when(interestRepository.countByEventId(any())).thenReturn(0L);
+
+        EventResponse response = eventService.create(baseRequest(EventAudienceType.EVERYONE, EventStatus.DRAFT, EventVisibility.INHOUSE));
+
+        assertThat(response.invitedCount()).isEqualTo(27);
+        assertThat(response.audienceType()).isEqualTo(EventAudienceType.EVERYONE);
+    }
+
+    @Test
+    void anEveryoneEventListsAllTheTrainersItNotifies() {
+        UUID eventId = UUID.randomUUID();
+        UUID trainerMembership = UUID.randomUUID();
+        UUID trainerUser = UUID.randomUUID();
+        when(interestRepository.findByEventId(eventId)).thenReturn(List.of());
+        when(eventRepository.findById(eventId)).thenReturn(java.util.Optional.of(
+                trainersEvent(eventId, academyId, EventAudienceType.EVERYONE, Set.of())));
+        when(membershipRepository.findByAcademyIdAndRoleTypeAndStatus(academyId, Role.TRAINER, MembershipStatus.ACTIVE))
+                .thenReturn(List.of(trainer(trainerMembership, trainerUser)));
+        when(userRepository.findAllById(any())).thenReturn(List.of(
+                com.nest.app.identity.entity.User.builder().id(trainerUser).fullName("Rahul Nair").build()));
+
+        assertThat(eventService.interestsFor(eventId).trainers()).extracting("fullName").containsExactly("Rahul Nair");
+    }
 }

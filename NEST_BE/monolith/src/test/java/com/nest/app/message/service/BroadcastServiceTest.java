@@ -251,4 +251,26 @@ class BroadcastServiceTest {
         assertThat(results).hasSize(1);
         assertThat(results.get(0).title()).isEqualTo("A");
     }
+
+    @Test
+    void everyoneReachesEveryActiveStudentAndTrainer() {
+        actingAsAdmin();
+        UUID student = UUID.randomUUID();
+        UUID trainer = UUID.randomUUID();
+        UUID studentUser = UUID.randomUUID();
+        UUID trainerUser = UUID.randomUUID();
+        when(membershipRepository.findByAcademyIdAndRoleTypeAndStatus(academyId, Role.STUDENT, MembershipStatus.ACTIVE))
+                .thenReturn(List.of(active(student, studentUser)));
+        when(membershipRepository.findByAcademyIdAndRoleTypeAndStatus(academyId, Role.TRAINER, MembershipStatus.ACTIVE))
+                .thenReturn(List.of(active(trainer, trainerUser)));
+        when(membershipRepository.findAllById(Set.of(student, trainer))).thenReturn(List.of(
+                active(student, studentUser), active(trainer, trainerUser)));
+
+        var response = broadcastService.create(new CreateBroadcastRequest("Hi", "Hello all", EventAudienceType.EVERYONE, null, null, null));
+
+        assertThat(response.recipientCount()).isEqualTo(2);
+        assertThat(response.audienceLabel()).isEqualTo("Everyone");
+        verify(notificationService).notifyBroadcast(eq(studentUser), any(), any(), any(), any(), any());
+        verify(notificationService).notifyBroadcast(eq(trainerUser), any(), any(), any(), any(), any());
+    }
 }

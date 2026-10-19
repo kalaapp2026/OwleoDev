@@ -100,6 +100,7 @@ class StudentEventVisibilityTest {
         when(eventRepository.findByAcademyId(academyId)).thenReturn(List.of(
                 event("everyone", EventAudienceType.ALL_STUDENTS, EventStatus.PUBLISHED, Set.of(), Set.of(), Set.of()),
                 event("trainers only", EventAudienceType.ALL_TRAINERS, EventStatus.PUBLISHED, Set.of(), Set.of(), Set.of()),
+                event("students and trainers", EventAudienceType.EVERYONE, EventStatus.PUBLISHED, Set.of(), Set.of(), Set.of()),
                 event("my course", EventAudienceType.BY_COURSE, EventStatus.PUBLISHED, Set.of(myCourse), Set.of(), Set.of()),
                 event("other course", EventAudienceType.BY_COURSE, EventStatus.PUBLISHED, Set.of(UUID.randomUUID()), Set.of(), Set.of()),
                 event("my batch", EventAudienceType.BY_BATCH, EventStatus.PUBLISHED, Set.of(), Set.of(myBatch), Set.of()),
@@ -108,7 +109,7 @@ class StudentEventVisibilityTest {
                 event("not invited", EventAudienceType.INDIVIDUALS, EventStatus.PUBLISHED, Set.of(), Set.of(), Set.of(UUID.randomUUID())),
                 event("draft", EventAudienceType.ALL_STUDENTS, EventStatus.DRAFT, Set.of(), Set.of(), Set.of())));
 
-        assertThat(titlesSeen()).containsExactlyInAnyOrder("everyone", "my course", "my batch", "invited");
+        assertThat(titlesSeen()).containsExactlyInAnyOrder("everyone", "students and trainers", "my course", "my batch", "invited");
     }
 
     @Test

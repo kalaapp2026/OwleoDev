@@ -6,6 +6,9 @@ package com.nest.app.event.entity;
 public enum EventAudienceType {
     ALL_STUDENTS,
     ALL_TRAINERS,
+    /** Every active student AND every active trainer - one audience for both, instead of making
+     * the admin pick between them. */
+    EVERYONE,
     BY_COURSE,
     BY_BATCH,
     INDIVIDUALS

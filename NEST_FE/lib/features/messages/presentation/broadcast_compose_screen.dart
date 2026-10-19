@@ -19,6 +19,7 @@ const _maxBodyLength = 500;
 const _audienceOptions = [
   ('ALL_STUDENTS', 'All students'),
   ('ALL_TRAINERS', 'All trainers'),
+  ('EVERYONE', 'Everyone'),
   ('BY_COURSE', 'By course'),
   ('BY_BATCH', 'By batch'),
   ('INDIVIDUALS', 'Individuals'),

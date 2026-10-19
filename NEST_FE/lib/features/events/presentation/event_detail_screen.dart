@@ -119,22 +119,24 @@ class _Body extends ConsumerWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  Flexible(child: StatusBadge(label: audienceLabels[event.audienceType] ?? event.audienceType, color: accent)),
-                  const Spacer(),
+                  // One expanding slot, not Flexible + Spacer: those two split the free space evenly and
+                  // whatever the badge doesn't fill is left empty at the row's end, which pushed the
+                  // type label and menu away from the card's right edge.
+                  Expanded(
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: StatusBadge(label: audienceLabels[event.audienceType] ?? event.audienceType, color: accent),
+                    ),
+                  ),
                   Icon(isPublic ? Icons.public : Icons.home_outlined, size: 12, color: palette.textFaint),
                   const SizedBox(width: 4),
                   Text(isPublic ? 'Public' : 'In-house',
                       style: TextStyle(fontSize: AppType.xs, fontWeight: AppType.bold, color: palette.textMuted)),
-                  PopupMenuButton<EventMenuAction>(
-                    icon: Icon(Icons.more_vert, size: 18, color: palette.textMuted),
-                    padding: EdgeInsets.zero,
-                    color: palette.surface,
-                    shape: RoundedRectangleBorder(borderRadius: AppRadii.all(AppRadii.xl), side: BorderSide(color: palette.border)),
-                    onSelected: (a) => _onMenu(context, ref, a),
-                    // Edit has its own button below, so the menu skips it here.
-                    itemBuilder: (context) => eventMenuItems(context, cancelled: cancelled, includeEdit: false),
-                  ),
+                  const SizedBox(width: AppSpacing.lg),
+                  // Edit has its own button below, so the menu skips it here.
+                  EventMenuButton(cancelled: cancelled, includeEdit: false, onSelected: (a) => _onMenu(context, ref, a)),
                 ],
               ),
               const SizedBox(height: AppSpacing.sm),

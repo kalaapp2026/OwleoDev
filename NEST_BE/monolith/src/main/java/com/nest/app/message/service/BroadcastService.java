@@ -208,6 +208,14 @@ public class BroadcastService {
             case ALL_TRAINERS -> membershipRepository
                     .findByAcademyIdAndRoleTypeAndStatus(academyId, Role.TRAINER, MembershipStatus.ACTIVE).stream()
                     .map(AcademyMembership::getId).collect(Collectors.toSet());
+            case EVERYONE -> {
+                Set<UUID> everyone = new HashSet<>();
+                for (Role role : List.of(Role.STUDENT, Role.TRAINER)) {
+                    membershipRepository.findByAcademyIdAndRoleTypeAndStatus(academyId, role, MembershipStatus.ACTIVE)
+                            .forEach(m -> everyone.add(m.getId()));
+                }
+                yield everyone;
+            }
             case BY_COURSE -> {
                 if (courseIds.isEmpty()) {
                     yield Set.of();
@@ -242,6 +250,7 @@ public class BroadcastService {
             labels.put(b.getId(), switch (b.getAudienceType()) {
                 case ALL_STUDENTS -> "All students";
                 case ALL_TRAINERS -> "All trainers";
+                case EVERYONE -> "Everyone";
                 case BY_COURSE -> joinNames(b.getCourseIds(), courseNames, "Courses");
                 case BY_BATCH -> joinNames(b.getBatchIds(), batchNames, "Batches");
                 case INDIVIDUALS -> b.getIndividualIds().size() + (b.getIndividualIds().size() == 1 ? " individual" : " individuals");

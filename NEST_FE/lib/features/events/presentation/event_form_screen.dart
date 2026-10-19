@@ -35,6 +35,7 @@ Future<String?> openEventForm(BuildContext context, {Event? existing}) {
 const _audienceOptions = [
   ('ALL_STUDENTS', 'All students', Icons.groups_outlined),
   ('ALL_TRAINERS', 'All trainers', Icons.badge_outlined),
+  ('EVERYONE', 'Everyone (students & trainers)', Icons.diversity_3_outlined),
   ('BY_COURSE', 'By course', Icons.auto_stories_outlined),
   ('BY_BATCH', 'By batch', Icons.grid_view_outlined),
   ('INDIVIDUALS', 'Individuals', Icons.person_outline),
@@ -513,6 +514,8 @@ class _EventFormScreenState extends ConsumerState<EventFormScreen> {
         ? palette.gold
         : value == 'ALL_TRAINERS'
             ? palette.gateway
+            : value == 'EVERYONE'
+                ? palette.coral
             : value == 'INDIVIDUALS'
                 ? palette.violet
                 : palette.primary;
