@@ -121,6 +121,12 @@ public class Academy {
     @Builder.Default
     private String plan = "STANDARD";
 
+    /** Language for receipts, reminders and broadcasts to students (BCP 47 tag) - the academy's,
+     * not any one person's display language. */
+    @Column(name = "default_language", nullable = false)
+    @Builder.Default
+    private String defaultLanguage = "en";
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     @Builder.Default

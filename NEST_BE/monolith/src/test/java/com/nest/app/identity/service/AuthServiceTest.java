@@ -192,6 +192,27 @@ class AuthServiceTest {
     }
 
     @Test
+    void verifyCurrentPasswordAcceptsTheRightOneAndTouchesNothing() {
+        when(userRepository.findById(userId)).thenReturn(Optional.of(adminUser()));
+        when(passwordEncoder.matches(eq("old"), eq("hashed"))).thenReturn(true);
+
+        authService.verifyCurrentPassword(userId, "old");
+
+        verify(userRepository, never()).save(any());
+        verify(refreshTokenRepository, never()).revokeAllForUser(any());
+    }
+
+    @Test
+    void verifyCurrentPasswordRejectsAWrongOneWithA400NotA401() {
+        when(userRepository.findById(userId)).thenReturn(Optional.of(adminUser()));
+        when(passwordEncoder.matches(eq("wrong"), eq("hashed"))).thenReturn(false);
+
+        assertThatThrownBy(() -> authService.verifyCurrentPassword(userId, "wrong"))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("incorrect");
+    }
+
+    @Test
     void identifyByUsernameOfPasswordAccountAsksForPassword() {
         when(userRepository.findByUsername("meera")).thenReturn(Optional.of(adminUser()));
 

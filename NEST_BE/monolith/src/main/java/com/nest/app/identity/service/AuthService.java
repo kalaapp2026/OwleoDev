@@ -209,6 +209,21 @@ public class AuthService {
         refreshTokenRepository.revokeAllForUser(user.getId());
     }
 
+    /**
+     * Checks the caller's current password without changing anything, so the change-password
+     * screen can refuse a wrong one at its first step instead of after the new password is typed.
+     * A 400 rather than the 401 {@link #changePassword} uses: the app treats any 401 as an expired
+     * session and tries to refresh it, which is the wrong reaction to a mistyped password.
+     */
+    @Transactional(readOnly = true)
+    public void verifyCurrentPassword(UUID userId, String currentPassword) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+        if (user.getPasswordHash() == null || !passwordEncoder.matches(currentPassword, user.getPasswordHash())) {
+            throw new BadRequestException("That password is incorrect.");
+        }
+    }
+
     @Transactional
     public void changePassword(UUID userId, ChangePasswordRequest request) {
         User user = userRepository.findById(userId)

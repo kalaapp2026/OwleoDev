@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:nest_fe/app/theme/app_tokens.dart';
+import 'package:nest_fe/app/theme/app_typography.dart';
+import 'package:nest_fe/core/design/buttons.dart';
 import 'package:nest_fe/core/auth/session_controller.dart';
 import 'package:nest_fe/core/providers/core_providers.dart';
 import 'package:nest_fe/core/widgets/app_notice.dart';
 import 'package:nest_fe/features/academy/presentation/academy_info_screen.dart' show academyProfileProvider;
+import 'package:nest_fe/features/academy/presentation/academy_settings_kit.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 final _prefsProvider = FutureProvider.autoDispose((ref) => ref.watch(authApiProvider).notificationPrefs());
@@ -104,68 +107,92 @@ class _ChangeEmailState extends ConsumerState<ChangeEmailScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.palette;
     final current = ref.watch(sessionControllerProvider).user?.email;
     final valid = RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$').hasMatch(_email.text.trim());
-    return Scaffold(
-      appBar: AppBar(title: const Text('Login email')),
-      body: ListView(padding: const EdgeInsets.all(20), children: [
+    final canVerify = _code.text.trim().length >= 4 && !_busy;
+
+    Future<void> sendCode() => _run(() async {
+          await ref.read(authApiProvider).requestEmailChangeCode(_email.text.trim());
+          if (mounted) setState(() => _sent = true);
+        });
+
+    Future<void> verify() => _run(() async {
+          final nav = Navigator.of(context);
+          final messenger = ScaffoldMessenger.of(context);
+          await ref.read(authApiProvider).confirmEmailChange(_email.text.trim(), _code.text.trim());
+          await ref.read(sessionControllerProvider.notifier).refreshProfile();
+          messenger.showSnackBar(const SnackBar(content: Text('Login email updated')));
+          nav.pop();
+        });
+
+    return SettingsPage(
+      title: 'Login Email',
+      footer: _sent
+          ? AppPrimaryButton(label: 'Verify and Save', icon: Icons.check, busy: _busy, onPressed: canVerify ? verify : null)
+          : AppPrimaryButton(label: 'Send code', icon: Icons.send_rounded, busy: _busy, onPressed: valid ? sendCode : null),
+      children: [
         if (current != null && current.isNotEmpty)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 16),
-            child: Text('Current: $current', style: Theme.of(context).textTheme.bodySmall),
+          SettingsCard(
+            child: Row(
+              children: [
+                Icon(Icons.mail_outline, size: 16, color: palette.textFaint),
+                const SizedBox(width: AppSpacing.lg),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Current login email', style: TextStyle(fontSize: AppType.xs, color: palette.textFaint)),
+                      Text(current, style: TextStyle(fontSize: AppType.lg, fontWeight: AppType.bold, color: palette.text)),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
+        const SizedBox(height: AppSpacing.x4l),
+        const SettingsFieldLabel('New login email'),
         TextField(
           controller: _email,
           enabled: !_sent,
           keyboardType: TextInputType.emailAddress,
-          decoration: const InputDecoration(labelText: 'New email address'),
+          style: TextStyle(color: palette.text),
+          decoration: settingsInput(context, 'new-email@example.com'),
           onChanged: (_) => setState(() {}),
         ),
-        const SizedBox(height: 12),
-        if (!_sent)
-          FilledButton(
-            onPressed: !valid || _busy
-                ? null
-                : () => _run(() async {
-                      await ref.read(authApiProvider).requestEmailChangeCode(_email.text.trim());
-                      if (mounted) setState(() => _sent = true);
-                    }),
-            child: Text(_busy ? 'Sending…' : 'Send code'),
-          )
-        else ...[
-          Text('We sent a code to ${_email.text.trim()}.', style: Theme.of(context).textTheme.bodySmall),
-          const SizedBox(height: 8),
+        if (_sent) ...[
+          const SizedBox(height: AppSpacing.x4l),
+          SettingsNote(
+            icon: Icons.check_circle_outline,
+            color: palette.primary,
+            text: 'We sent a code to ${_email.text.trim()}. Your current email stays in place until you enter it.',
+          ),
+          const SizedBox(height: AppSpacing.xl),
+          const SettingsFieldLabel('Code'),
           TextField(
             controller: _code,
             keyboardType: TextInputType.number,
-            decoration: const InputDecoration(labelText: 'Code'),
+            style: TextStyle(color: palette.text, letterSpacing: 4, fontSize: AppType.x4l),
+            decoration: settingsInput(context, 'Enter the code'),
             onChanged: (_) => setState(() {}),
           ),
-          const SizedBox(height: 12),
-          FilledButton(
-            onPressed: _code.text.trim().length < 4 || _busy
-                ? null
-                : () => _run(() async {
-                      final nav = Navigator.of(context);
-                      final messenger = ScaffoldMessenger.of(context);
-                      await ref.read(authApiProvider).confirmEmailChange(_email.text.trim(), _code.text.trim());
-                      await ref.read(sessionControllerProvider.notifier).refreshProfile();
-                      messenger.showSnackBar(const SnackBar(content: Text('Login email updated')));
-                      nav.pop();
-                    }),
-            child: Text(_busy ? 'Verifying…' : 'Verify and save'),
-          ),
-          TextButton(
-            onPressed: _busy ? null : () => setState(() => _sent = false),
-            child: const Text('Use a different email'),
+          const SizedBox(height: AppSpacing.lg),
+          Row(
+            children: [
+              TextButton(onPressed: _busy ? null : sendCode, child: const Text('Resend code')),
+              TextButton(
+                onPressed: _busy ? null : () => setState(() => _sent = false),
+                child: const Text('Use a different email'),
+              ),
+            ],
           ),
         ],
         if (_error != null)
           Padding(
-            padding: const EdgeInsets.only(top: 12),
-            child: Text(_error!, style: TextStyle(color: context.palette.notPaid)),
+            padding: const EdgeInsets.only(top: AppSpacing.xl),
+            child: Text(_error!, style: TextStyle(color: palette.notPaid)),
           ),
-      ]),
+      ],
     );
   }
 }

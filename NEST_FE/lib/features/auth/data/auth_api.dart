@@ -171,6 +171,12 @@ class AuthApi {
     return _client.callVoid((dio) => dio.post('/auth/logout', data: {'refreshToken': refreshToken}));
   }
 
+  /// Confirms the current password without changing it - the first step of the change-password
+  /// screen. Throws if it is wrong.
+  Future<void> verifyPassword(String currentPassword) {
+    return _client.callVoid((dio) => dio.post('/auth/password/verify', data: {'currentPassword': currentPassword}));
+  }
+
   Future<void> changePassword(String currentPassword, String newPassword) {
     return _client.callVoid((dio) => dio.post('/auth/password/change', data: {
           'currentPassword': currentPassword,

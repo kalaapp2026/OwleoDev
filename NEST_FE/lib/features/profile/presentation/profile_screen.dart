@@ -9,6 +9,7 @@ import 'package:nest_fe/l10n/app_localizations.dart';
 import 'package:nest_fe/core/auth/session_controller.dart';
 import 'package:nest_fe/core/widgets/app_notice.dart';
 import 'package:nest_fe/features/academy/presentation/academy_management_screen.dart';
+import 'package:nest_fe/features/academy/presentation/academy_requests_screen.dart';
 import 'package:nest_fe/features/artist_application/presentation/artist_applications_screen.dart';
 
 /// The Profile tab: the account-switcher bar on top, whichever profile body fits the role below.
@@ -94,6 +95,18 @@ class _ProfileBody extends ConsumerWidget {
               trailing: const Icon(Icons.chevron_right),
               onTap: () => Navigator.of(context).push(
                 MaterialPageRoute(builder: (_) => const AcademyManagementScreen()),
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.inbox_outlined),
+              title: const Text('Academy requests'),
+              subtitle: const Text('Plan changes, ownership transfers, closures and messages'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const AcademyRequestsScreen(platform: true)),
               ),
             ),
           ),

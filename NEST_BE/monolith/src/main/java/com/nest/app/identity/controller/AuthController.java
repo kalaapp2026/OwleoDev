@@ -97,6 +97,13 @@ public class AuthController {
         return ResponseEntity.noContent().build();
     }
 
+    /** Confirms the caller's current password - the first step of the change-password screen. */
+    @PostMapping("/auth/password/verify")
+    public ResponseEntity<Void> verifyPassword(@Valid @RequestBody com.nest.app.identity.dto.VerifyPasswordRequest request) {
+        authService.verifyCurrentPassword(TenantContext.currentUserId(), request.currentPassword());
+        return ResponseEntity.noContent().build();
+    }
+
     @PostMapping("/auth/password/change")
     public ResponseEntity<Void> changePassword(@Valid @RequestBody ChangePasswordRequest request) {
         authService.changePassword(TenantContext.currentUserId(), request);
