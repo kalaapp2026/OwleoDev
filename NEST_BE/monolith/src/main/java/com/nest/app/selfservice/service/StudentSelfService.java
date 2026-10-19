@@ -12,6 +12,11 @@ import com.nest.app.identity.repository.UserRepository;
 import com.nest.app.notification.entity.NotificationModule;
 import com.nest.app.notification.entity.NotificationType;
 import com.nest.app.notification.service.NotificationService;
+import com.nest.app.enrolment.entity.Batch;
+import com.nest.app.enrolment.entity.BatchStatus;
+import com.nest.app.enrolment.repository.BatchRepository;
+import com.nest.app.scheduling.entity.Schedule;
+import com.nest.app.scheduling.repository.ScheduleRepository;
 import com.nest.app.selfservice.dto.ExploreCourseResponse;
 import com.nest.app.selfservice.entity.AccountDeletionRequest;
 import com.nest.app.selfservice.entity.CourseInterest;
@@ -24,7 +29,9 @@ import com.nest.common.security.TenantContext;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -42,12 +49,15 @@ public class StudentSelfService {
     private final AcademyMembershipRepository membershipRepository;
     private final UserRepository userRepository;
     private final NotificationService notificationService;
+    private final BatchRepository batchRepository;
+    private final ScheduleRepository scheduleRepository;
 
     public StudentSelfService(CourseRepository courseRepository, CourseMapRepository courseMapRepository,
                               CourseInterestRepository interestRepository,
                               AccountDeletionRequestRepository deletionRepository,
                               AcademyMembershipRepository membershipRepository, UserRepository userRepository,
-                              NotificationService notificationService) {
+                              NotificationService notificationService,
+                              BatchRepository batchRepository, ScheduleRepository scheduleRepository) {
         this.courseRepository = courseRepository;
         this.courseMapRepository = courseMapRepository;
         this.interestRepository = interestRepository;
@@ -55,6 +65,8 @@ public class StudentSelfService {
         this.membershipRepository = membershipRepository;
         this.userRepository = userRepository;
         this.notificationService = notificationService;
+        this.batchRepository = batchRepository;
+        this.scheduleRepository = scheduleRepository;
     }
 
     @Transactional(readOnly = true)
@@ -64,13 +76,56 @@ public class StudentSelfService {
                 .map(cm -> cm.getCourseId()).collect(Collectors.toSet());
         Set<UUID> interested = interestRepository.findByMembershipId(me).stream()
                 .map(CourseInterest::getCourseId).collect(Collectors.toSet());
-        return courseRepository
+        List<Course> offered = courseRepository
                 .findByAcademyIdAndStatusOrderByNameAsc(TenantContext.currentAcademyId(), CourseStatus.ACTIVE)
                 .stream()
                 .filter(c -> !enrolled.contains(c.getId()))
-                .map(c -> new ExploreCourseResponse(c.getId(), c.getName(), c.getCategory().name(),
-                        c.getDescription(), c.getDurationLevel(), c.getIconKey(), interested.contains(c.getId())))
                 .collect(Collectors.toList());
+
+        // One batch per course stands for it: the first active one, which is what a student would be
+        // placed in. Everything below is batched so the list costs a handful of queries, not one per row.
+        Map<UUID, Batch> batchByCourse = new HashMap<>();
+        for (Batch b : batchRepository.findByCourseIdIn(offered.stream().map(Course::getId).toList())) {
+            if (b.getStatus() == BatchStatus.ACTIVE) {
+                batchByCourse.putIfAbsent(b.getCourseId(), b);
+            }
+        }
+        Map<UUID, List<Schedule>> slotsByBatch = new HashMap<>();
+        for (Schedule slot : scheduleRepository.findByBatchIdInAndEffectiveToIsNull(
+                batchByCourse.values().stream().map(Batch::getId).toList())) {
+            slotsByBatch.computeIfAbsent(slot.getBatchId(), k -> new java.util.ArrayList<>()).add(slot);
+        }
+
+        return offered.stream()
+                .map(c -> {
+                    Batch batch = batchByCourse.get(c.getId());
+                    return new ExploreCourseResponse(c.getId(), c.getName(), c.getCategory().name(),
+                            c.getDescription(), c.getDurationLevel(), c.getIconKey(), interested.contains(c.getId()),
+                            batch == null ? null : trainerNameOf(batch),
+                            batch == null ? null : scheduleLine(slotsByBatch.getOrDefault(batch.getId(), List.of())));
+                })
+                .collect(Collectors.toList());
+    }
+
+    private String trainerNameOf(Batch batch) {
+        if (batch.getTrainerMembershipId() == null) {
+            return null;
+        }
+        return membershipRepository.findById(batch.getTrainerMembershipId())
+                .flatMap(m -> userRepository.findById(m.getUserId()))
+                .map(User::getFullName).orElse(null);
+    }
+
+    /** "Tue, Thu · 8:00 AM–8:45 AM" from a batch's current weekly slots, or null with none. */
+    private static String scheduleLine(List<Schedule> slots) {
+        if (slots.isEmpty()) {
+            return null;
+        }
+        String days = slots.stream().map(Schedule::getDayOfWeek).distinct().sorted()
+                .map(d -> d.getDisplayName(java.time.format.TextStyle.SHORT, java.util.Locale.ENGLISH))
+                .collect(Collectors.joining(", "));
+        java.time.format.DateTimeFormatter clock = java.time.format.DateTimeFormatter.ofPattern("h:mm a", java.util.Locale.ENGLISH);
+        return days + " · " + slots.get(0).getStartTime().format(clock) + "–" + slots.get(0).getEndTime().format(clock);
     }
 
     @Transactional

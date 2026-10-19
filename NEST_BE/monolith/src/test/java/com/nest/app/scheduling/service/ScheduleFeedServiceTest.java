@@ -4,6 +4,7 @@ import com.nest.app.attendance.repository.AttendanceRepository;
 import com.nest.app.curriculum.entity.Course;
 import com.nest.app.curriculum.repository.CourseRepository;
 import com.nest.app.enrolment.entity.Batch;
+import com.nest.app.enrolment.entity.BatchMember;
 import com.nest.app.enrolment.entity.BatchType;
 import com.nest.app.enrolment.repository.BatchMemberRepository;
 import com.nest.app.enrolment.repository.BatchRepository;
@@ -130,5 +131,39 @@ class ScheduleFeedServiceTest {
         assertThat(service.feed(day, day, null, FeatureKey.ATTENDANCE)).hasSize(1);
         // The Schedule screen, scoped by Reschedule, still shows them nothing - unchanged.
         assertThat(service.feed(day, day, null)).isEmpty();
+    }
+
+    @Test
+    void aStudentSeesTheClassesOfTheirOwnBatchesAndNoOthers() {
+        UUID membershipId = UUID.randomUUID();
+        TenantContext.set(new NestPrincipal(UUID.randomUUID(), "student", Role.STUDENT,
+                List.of(new MembershipClaim(membershipId, academyId, "Natyalaya", Role.STUDENT, Set.of(), Set.of())),
+                membershipId));
+
+        UUID otherBatchId = UUID.randomUUID();
+        LocalDate day = LocalDate.of(2026, 10, 19);
+        ClassInstance mine = ClassInstance.builder().id(UUID.randomUUID()).batchId(batchId)
+                .date(day).startTime(LocalTime.of(20, 0)).endTime(LocalTime.of(21, 0))
+                .status(ClassInstanceStatus.SCHEDULED).build();
+
+        // A student holds no per-course permission, so the trainer rules would leave them nothing.
+        when(courseRepository.findByAcademyIdOrderByNameAsc(academyId))
+                .thenReturn(List.of(Course.builder().id(courseId).academyId(academyId).name("Bharatanatyam").build()));
+        when(batchMemberRepository.findByMembershipId(membershipId))
+                .thenReturn(List.of(BatchMember.builder().batchId(batchId).membershipId(membershipId).build()));
+        when(batchRepository.findByCourseIdIn(any())).thenReturn(List.of(
+                Batch.builder().id(batchId).courseId(courseId).name("Morning").batchType(BatchType.REGULAR).build(),
+                Batch.builder().id(otherBatchId).courseId(courseId).name("Evening").batchType(BatchType.REGULAR).build()));
+        when(classInstanceRepository.findByBatchIdInAndDateBetween(any(), any(), any())).thenReturn(List.of(mine));
+
+        var service = new ScheduleFeedService(classInstanceRepository, batchRepository, batchTrainerRepository,
+                batchMemberRepository, courseRepository, membershipRepository, userRepository,
+                attendanceRepository, courseFeatureGuard);
+
+        assertThat(service.feed(day, day, null, "ALL")).hasSize(1);
+        // Only the student's own batch is asked for - the other batch's classes are never fetched.
+        org.mockito.ArgumentCaptor<java.util.Collection<UUID>> asked = org.mockito.ArgumentCaptor.forClass(java.util.Collection.class);
+        org.mockito.Mockito.verify(classInstanceRepository).findByBatchIdInAndDateBetween(asked.capture(), any(), any());
+        assertThat(asked.getValue()).containsExactly(batchId);
     }
 }

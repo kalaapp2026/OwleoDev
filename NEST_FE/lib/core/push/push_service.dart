@@ -54,6 +54,29 @@ class PushService {
     }
   }
 
+  /// Whether this device can show pushes at all (Android only today).
+  bool get isSupported => _supported;
+
+  /// Whether the OS permission is already granted - what the bell's "Turn on notifications" card
+  /// keys on. False wherever push isn't supported, so the card never offers something that can't work.
+  Future<bool> isEnabled() async {
+    if (!_supported) return false;
+    try {
+      await Firebase.initializeApp();
+      final settings = await FirebaseMessaging.instance.getNotificationSettings();
+      return settings.authorizationStatus == AuthorizationStatus.authorized ||
+          settings.authorizationStatus == AuthorizationStatus.provisional;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Asks for permission and registers the token; true if pushes are now on.
+  Future<bool> enable(DioClient client) async {
+    await register(client);
+    return isEnabled();
+  }
+
   /// Call BEFORE the server-side logout, while the access token is still valid, so a shared phone
   /// stops receiving the previous person's alerts.
   Future<void> unregister() async {

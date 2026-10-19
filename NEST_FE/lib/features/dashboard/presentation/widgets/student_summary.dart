@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:nest_fe/app/theme/app_tokens.dart';
 import 'package:nest_fe/app/theme/app_typography.dart';
 import 'package:nest_fe/core/design/charts.dart';
@@ -10,6 +11,7 @@ import 'package:nest_fe/core/format/money.dart';
 import 'package:nest_fe/features/attendance/data/student_attendance.dart';
 import 'package:nest_fe/features/fees/data/student_statement.dart' show FeeCategory;
 import 'package:nest_fe/features/fees/presentation/fees_screen.dart' show feesApiProvider;
+import 'package:nest_fe/features/dashboard/presentation/widgets/student_home_sections.dart' show openStudentClassCalendar;
 import 'package:nest_fe/features/scheduling/data/scheduling_api.dart';
 import 'package:nest_fe/features/shell/presentation/app_shell.dart';
 
@@ -107,10 +109,11 @@ class StudentQuickStats extends ConsumerWidget {
         Expanded(
           child: _StudentStatTile(
             icon: Icons.auto_stories_outlined,
-            label: 'My courses',
+            label: 'Courses',
             value: '$courseCount',
             color: palette.violet,
             softColor: palette.violetSoft,
+            onTap: () => context.push('/erp/my-courses'),
           ),
         ),
         const SizedBox(width: AppSpacing.sm),
@@ -121,6 +124,7 @@ class StudentQuickStats extends ConsumerWidget {
             value: todayLabel,
             color: palette.gateway,
             softColor: palette.gatewaySoft,
+            onTap: () => openStudentClassCalendar(context, ref),
           ),
         ),
       ],

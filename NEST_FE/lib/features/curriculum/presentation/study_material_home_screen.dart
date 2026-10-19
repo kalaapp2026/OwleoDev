@@ -16,6 +16,8 @@ import 'package:nest_fe/features/curriculum/presentation/file_viewer_screen.dart
 import 'package:nest_fe/features/curriculum/presentation/material_library_screen.dart';
 import 'package:nest_fe/features/curriculum/presentation/playlists_screen.dart';
 import 'package:nest_fe/core/auth/session_controller.dart';
+import 'package:nest_fe/features/notification/data/notification_api.dart';
+import 'package:nest_fe/features/notification/presentation/notification_bell.dart';
 
 enum MaterialBatchSort {
   recent('Recently updated'),
@@ -108,33 +110,30 @@ class _StudyMaterialHomeScreenState extends ConsumerState<StudyMaterialHomeScree
             return Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                _header(palette, totalFiles, batches.length),
+                _header(palette, totalFiles, batches.length, isStudent),
                 if (isStudent) _studentStrip(palette),
                 Padding(
                   padding: const EdgeInsets.fromLTRB(
                       AppSpacing.page, AppSpacing.xxl, AppSpacing.page, 0),
                   child: Column(
                     children: [
-                      _searchAndSort(palette),
-                      const SizedBox(height: AppSpacing.lg),
-                      Row(
-                        children: [
-                          _categoryChip(palette),
-                          const Spacer(),
-                          // The libraries cut across batches. They sit here rather than as their
-                          // own tiles because the question they answer - "where is that track" -
-                          // only comes up once you are already looking for material.
-                          // Audio first, as in the reference.
-                          for (final type in const [
-                            StudyMaterialType.audio,
-                            StudyMaterialType.notes,
-                            StudyMaterialType.image,
-                          ]) ...[
-                            _LibraryButton(type: type),
-                            if (type != StudyMaterialType.image) const SizedBox(width: AppSpacing.xs),
+                      _searchAndSort(palette, isStudent),
+                      // A student has no sorting or category filter: one search box, and the three
+                      // libraries beside it, as in the reference.
+                      if (!isStudent) ...[
+                        const SizedBox(height: AppSpacing.lg),
+                        Row(
+                          children: [
+                            _categoryChip(palette),
+                            const Spacer(),
+                            // The libraries cut across batches. They sit here rather than as their
+                            // own tiles because the question they answer - "where is that track" -
+                            // only comes up once you are already looking for material.
+                            // Audio first, as in the reference.
+                            ..._libraryButtons(),
                           ],
-                        ],
-                      ),
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -239,7 +238,18 @@ class _StudyMaterialHomeScreenState extends ConsumerState<StudyMaterialHomeScree
     );
   }
 
-  Widget _header(AppPalette palette, int totalFiles, int batchCount) {
+  List<Widget> _libraryButtons({double size = 34}) => [
+        for (final type in const [
+          StudyMaterialType.audio,
+          StudyMaterialType.notes,
+          StudyMaterialType.image,
+        ]) ...[
+          _LibraryButton(type: type, size: size),
+          if (type != StudyMaterialType.image) const SizedBox(width: AppSpacing.xs),
+        ],
+      ];
+
+  Widget _header(AppPalette palette, int totalFiles, int batchCount, bool isStudent) {
     return Container(
       padding: const EdgeInsets.fromLTRB(
           AppSpacing.page, AppSpacing.x4l, AppSpacing.page, AppSpacing.xxl),
@@ -271,12 +281,16 @@ class _StudyMaterialHomeScreenState extends ConsumerState<StudyMaterialHomeScree
           ),
           const SizedBox(width: AppSpacing.md),
           const ThemeModeButton(),
+          if (isStudent) ...[
+            const SizedBox(width: AppSpacing.md),
+            const NotificationBell(module: NotificationModule.erp, tile: true),
+          ],
         ],
       ),
     );
   }
 
-  Widget _searchAndSort(AppPalette palette) {
+  Widget _searchAndSort(AppPalette palette, bool isStudent) {
     return Row(
       children: [
         Expanded(
@@ -327,6 +341,9 @@ class _StudyMaterialHomeScreenState extends ConsumerState<StudyMaterialHomeScree
           ),
         ),
         const SizedBox(width: AppSpacing.sm),
+        if (isStudent)
+          ..._libraryButtons(size: 38)
+        else
         AttachedSelect<MaterialBatchSort>(
           label: 'Sort',
           options: MaterialBatchSort.values,
@@ -544,9 +561,10 @@ class _BatchRow extends StatelessWidget {
 /// Icon-only: three of them sit in a row beside the category filter, and labelled buttons would
 /// crowd out the filter itself on a phone.
 class _LibraryButton extends ConsumerWidget {
-  const _LibraryButton({required this.type});
+  const _LibraryButton({required this.type, this.size = 34});
 
   final StudyMaterialType type;
+  final double size;
 
   /// Opens the newest song. The player has its own library button, so the way to the full list
   /// is one tap further in - and the song you were most likely after is already playing.
@@ -591,8 +609,8 @@ class _LibraryButton extends ConsumerWidget {
                 builder: (_) => MaterialLibraryScreen(fileType: type),
               )),
         child: Container(
-          height: 34,
-          width: 34,
+          height: size,
+          width: size,
           alignment: Alignment.center,
           decoration: BoxDecoration(
             color: type.softColor(palette),

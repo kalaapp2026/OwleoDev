@@ -20,7 +20,7 @@ import 'package:nest_fe/features/fees/presentation/student_fees_screen.dart';
 import 'package:nest_fe/features/dashboard/presentation/dashboard_screen.dart';
 import 'package:nest_fe/features/fees/presentation/fees_landing_screen.dart';
 import 'package:nest_fe/features/notification/data/notification_api.dart';
-import 'package:nest_fe/features/notification/presentation/notifications_screen.dart';
+import 'package:nest_fe/features/notification/presentation/notification_bell.dart';
 import 'package:nest_fe/features/platform/data/platform_settings_api.dart';
 import 'package:nest_fe/features/platform/presentation/academy_stats_screen.dart';
 import 'package:nest_fe/features/platform/presentation/platform_settings_screen.dart';
@@ -307,7 +307,7 @@ class AppShellState extends ConsumerState<AppShell> {
             : null,
         actions: [
           if (isDashboardHero) const _ThemeToggleButton(),
-          if (studentHeader || (_mode == AppMode.erp && !isDashboardHero)) const Padding(padding: EdgeInsets.only(right: 4), child: ThemeModeButton()),
+          if (studentHeader || (_mode == AppMode.erp && !isDashboardHero)) Padding(padding: EdgeInsets.only(right: studentHeader ? 8 : 4), child: const ThemeModeButton()),
           // Platform settings live in the app bar, not just on the Platform dashboard: a gear icon
           // is where anyone looks for settings first, and on the dashboard it sat below the charts
           // where it was easy to miss entirely.
@@ -319,7 +319,10 @@ class AppShellState extends ConsumerState<AppShell> {
                 MaterialPageRoute(builder: (_) => const PlatformSettingsScreen()),
               ),
             ),
-          _NotificationBell(module: module),
+          // A student's tab headers carry just the theme switch and a bell tile (the reference); the
+          // account menu lives on the Dashboard's avatar.
+          NotificationBell(module: module, tile: studentHeader),
+          if (studentHeader) const SizedBox(width: AppSpacing.x4l),
           // A real avatar on the hero (matching the reference's ringed circle) rather than the
           // plain outline glyph the non-hero app bars use - it's the one spot in the app where the
           // icon sits directly on the caller's own gradient rather than a flat bar.
@@ -347,7 +350,7 @@ class AppShellState extends ConsumerState<AppShell> {
                 ),
               ),
             )
-          else
+          else if (!studentHeader)
             IconButton(
               icon: const Icon(Icons.person_outline),
               tooltip: t.navProfile,
@@ -674,94 +677,6 @@ class _BottomNavBarState extends State<BottomNavBar> with SingleTickerProviderSt
               selected: !isSocial && widget.moreActive,
             ),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-/// App-bar bell for the current module, with an unread-count badge. Tapping TOGGLES a dropdown
-/// panel open/closed right under the bell - never a full page - and tapping outside (or the bell
-/// again) closes it. Watching a Riverpod family per module means the badge auto-refreshes whenever
-/// the notifications/unread providers are invalidated (e.g. after marking something read).
-class _NotificationBell extends ConsumerStatefulWidget {
-  const _NotificationBell({required this.module});
-
-  final NotificationModule module;
-
-  @override
-  ConsumerState<_NotificationBell> createState() => _NotificationBellState();
-}
-
-class _NotificationBellState extends ConsumerState<_NotificationBell> {
-  final _link = LayerLink();
-  OverlayEntry? _overlayEntry;
-
-  void _toggle() => _overlayEntry != null ? _close() : _open();
-
-  void _open() {
-    final overlay = Overlay.of(context);
-    _overlayEntry = OverlayEntry(
-      builder: (overlayContext) => Stack(
-        children: [
-          // Full-screen invisible barrier - tapping anywhere outside the panel closes it.
-          Positioned.fill(
-            child: GestureDetector(behavior: HitTestBehavior.opaque, onTap: _close),
-          ),
-          // Anchored to the screen's top-right rather than to the bell: the bell sits left of the
-          // avatar, so a fixed-width panel right-aligned to it ran off the left edge of a phone.
-          Builder(builder: (ctx) {
-            final media = MediaQuery.of(ctx);
-            final palette = ctx.palette;
-            final width = (media.size.width - AppSpacing.page * 2).clamp(0.0, 380.0);
-            return Positioned(
-              top: media.padding.top + kToolbarHeight - 4,
-              right: AppSpacing.page,
-              width: width,
-              child: Material(
-                color: palette.surface,
-                elevation: 8,
-                shadowColor: Colors.black45,
-                borderRadius: AppRadii.all(AppRadii.xl),
-                clipBehavior: Clip.antiAlias,
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(maxHeight: (media.size.height * 0.6).clamp(0.0, 440.0)),
-                  child: NotificationDropdownContent(module: widget.module, onClose: _close),
-                ),
-              ),
-            );
-          }),
-        ],
-      ),
-    );
-    overlay.insert(_overlayEntry!);
-    setState(() {});
-  }
-
-  void _close() {
-    _overlayEntry?.remove();
-    _overlayEntry = null;
-    if (mounted) setState(() {});
-  }
-
-  @override
-  void dispose() {
-    _overlayEntry?.remove();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final unread = ref.watch(unreadCountProvider(widget.module)).valueOrNull ?? 0;
-    return CompositedTransformTarget(
-      link: _link,
-      child: IconButton(
-        tooltip: 'Notifications',
-        onPressed: _toggle,
-        icon: Badge(
-          isLabelVisible: unread > 0,
-          label: Text(unread > 99 ? '99+' : '$unread'),
-          child: Icon(_overlayEntry != null ? Icons.notifications : Icons.notifications_outlined),
         ),
       ),
     );

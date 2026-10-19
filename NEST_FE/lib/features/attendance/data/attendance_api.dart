@@ -19,8 +19,17 @@ final classAttendanceProvider =
   return ref.watch(attendanceApiProvider).forClassInstance(classInstanceId);
 });
 
-/// A student's marked sessions joined to their dates - the attendance profile.
+/// A student's marked sessions joined to their dates - the attendance profile. Holidays (cancelled
+/// classes) are left out: every figure built on this counts only classes someone was marked for.
 final studentAttendanceProvider =
+    FutureProvider.autoDispose.family<List<StudentAttendanceRecord>, String>((ref, membershipId) async {
+  ref.watch(activeMembershipIdProvider);
+  final all = await ref.watch(attendanceApiProvider).detailedHistory(membershipId);
+  return all.where((r) => !r.isHoliday).toList();
+});
+
+/// The same history including holidays - what the student's own Attendance calendar and history list.
+final studentAttendanceWithHolidaysProvider =
     FutureProvider.autoDispose.family<List<StudentAttendanceRecord>, String>((ref, membershipId) {
   ref.watch(activeMembershipIdProvider);
   return ref.watch(attendanceApiProvider).detailedHistory(membershipId);

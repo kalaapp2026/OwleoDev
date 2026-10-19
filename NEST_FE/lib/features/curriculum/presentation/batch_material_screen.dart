@@ -62,6 +62,10 @@ class _BatchMaterialScreenState extends ConsumerState<BatchMaterialScreen> {
   /// upload button that 403s is worse than no button.
   bool get _readOnly => _readOnlyFor(ref.watch(sessionControllerProvider).user);
 
+  /// A student, or someone previewing as one: no sorting and no permission badges, as in the reference.
+  bool get _isStudent =>
+      widget.studentPreview || ref.watch(sessionControllerProvider).user?.activeMembership?.roleType == 'STUDENT';
+
   /// The same rule for event handlers, which must read rather than watch.
   bool _readOnlyNow() => _readOnlyFor(ref.read(sessionControllerProvider).user);
 
@@ -504,7 +508,8 @@ class _BatchMaterialScreenState extends ConsumerState<BatchMaterialScreen> {
             ),
           ),
         ),
-        const SizedBox(width: AppSpacing.sm),
+        if (!_isStudent) const SizedBox(width: AppSpacing.sm),
+        if (!_isStudent)
         AttachedSelect<MaterialSort>(
           label: 'Sort',
           options: MaterialSort.values,
@@ -685,24 +690,28 @@ class _MaterialRow extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(fontSize: AppType.sm, color: palette.textFaint),
                   ),
-                  const SizedBox(height: 7),
-                  Wrap(
-                    spacing: 6,
-                    runSpacing: 4,
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    children: [
-                      PermissionBadge(permission: material.permission),
-                      if (!studentPreview && material.visibility == StudyMaterialVisibility.selected)
-                        _studentsBadge(palette),
-                    ],
-                  ),
+                  // A student sees what they can do with a file from the icon on the right (an eye to
+                  // open it, an arrow to save it); the badges are for whoever shares it.
+                  if (!studentPreview) ...[
+                    const SizedBox(height: 7),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 4,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        PermissionBadge(permission: material.permission),
+                        if (material.visibility == StudyMaterialVisibility.selected) _studentsBadge(palette),
+                      ],
+                    ),
+                  ],
                 ],
               ),
             ),
             const SizedBox(width: AppSpacing.sm),
             if (studentPreview)
               // A student sees only what they can do with it, not who set it that way.
-              Icon(material.permission.icon, size: 16, color: palette.textMuted)
+              Icon(material.isDownloadable ? Icons.download_outlined : Icons.visibility_outlined,
+                  size: 16, color: palette.textMuted)
             else
               _kebab(palette),
           ],

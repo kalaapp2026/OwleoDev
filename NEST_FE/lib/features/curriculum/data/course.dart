@@ -174,6 +174,8 @@ class ExploreCourse {
     required this.durationLevel,
     required this.iconKey,
     required this.interested,
+    this.trainerName,
+    this.schedule,
   });
 
   final String id;
@@ -184,6 +186,10 @@ class ExploreCourse {
   final String? iconKey;
   final bool interested;
 
+  /// From the course's first active batch; null until one with a trainer / weekly schedule exists.
+  final String? trainerName;
+  final String? schedule;
+
   factory ExploreCourse.fromJson(Map<String, dynamic> json) => ExploreCourse(
         id: json['id'] as String,
         name: json['name'] as String,
@@ -192,5 +198,7 @@ class ExploreCourse {
         durationLevel: json['durationLevel'] as String?,
         iconKey: json['iconKey'] as String?,
         interested: json['interested'] as bool? ?? false,
+        trainerName: json['trainerName'] as String?,
+        schedule: json['schedule'] as String?,
       );
 }

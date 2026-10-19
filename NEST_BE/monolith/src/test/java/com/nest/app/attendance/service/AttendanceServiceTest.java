@@ -71,7 +71,9 @@ class AttendanceServiceTest {
      * (the CourseFeatureGuard itself is a no-op mock, so it never blocks these tests). */
     private void newService() {
         attendanceService = new AttendanceService(attendanceRepository, classInstanceRepository, batchRepository, courseRepository, courseFeatureGuard,
-                org.mockito.Mockito.mock(com.nest.app.notification.service.NotificationTriggers.class));
+                org.mockito.Mockito.mock(com.nest.app.notification.service.NotificationTriggers.class),
+                org.mockito.Mockito.mock(com.nest.app.enrolment.repository.BatchMemberRepository.class),
+                org.mockito.Mockito.mock(com.nest.app.identity.repository.UserRepository.class));
         // lenient: only submitSheet/forClassInstance resolve via findById - historyForStudent and
         // detailedHistory resolve via findAllById instead, so these two are unused there.
         lenient().when(classInstanceRepository.findById(classInstanceId))

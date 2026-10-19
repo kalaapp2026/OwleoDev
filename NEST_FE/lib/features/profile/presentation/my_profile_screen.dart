@@ -2,7 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:nest_fe/app/theme/app_tokens.dart';
+import 'package:nest_fe/app/theme/app_typography.dart';
 import 'package:nest_fe/core/auth/session_controller.dart';
+import 'package:nest_fe/core/design/app_top_bar.dart';
+import 'package:nest_fe/core/design/pressable.dart';
 import 'package:nest_fe/core/design/attached_select.dart';
 import 'package:nest_fe/core/error/api_exception.dart';
 import 'package:nest_fe/core/widgets/app_notice.dart';
@@ -58,23 +61,68 @@ class _MyProfileScreenState extends ConsumerState<MyProfileScreen> {
       backgroundColor: palette.bg,
       // Embedded as the Profile tab, the shell already provides the app bar - a second one here
       // would stack two. Edit and Settings move into the page itself instead.
-      appBar: widget.embedded
-          ? null
-          : AppBar(
-              title: const Text('My Profile'),
+      body: SafeArea(
+        top: !widget.embedded,
+        bottom: false,
+        child: Column(children: [
+          if (!widget.embedded)
+            AppTopBar(
+              title: 'My Profile',
+              subtitle: ref.watch(sessionControllerProvider).user?.fullName,
               actions: [
-                if (profileAsync.hasValue)
-                  TextButton.icon(
-                    onPressed: () => _push(EditMyProfileScreen(profile: profileAsync.requireValue)),
-                    icon: const Icon(Icons.edit_outlined, size: 14),
-                    label: const Text('Edit'),
-                  ),
+                const ThemeModeButton(),
+                _settingsTile(),
+                if (profileAsync.hasValue) _editPill(profileAsync.requireValue),
               ],
             ),
-      body: AsyncValueView(
-        value: profileAsync,
-        onRetry: () => ref.invalidate(selfProfileProvider),
-        data: (context, profile) => _body(context, profile),
+          Expanded(
+            child: AsyncValueView(
+              value: profileAsync,
+              onRetry: () => ref.invalidate(selfProfileProvider),
+              data: (context, profile) => _body(context, profile),
+            ),
+          ),
+        ]),
+      ),
+    );
+  }
+
+  /// The header's gear tile - this person's own settings.
+  Widget _settingsTile() {
+    final palette = context.palette;
+    return Pressable(
+      onTap: () => _push(const UserSettingsScreen()),
+      child: Container(
+        width: 36,
+        height: 36,
+        decoration: BoxDecoration(
+          color: palette.surfaceRaised,
+          borderRadius: AppRadii.all(AppRadii.lg),
+          border: Border.all(color: palette.border),
+        ),
+        child: Icon(Icons.settings_outlined, size: 16, color: palette.textMuted),
+      ),
+    );
+  }
+
+  /// The header's "Edit" pill.
+  Widget _editPill(SelfProfile p) {
+    final palette = context.palette;
+    return Pressable(
+      onTap: () => _push(EditMyProfileScreen(profile: p)),
+      child: Container(
+        height: 36,
+        padding: const EdgeInsets.symmetric(horizontal: 14),
+        decoration: BoxDecoration(
+          color: palette.surfaceRaised,
+          borderRadius: AppRadii.all(AppRadii.lg),
+          border: Border.all(color: palette.border),
+        ),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Icon(Icons.edit_outlined, size: 14, color: palette.primary),
+          const SizedBox(width: 6),
+          Text('Edit', style: TextStyle(fontSize: 12.5, fontWeight: AppType.heavy, color: palette.primary)),
+        ]),
       ),
     );
   }
@@ -109,16 +157,9 @@ class _MyProfileScreenState extends ConsumerState<MyProfileScreen> {
             Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
-                IconButton(
-                  tooltip: 'Settings',
-                  icon: const Icon(Icons.settings_outlined, size: 20),
-                  onPressed: () => _push(const UserSettingsScreen()),
-                ),
-                TextButton.icon(
-                  onPressed: () => _push(EditMyProfileScreen(profile: p)),
-                  icon: const Icon(Icons.edit_outlined, size: 14),
-                  label: const Text('Edit'),
-                ),
+                _settingsTile(),
+                const SizedBox(width: AppSpacing.md),
+                _editPill(p),
               ],
             ),
           // Hero

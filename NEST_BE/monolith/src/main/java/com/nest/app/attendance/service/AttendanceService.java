@@ -10,9 +10,14 @@ import com.nest.app.attendance.repository.AttendanceRepository;
 import com.nest.app.curriculum.entity.Course;
 import com.nest.app.curriculum.repository.CourseRepository;
 import com.nest.app.enrolment.entity.Batch;
+import com.nest.app.enrolment.entity.BatchMember;
+import com.nest.app.enrolment.repository.BatchMemberRepository;
 import com.nest.app.enrolment.repository.BatchRepository;
+import com.nest.app.identity.entity.User;
+import com.nest.app.identity.repository.UserRepository;
 import com.nest.app.identity.service.CourseFeatureGuard;
 import com.nest.app.scheduling.entity.ClassInstance;
+import com.nest.app.scheduling.entity.ClassInstanceStatus;
 import com.nest.app.scheduling.repository.ClassInstanceRepository;
 import com.nest.app.notification.service.NotificationTriggers;
 import com.nest.common.audit.Auditable;
@@ -23,6 +28,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -38,16 +44,21 @@ public class AttendanceService {
     private final CourseRepository courseRepository;
     private final CourseFeatureGuard courseFeatureGuard;
     private final NotificationTriggers notificationTriggers;
+    private final BatchMemberRepository batchMemberRepository;
+    private final UserRepository userRepository;
 
     public AttendanceService(AttendanceRepository attendanceRepository, ClassInstanceRepository classInstanceRepository,
                              BatchRepository batchRepository, CourseRepository courseRepository,
-                             CourseFeatureGuard courseFeatureGuard, NotificationTriggers notificationTriggers) {
+                             CourseFeatureGuard courseFeatureGuard, NotificationTriggers notificationTriggers,
+                             BatchMemberRepository batchMemberRepository, UserRepository userRepository) {
         this.attendanceRepository = attendanceRepository;
         this.classInstanceRepository = classInstanceRepository;
         this.batchRepository = batchRepository;
         this.courseRepository = courseRepository;
         this.courseFeatureGuard = courseFeatureGuard;
         this.notificationTriggers = notificationTriggers;
+        this.batchMemberRepository = batchMemberRepository;
+        this.userRepository = userRepository;
     }
 
     @Transactional
@@ -152,24 +163,31 @@ public class AttendanceService {
      * corrected later, and a history ordered by when someone pressed submit shows sessions out of
      * sequence.
      *
+     * <p>For the student's own history, classes that were cancelled (up to today, in the batches
+     * they are in) are added as {@code HOLIDAY} rows - the calendar and history show them as days off
+     * rather than leaving a silent gap. Anyone else looking at the record sees only what was marked.
+     *
      * @param batchId optional - null means every batch the student is in.
      */
     @Transactional(readOnly = true)
     public List<StudentAttendanceRecord> detailedHistory(UUID membershipId, UUID batchId) {
         List<Attendance> records = attendanceRepository.findByMembershipIdOrderByMarkedAtDesc(membershipId);
-        if (records.isEmpty()) {
+        boolean isSelf = isSelf(membershipId);
+
+        List<ClassInstance> holidays = isSelf ? cancelledClassesFor(membershipId, batchId) : List.of();
+        if (records.isEmpty() && holidays.isEmpty()) {
             return List.of();
         }
-        boolean isSelf = isSelf(membershipId);
         Map<UUID, java.util.Optional<java.util.Set<UUID>>> batchScopes = new java.util.HashMap<>();
 
         Map<UUID, ClassInstance> instancesById = classInstanceRepository
                 .findAllById(records.stream().map(Attendance::getClassInstanceId).collect(Collectors.toSet()))
                 .stream().collect(Collectors.toMap(ClassInstance::getId, c -> c));
 
-        Map<UUID, Batch> batchesById = batchRepository
-                .findAllById(instancesById.values().stream().map(ClassInstance::getBatchId)
-                        .collect(Collectors.toSet()))
+        java.util.Set<UUID> batchIdsNeeded = instancesById.values().stream().map(ClassInstance::getBatchId)
+                .collect(Collectors.toCollection(java.util.HashSet::new));
+        holidays.forEach(h -> batchIdsNeeded.add(h.getBatchId()));
+        Map<UUID, Batch> batchesById = batchRepository.findAllById(batchIdsNeeded)
                 .stream().collect(Collectors.toMap(Batch::getId, b -> b));
 
         Map<UUID, Course> coursesById = courseRepository
@@ -177,7 +195,12 @@ public class AttendanceService {
                         .collect(Collectors.toSet()))
                 .stream().collect(Collectors.toMap(Course::getId, c -> c));
 
+        Map<UUID, String> markerNames = userRepository
+                .findAllById(records.stream().map(Attendance::getMarkedBy).collect(Collectors.toSet()))
+                .stream().collect(Collectors.toMap(User::getId, User::getFullName, (a, b) -> a));
+
         List<StudentAttendanceRecord> result = new java.util.ArrayList<>();
+        java.util.Set<UUID> markedInstances = new java.util.HashSet<>();
         for (Attendance record : records) {
             ClassInstance instance = instancesById.get(record.getClassInstanceId());
             // An attendance row whose class was hard-deleted (an undone reschedule) has nothing
@@ -194,17 +217,48 @@ public class AttendanceService {
                 continue;
             }
 
+            markedInstances.add(instance.getId());
             result.add(new StudentAttendanceRecord(
                     instance.getId(), instance.getDate(), instance.getStartTime(), instance.getEndTime(),
-                    record.getStatus(),
+                    record.getStatus().name(),
                     instance.getBatchId(), batch == null ? null : batch.getName(),
                     course == null ? null : course.getId(), course == null ? null : course.getName(),
-                    record.getNote()));
+                    record.getNote(), markerNames.get(record.getMarkedBy()), record.getMarkedAt()));
+        }
+
+        for (ClassInstance instance : holidays) {
+            // Someone was marked on this class before it was cancelled - what was marked stands.
+            if (markedInstances.contains(instance.getId())) {
+                continue;
+            }
+            Batch batch = batchesById.get(instance.getBatchId());
+            Course course = batch == null ? null : coursesById.get(batch.getCourseId());
+            String reason = instance.getCancellationReason();
+            result.add(new StudentAttendanceRecord(
+                    instance.getId(), instance.getDate(), instance.getStartTime(), instance.getEndTime(),
+                    "HOLIDAY",
+                    instance.getBatchId(), batch == null ? null : batch.getName(),
+                    course == null ? null : course.getId(), course == null ? null : course.getName(),
+                    reason == null || reason.isBlank() ? "Class cancelled" : reason, null, null));
         }
 
         result.sort(java.util.Comparator.comparing(StudentAttendanceRecord::date).reversed()
                 .thenComparing(StudentAttendanceRecord::startTime));
         return result;
+    }
+
+    /** Classes in the student's batches that were cancelled, from two years back up to today. */
+    private List<ClassInstance> cancelledClassesFor(UUID membershipId, UUID batchId) {
+        List<UUID> batchIds = batchMemberRepository.findByMembershipId(membershipId).stream()
+                .map(BatchMember::getBatchId)
+                .filter(id -> batchId == null || id.equals(batchId))
+                .toList();
+        if (batchIds.isEmpty()) {
+            return List.of();
+        }
+        LocalDate today = LocalDate.now();
+        return classInstanceRepository.findByBatchIdInAndDateBetweenAndStatus(
+                batchIds, today.minusYears(2), today, ClassInstanceStatus.CANCELLED);
     }
 
     private AttendanceResponse upsert(UUID classInstanceId, AttendanceEntry entry, UUID markedBy) {

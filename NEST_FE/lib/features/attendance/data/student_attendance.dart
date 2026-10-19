@@ -1,25 +1,38 @@
 import 'package:flutter/widgets.dart';
 import 'package:nest_fe/app/theme/app_tokens.dart';
 
-/// Present or absent. Deliberately only two - the prototype's marking flow is a single tap per
-/// student, and a third state (late, excused) would turn every row into a menu.
+/// Present or absent when a trainer marks a class - deliberately only two, since the marking flow
+/// is a single tap per student and a third state (late, excused) would turn every row into a menu.
+///
+/// [holiday] is never marked and never submitted: it is how a student's own history shows a class
+/// that was cancelled. It counts towards neither side of their attendance.
 enum AttendanceStatus {
   present('PRESENT', 'Present'),
-  absent('ABSENT', 'Absent');
+  absent('ABSENT', 'Absent'),
+  holiday('HOLIDAY', 'Holiday');
 
   const AttendanceStatus(this.wire, this.label);
 
   final String wire;
   final String label;
 
-  static AttendanceStatus fromWire(String? value) =>
-      value == 'ABSENT' ? AttendanceStatus.absent : AttendanceStatus.present;
+  static AttendanceStatus fromWire(String? value) => switch (value) {
+        'ABSENT' => AttendanceStatus.absent,
+        'HOLIDAY' => AttendanceStatus.holiday,
+        _ => AttendanceStatus.present,
+      };
 
-  Color color(AppPalette p) =>
-      this == AttendanceStatus.present ? p.paidManual : p.notPaid;
+  Color color(AppPalette p) => switch (this) {
+        AttendanceStatus.present => p.paidManual,
+        AttendanceStatus.absent => p.notPaid,
+        AttendanceStatus.holiday => p.textFaint,
+      };
 
-  Color softColor(AppPalette p) =>
-      this == AttendanceStatus.present ? p.paidManualSoft : p.notPaidSoft;
+  Color softColor(AppPalette p) => switch (this) {
+        AttendanceStatus.present => p.paidManualSoft,
+        AttendanceStatus.absent => p.notPaidSoft,
+        AttendanceStatus.holiday => p.surfaceHigh,
+      };
 }
 
 /// One marked session in a student's history, joined to the date it was actually held.
@@ -35,6 +48,8 @@ class StudentAttendanceRecord {
     required this.courseId,
     required this.courseName,
     required this.note,
+    this.markedByName,
+    this.markedAt,
   });
 
   final String classInstanceId;
@@ -48,6 +63,12 @@ class StudentAttendanceRecord {
   final String? courseName;
   final String? note;
 
+  /// Who recorded it and when; null for a holiday.
+  final String? markedByName;
+  final DateTime? markedAt;
+
+  bool get isHoliday => status == AttendanceStatus.holiday;
+
   factory StudentAttendanceRecord.fromJson(Map<String, dynamic> json) =>
       StudentAttendanceRecord(
         classInstanceId: json['classInstanceId'] as String,
@@ -60,6 +81,8 @@ class StudentAttendanceRecord {
         courseId: json['courseId'] as String?,
         courseName: json['courseName'] as String?,
         note: json['note'] as String?,
+        markedByName: json['markedByName'] as String?,
+        markedAt: json['markedAt'] == null ? null : DateTime.tryParse(json['markedAt'] as String)?.toLocal(),
       );
 }
 

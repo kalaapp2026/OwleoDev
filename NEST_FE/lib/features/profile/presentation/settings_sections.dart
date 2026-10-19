@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:nest_fe/app/theme/app_tokens.dart';
 import 'package:nest_fe/app/theme/app_typography.dart';
 import 'package:nest_fe/core/design/buttons.dart';
+import 'package:nest_fe/core/design/pressable.dart';
 import 'package:nest_fe/core/auth/session_controller.dart';
 import 'package:nest_fe/core/providers/core_providers.dart';
 import 'package:nest_fe/core/widgets/app_notice.dart';
@@ -18,52 +19,55 @@ class NotificationPrefsCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final palette = context.palette;
     final async = ref.watch(_prefsProvider);
-    return Card(
-      child: async.when(
-        loading: () => const Padding(padding: EdgeInsets.all(20), child: Center(child: CircularProgressIndicator())),
-        error: (e, _) => Padding(padding: const EdgeInsets.all(16), child: Text(e.toString().replaceFirst('Exception: ', ''))),
-        data: (p) {
-          Future<void> save({bool? attendance, bool? events, bool? study}) async {
-            try {
-              await ref.read(authApiProvider).updateNotificationPrefs(
-                    attendance: attendance ?? p.attendance,
-                    events: events ?? p.events,
-                    study: study ?? p.study,
-                  );
-              ref.invalidate(_prefsProvider);
-            } catch (_) {
-              if (context.mounted) AppNotice.error(context, "Couldn't save - try again");
-            }
+    return async.when(
+      loading: () => const SettingsCard(child: Padding(padding: EdgeInsets.all(12), child: Center(child: CircularProgressIndicator()))),
+      error: (e, _) => SettingsCard(child: Text(e.toString().replaceFirst('Exception: ', ''))),
+      data: (p) {
+        Future<void> save({bool? attendance, bool? events, bool? study}) async {
+          try {
+            await ref.read(authApiProvider).updateNotificationPrefs(
+                  attendance: attendance ?? p.attendance,
+                  events: events ?? p.events,
+                  study: study ?? p.study,
+                );
+            ref.invalidate(_prefsProvider);
+          } catch (_) {
+            if (context.mounted) AppNotice.error(context, "Couldn't save - try again");
           }
+        }
 
-          return Column(children: [
-            SwitchListTile(
-              secondary: const Icon(Icons.fact_check_outlined),
-              title: const Text('Attendance updates'),
-              subtitle: const Text("When you're marked present or absent"),
-              value: p.attendance,
-              onChanged: (v) => save(attendance: v),
-            ),
-            const Divider(height: 1),
-            SwitchListTile(
-              secondary: const Icon(Icons.event_outlined),
-              title: const Text('Event announcements'),
-              subtitle: const Text('New events and schedule changes'),
-              value: p.events,
-              onChanged: (v) => save(events: v),
-            ),
-            const Divider(height: 1),
-            SwitchListTile(
-              secondary: const Icon(Icons.description_outlined),
-              title: const Text('Study material'),
-              subtitle: const Text('When trainers upload new material'),
-              value: p.study,
-              onChanged: (v) => save(study: v),
-            ),
-          ]);
-        },
-      ),
+        return SettingsRowGroup(rows: [
+          SettingsSwitchRow(
+            icon: Icons.notifications_none,
+            color: palette.primary,
+            soft: palette.primarySoft,
+            title: 'Attendance Updates',
+            subtitle: "When you're marked present, late or absent",
+            value: p.attendance,
+            onChanged: (v) => save(attendance: v),
+          ),
+          SettingsSwitchRow(
+            icon: Icons.notifications_none,
+            color: palette.violet,
+            soft: palette.violetSoft,
+            title: 'Event Announcements',
+            subtitle: 'New events and schedule changes',
+            value: p.events,
+            onChanged: (v) => save(events: v),
+          ),
+          SettingsSwitchRow(
+            icon: Icons.notifications_none,
+            color: palette.gateway,
+            soft: palette.gatewaySoft,
+            title: 'Study Material',
+            subtitle: 'When trainers upload new material',
+            value: p.study,
+            onChanged: (v) => save(study: v),
+          ),
+        ]);
+      },
     );
   }
 }
@@ -197,49 +201,88 @@ class _ChangeEmailState extends ConsumerState<ChangeEmailScreen> {
   }
 }
 
-/// How to reach the academy - the contact details its admin published on the Academy Profile.
+/// How to reach the student's own academy - the phone, WhatsApp, email, website and address it has
+/// published on its profile, laid out like the reference's Contact Us.
 class ContactUsScreen extends ConsumerWidget {
   const ContactUsScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final palette = context.palette;
     final async = ref.watch(academyProfileProvider);
-    return Scaffold(
-      appBar: AppBar(title: const Text('Contact us')),
-      body: async.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text(e.toString().replaceFirst('Exception: ', ''))),
-        data: (p) {
-          final tiles = <Widget>[
-            if ((p.contactNumber ?? '').isNotEmpty)
-              ListTile(
-                leading: const Icon(Icons.phone_outlined),
-                title: const Text('Phone'),
-                subtitle: Text(p.contactNumber!),
-                onTap: () => launchUrl(Uri(scheme: 'tel', path: p.contactNumber)),
+
+    Widget row(IconData icon, Color color, Color soft, String label, String value, {Uri? open, bool last = false}) {
+      return Container(
+        decoration: BoxDecoration(border: last ? null : Border(bottom: BorderSide(color: palette.borderSoft))),
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 4),
+        child: Row(children: [
+          SettingsIconTile(icon: icon, color: color, soft: soft),
+          const SizedBox(width: AppSpacing.lg),
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(label, style: TextStyle(fontSize: 11, color: palette.textFaint)),
+              const SizedBox(height: 1),
+              Text(value, style: TextStyle(fontSize: 13.5, fontWeight: AppType.bold, color: palette.text)),
+            ]),
+          ),
+          if (open != null)
+            Pressable(
+              onTap: () => launchUrl(open, mode: LaunchMode.externalApplication),
+              child: Icon(Icons.open_in_new, size: 15, color: palette.textFaint),
+            ),
+        ]),
+      );
+    }
+
+    return SettingsPage(
+      title: 'Contact Us',
+      children: [
+        async.when(
+          loading: () => const Padding(padding: EdgeInsets.all(40), child: Center(child: CircularProgressIndicator())),
+          error: (e, _) => Text(e.toString().replaceFirst('Exception: ', ''), style: TextStyle(color: palette.textFaint)),
+          data: (p) {
+            final rows = <Widget Function(bool last)>[
+              if ((p.contactNumber ?? '').isNotEmpty)
+                (last) => row(Icons.phone_outlined, palette.gateway, palette.gatewaySoft, 'Phone', p.contactNumber!,
+                    open: Uri(scheme: 'tel', path: p.contactNumber), last: last),
+              if ((p.whatsapp ?? '').isNotEmpty)
+                (last) => row(Icons.chat_bubble_outline, palette.paidManual, palette.paidManualSoft, 'WhatsApp', p.whatsapp!,
+                    open: Uri.parse('https://wa.me/${p.whatsapp!.replaceAll(RegExp(r'[^0-9]'), '')}'), last: last),
+              if ((p.email ?? '').isNotEmpty)
+                (last) => row(Icons.mail_outline, palette.primary, palette.primarySoft, 'Email', p.email!,
+                    open: Uri(scheme: 'mailto', path: p.email), last: last),
+              if ((p.websiteUrl ?? '').isNotEmpty)
+                (last) => row(Icons.language, palette.gold, palette.goldSoft, 'Website', p.websiteUrl!,
+                    open: Uri.tryParse(p.websiteUrl!.startsWith('http') ? p.websiteUrl! : 'https://${p.websiteUrl}'), last: last),
+              if ((p.address ?? '').isNotEmpty || (p.city ?? '').isNotEmpty)
+                (last) => row(
+                    Icons.place_outlined,
+                    palette.violet,
+                    palette.violetSoft,
+                    'Address',
+                    [p.address, p.area, p.city, p.state, p.pinCode].where((s) => (s ?? '').isNotEmpty).join(', '),
+                    last: last),
+            ];
+            if (rows.isEmpty) {
+              return SettingsCard(
+                child: Text("Your academy hasn't published contact details yet.",
+                    style: TextStyle(fontSize: 12.5, color: palette.textMuted)),
+              );
+            }
+            return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Padding(
+                padding: const EdgeInsets.only(left: 6, bottom: AppSpacing.md),
+                child: Text('GET IN TOUCH',
+                    style: TextStyle(fontSize: AppType.sm, fontWeight: AppType.heavy, letterSpacing: 0.6, color: palette.textFaint)),
               ),
-            if ((p.email ?? '').isNotEmpty)
-              ListTile(
-                leading: const Icon(Icons.mail_outline),
-                title: const Text('Email'),
-                subtitle: Text(p.email!),
-                onTap: () => launchUrl(Uri(scheme: 'mailto', path: p.email)),
+              SettingsCard(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+                child: Column(children: [for (var i = 0; i < rows.length; i++) rows[i](i == rows.length - 1)]),
               ),
-            if ((p.address ?? '').isNotEmpty || (p.city ?? '').isNotEmpty)
-              ListTile(
-                leading: const Icon(Icons.place_outlined),
-                title: const Text('Address'),
-                subtitle: Text([p.address, p.area, p.city, p.state, p.pinCode]
-                    .where((s) => (s ?? '').isNotEmpty)
-                    .join(', ')),
-              ),
-          ];
-          if (tiles.isEmpty) {
-            return const Center(child: Text("Your academy hasn't published contact details yet."));
-          }
-          return ListView(padding: const EdgeInsets.all(20), children: [Card(child: Column(children: tiles))]);
-        },
-      ),
+            ]);
+          },
+        ),
+      ],
     );
   }
 }

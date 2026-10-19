@@ -28,7 +28,16 @@ Future<void> showMoreMenu(BuildContext context, WidgetRef ref, AppShellState she
 
   // erpTabIndex-bound items (Dashboard/Attendance/Fees) are the bottom tab bar itself - never
   // duplicated inside "More".
-  final visibleItems = kErpActions.where((item) => item.visibleFor(user) && item.route != null).toList();
+  var visibleItems = kErpActions.where((item) => item.visibleFor(user) && item.route != null).toList();
+
+  // A student's More: Courses, Study Material, Events, Academy Profile, Profile, Settings - four to a row.
+  final student = user.activeMembership?.roleType == 'STUDENT';
+  if (student) {
+    const order = ['My Courses', 'Study Material', 'Events', 'Academy Profile', 'Profile', 'Settings'];
+    visibleItems = [
+      for (final label in order) ...visibleItems.where((i) => i.label == label),
+    ];
+  }
 
   return showModalBottomSheet(
     context: context,
@@ -54,7 +63,7 @@ Future<void> showMoreMenu(BuildContext context, WidgetRef ref, AppShellState she
       // its own height (64) plus its SafeArea minimum (8) plus a visual gap keeps it visible
       // underneath, the way the reference floats the sheet just above the bar rather than over it.
       final navBarReserve = 64 + 8 + 14 + MediaQuery.paddingOf(sheetContext).bottom;
-      return _MoreSheetBody(items: visibleItems, shellState: shellState, navBarReserve: navBarReserve);
+      return _MoreSheetBody(items: visibleItems, shellState: shellState, navBarReserve: navBarReserve, student: student);
     },
   );
 }
@@ -72,11 +81,12 @@ Future<void> showMoreMenu(BuildContext context, WidgetRef ref, AppShellState she
 /// height never needs to be measured up front: Align lets it lay out at its natural size every
 /// frame regardless of how much of it is currently revealed.
 class _MoreSheetBody extends StatefulWidget {
-  const _MoreSheetBody({required this.items, required this.shellState, required this.navBarReserve});
+  const _MoreSheetBody({required this.items, required this.shellState, required this.navBarReserve, this.student = false});
 
   final List<ErpAction> items;
   final AppShellState shellState;
   final double navBarReserve;
+  final bool student;
 
   @override
   State<_MoreSheetBody> createState() => _MoreSheetBodyState();
@@ -236,7 +246,7 @@ class _MoreSheetBodyState extends State<_MoreSheetBody> with SingleTickerProvide
                             child: Text(
                               'More',
                               style: TextStyle(
-                                fontSize: AppType.title,
+                                fontSize: widget.student ? AppType.lg : AppType.title,
                                 fontWeight: AppType.heavy,
                                 color: palette.text,
                               ),
@@ -250,15 +260,16 @@ class _MoreSheetBodyState extends State<_MoreSheetBody> with SingleTickerProvide
                         crossAxisCount: 4,
                         shrinkWrap: true,
                         physics: const NeverScrollableScrollPhysics(),
-                        mainAxisSpacing: AppSpacing.xl,
+                        mainAxisSpacing: widget.student ? AppSpacing.lg : AppSpacing.xl,
                         crossAxisSpacing: AppSpacing.sm,
-                        childAspectRatio: 0.82,
+                        childAspectRatio: widget.student ? 0.9 : 0.82,
                         children: [
                           for (var i = 0; i < widget.items.length; i++)
                             _StaggeredTile(
                               animation: _tileAnimation(i),
                               child: _MoreMenuTile(
                                 item: widget.items[i],
+                                student: widget.student,
                                 onTap: () {
                                   Navigator.of(sheetContext).pop();
                                   final item = widget.items[i];
@@ -354,6 +365,9 @@ class _CloseButton extends StatelessWidget {
 /// category dots and stat tiles - so a new module added to [kErpActions] never needs a colour
 /// decision made up on the spot.
 (Color, Color) _accentFor(AppPalette palette, String label) => switch (label) {
+      'My Courses' => (palette.primary, palette.primarySoft),
+      'Profile' => (palette.primary, palette.primarySoft),
+      'Settings' => (palette.gateway, palette.gatewaySoft),
       'Courses' => (palette.violet, palette.violetSoft),
       'Batches' => (palette.paidManual, palette.paidManualSoft),
       'Batch Scheduling' => (palette.gold, palette.goldSoft),
@@ -367,8 +381,9 @@ class _CloseButton extends StatelessWidget {
     };
 
 class _MoreMenuTile extends StatelessWidget {
-  const _MoreMenuTile({required this.item, required this.onTap});
+  const _MoreMenuTile({required this.item, required this.onTap, this.student = false});
 
+  final bool student;
   final ErpAction item;
   final VoidCallback onTap;
 
@@ -376,6 +391,43 @@ class _MoreMenuTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final palette = context.palette;
     final (color, soft) = _accentFor(palette, item.label);
+
+    if (student) {
+      // Study Material is violet and Events gold in the reference, not the staff palette.
+      final (c, _) = switch (item.label) {
+        'Study Material' => (palette.violet, palette.violetSoft),
+        'Events' || 'Academy Profile' => (palette.gold, palette.goldSoft),
+        _ => (color, soft),
+      };
+      return InkWell(
+        onTap: onTap,
+        borderRadius: AppRadii.all(AppRadii.xl),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 46,
+              height: 46,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: c.withValues(alpha: 0.12),
+                borderRadius: AppRadii.all(15),
+                border: Border.all(color: c.withValues(alpha: 0.27)),
+              ),
+              child: Icon(item.icon, color: c, size: 19),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              item.label,
+              textAlign: TextAlign.center,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(fontSize: 10, fontWeight: AppType.semi, color: palette.textMuted, height: 1.15),
+            ),
+          ],
+        ),
+      );
+    }
 
     return InkWell(
       onTap: onTap,

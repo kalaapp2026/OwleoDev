@@ -21,6 +21,7 @@ import com.nest.app.scheduling.entity.ClassInstance;
 import com.nest.app.scheduling.entity.ClassInstanceStatus;
 import com.nest.app.scheduling.repository.ClassInstanceRepository;
 import com.nest.common.security.FeatureKey;
+import com.nest.common.security.Role;
 import com.nest.common.security.TenantContext;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -108,7 +109,18 @@ public class ScheduleFeedService {
         // The Schedule screen is opened by Reschedule OR Batch scheduling, so it lists the courses of
         // whichever the person holds. Scoping it by Reschedule alone showed a trainer who only sets
         // timings a Schedule screen with nothing on it.
-        var visible = switch (feature == null ? "" : feature) {
+        //
+        // A Student holds no per-course permissions at all, so those rules would leave them an empty
+        // feed - no "Today's classes", no calendar. They are scoped by what they ARE instead: the
+        // batches they belong to, whatever the screen asked for.
+        var claim = TenantContext.require().activeMembership().orElse(null);
+        boolean student = claim != null && claim.roleType() == Role.STUDENT;
+        Set<UUID> myBatchIds = student
+                ? batchMemberRepository.findByMembershipId(claim.membershipId()).stream()
+                        .map(BatchMember::getBatchId).collect(Collectors.toSet())
+                : Set.of();
+
+        var visible = student ? java.util.Optional.<Set<UUID>>empty() : switch (feature == null ? "" : feature) {
             case FeatureKey.ATTENDANCE -> courseFeatureGuard.visibleCourseIds(FeatureKey.ATTENDANCE);
             case "ALL" -> courseFeatureGuard.visibleCourseIdsAny(
                     FeatureKey.ATTENDANCE, FeatureKey.RESCHEDULE, FeatureKey.BATCH_SCHEDULING);
@@ -132,8 +144,10 @@ public class ScheduleFeedService {
         Map<UUID, java.util.Optional<java.util.Set<UUID>>> scopeByCourse = new HashMap<>();
         List<Batch> batches = batchRepository.findByCourseIdIn(coursesById.keySet()).stream()
                 .filter(b -> b.getStatus() == BatchStatus.ACTIVE)
-                .filter(b -> CourseFeatureGuard.inScope(
-                        scopeByCourse.computeIfAbsent(b.getCourseId(), courseFeatureGuard::batchScope), b.getId()))
+                .filter(b -> student
+                        ? myBatchIds.contains(b.getId())
+                        : CourseFeatureGuard.inScope(
+                                scopeByCourse.computeIfAbsent(b.getCourseId(), courseFeatureGuard::batchScope), b.getId()))
                 .toList();
         if (batches.isEmpty()) {
             return List.of();

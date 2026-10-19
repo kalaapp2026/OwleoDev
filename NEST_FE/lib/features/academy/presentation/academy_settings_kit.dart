@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:nest_fe/app/i18n/app_languages.dart';
 import 'package:nest_fe/app/theme/app_tokens.dart';
 import 'package:nest_fe/app/theme/app_typography.dart';
 import 'package:nest_fe/core/design/app_top_bar.dart';
@@ -267,4 +268,191 @@ String shortDate(String? iso) {
   if (d == null) return '';
   const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   return '${d.day} ${months[d.month - 1]} ${d.year}';
+}
+
+
+/// A settings row with an on/off switch on the right: tile, title, subtitle, switch.
+class SettingsSwitchRow extends StatelessWidget {
+  const SettingsSwitchRow({
+    super.key,
+    required this.icon,
+    required this.color,
+    required this.soft,
+    required this.title,
+    this.subtitle,
+    required this.value,
+    required this.onChanged,
+  });
+
+  final IconData icon;
+  final Color color;
+  final Color soft;
+  final String title;
+  final String? subtitle;
+  final bool value;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.palette;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 13, horizontal: 4),
+      child: Row(
+        children: [
+          SettingsIconTile(icon: icon, color: color, soft: soft),
+          const SizedBox(width: AppSpacing.lg),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: TextStyle(fontSize: AppType.xl, fontWeight: AppType.semi, color: palette.text)),
+                if (subtitle != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 1),
+                    child: Text(subtitle!, style: TextStyle(fontSize: AppType.sm, color: palette.textFaint)),
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(width: AppSpacing.md),
+          Pressable(
+            onTap: () => onChanged(!value),
+            child: AnimatedContainer(
+              duration: AppMotion.fade,
+              width: 42,
+              height: 25,
+              decoration: BoxDecoration(
+                color: value ? palette.primary : palette.border,
+                borderRadius: BorderRadius.circular(13),
+              ),
+              child: AnimatedAlign(
+                duration: AppMotion.fade,
+                curve: Curves.easeOutBack,
+                alignment: value ? Alignment.centerRight : Alignment.centerLeft,
+                child: Container(
+                  width: 20,
+                  height: 20,
+                  margin: const EdgeInsets.symmetric(horizontal: 2.5),
+                  decoration: const BoxDecoration(
+                    color: Colors.white,
+                    shape: BoxShape.circle,
+                    boxShadow: [BoxShadow(color: Color(0x40000000), blurRadius: 6, offset: Offset(0, 2))],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// System / Light / Dark: a flat raised track, the selected option filled gold, each with its icon.
+class SettingsThemeTabs extends StatelessWidget {
+  const SettingsThemeTabs({super.key, required this.selected, required this.onChanged, this.lightFirst = false});
+
+  final ThemeMode selected;
+  final ValueChanged<ThemeMode> onChanged;
+
+  /// The student screens list Light, Dark, System; the admin one lists System first.
+  final bool lightFirst;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.palette;
+    const system = (ThemeMode.system, 'System', Icons.monitor_outlined);
+    const light = (ThemeMode.light, 'Light', Icons.wb_sunny_outlined);
+    const dark = (ThemeMode.dark, 'Dark', Icons.dark_mode_outlined);
+    final options = lightFirst ? [light, dark, system] : [system, light, dark];
+    return Container(
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(color: palette.surfaceRaised, borderRadius: BorderRadius.circular(12)),
+      child: Row(
+        children: [
+          for (var i = 0; i < options.length; i++) ...[
+            if (i > 0) const SizedBox(width: 4),
+            Expanded(
+              child: Pressable(
+                onTap: () => onChanged(options[i].$1),
+                child: AnimatedContainer(
+                  duration: AppMotion.fade,
+                  padding: const EdgeInsets.symmetric(vertical: 9),
+                  decoration: BoxDecoration(
+                    color: options[i].$1 == selected ? palette.gold : Colors.transparent,
+                    borderRadius: BorderRadius.circular(9),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(options[i].$3, size: 13, color: options[i].$1 == selected ? palette.onGold : palette.textMuted),
+                      const SizedBox(width: 6),
+                      Text(options[i].$2,
+                          style: TextStyle(
+                              fontSize: AppType.base,
+                              fontWeight: options[i].$1 == selected ? AppType.heavy : AppType.semi,
+                              color: options[i].$1 == selected ? palette.onGold : palette.textMuted)),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// "English ⌄" chip that opens a panel of languages under it, the selected one ticked.
+class SettingsLanguageDropdown extends StatelessWidget {
+  const SettingsLanguageDropdown({super.key, required this.selected, required this.onSelected});
+
+  final AppLanguage selected;
+  final ValueChanged<AppLanguage> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.palette;
+    return PopupMenuButton<AppLanguage>(
+      onSelected: onSelected,
+      color: palette.surfaceHigh,
+      elevation: 8,
+      padding: EdgeInsets.zero,
+      offset: const Offset(0, 38),
+      constraints: const BoxConstraints(minWidth: 190),
+      shape: RoundedRectangleBorder(borderRadius: AppRadii.all(AppRadii.xl), side: BorderSide(color: palette.border)),
+      itemBuilder: (context) => [
+        for (final l in AppLanguage.values)
+          PopupMenuItem<AppLanguage>(
+            value: l,
+            height: 40,
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(l.nativeName, style: TextStyle(fontSize: AppType.md, fontWeight: AppType.semi, color: palette.text)),
+                ),
+                if (l == selected) Icon(Icons.check, size: 13, color: palette.primary),
+              ],
+            ),
+          ),
+      ],
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+        decoration: BoxDecoration(
+          color: palette.surfaceHigh,
+          borderRadius: AppRadii.all(AppRadii.md),
+          border: Border.all(color: palette.border),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(selected.nativeName, style: TextStyle(fontSize: AppType.base, fontWeight: AppType.bold, color: palette.text)),
+            const SizedBox(width: 6),
+            Icon(Icons.keyboard_arrow_down_rounded, size: 14, color: palette.textFaint),
+          ],
+        ),
+      ),
+    );
+  }
 }

@@ -2,11 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:nest_fe/app/theme/app_tokens.dart';
-import 'package:nest_fe/app/theme/app_typography.dart';
 import 'package:nest_fe/core/design/pressable.dart';
 import 'package:nest_fe/core/providers/core_providers.dart';
 import 'package:nest_fe/features/curriculum/data/study_material.dart';
 import 'package:nest_fe/features/curriculum/data/study_material_api.dart';
+import 'package:nest_fe/features/dashboard/presentation/widgets/student_home_sections.dart' show StudentSectionHeader;
 
 /// The newest files shared with the student across songs, documents and images. The library
 /// endpoint already applies the per-student visibility rules, so nothing is filtered here.
@@ -31,17 +31,14 @@ class StudentMaterialStrip extends ConsumerWidget {
     // Nothing shared yet (or still loading): no empty card, the section simply isn't there.
     if (items.isEmpty) return const SizedBox.shrink();
 
+    final courseByBatch = {
+      for (final b in ref.watch(materialBatchesProvider).valueOrNull ?? const <BatchMaterialSummary>[])
+        b.batchId: b.courseName ?? b.batchName,
+    };
+
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-        Text('Study material',
-            style: TextStyle(fontSize: AppType.md, fontWeight: AppType.bold, color: palette.text)),
-        Pressable(
-          onTap: () => context.push('/erp/study-materials'),
-          child: Text('See all',
-              style: TextStyle(fontSize: AppType.xs, fontWeight: AppType.bold, color: palette.primary)),
-        ),
-      ]),
-      const SizedBox(height: AppSpacing.md),
+      StudentSectionHeader(
+          title: 'Study material', actionLabel: 'See all', onAction: () => context.push('/erp/study-materials')),
       for (final m in items)
         Padding(
           padding: const EdgeInsets.only(bottom: 8),
@@ -70,7 +67,8 @@ class StudentMaterialStrip extends ConsumerWidget {
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: palette.text)),
                     const SizedBox(height: 2),
-                    Text(m.fileType.label, style: TextStyle(fontSize: 10, color: palette.textFaint)),
+                    Text([if (courseByBatch[m.batchId] != null) courseByBatch[m.batchId]!, m.fileType.label].join(' · '),
+                        style: TextStyle(fontSize: 10, color: palette.textFaint)),
                   ]),
                 ),
                 Icon(Icons.chevron_right, size: 14, color: palette.textFaint),

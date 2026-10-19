@@ -53,6 +53,8 @@ dependencies:
   firebase_core: ^5.0.0
   firebase_messaging: ^17.0.0
   pdfrx: ^2.4.8
+  pdf: ^3.13.1
+  archive: ^4.5.2
 
 dev_dependencies:
   flutter_test:

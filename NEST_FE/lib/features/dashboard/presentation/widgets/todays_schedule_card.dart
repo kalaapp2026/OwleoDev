@@ -8,6 +8,7 @@ import 'package:nest_fe/core/auth/session_controller.dart';
 import 'package:nest_fe/core/design/category_meta.dart';
 import 'package:nest_fe/core/design/pressable.dart';
 import 'package:nest_fe/core/format/money.dart';
+import 'package:nest_fe/features/enrolment/data/batch.dart' show formatTimeOfDay;
 import 'package:nest_fe/features/scheduling/data/schedule_entry.dart';
 import 'package:nest_fe/features/scheduling/data/scheduling_api.dart';
 import 'package:nest_fe/features/scheduling/presentation/widgets/inline_month_calendar.dart';
@@ -373,7 +374,7 @@ class _ClassRow extends StatelessWidget {
               ),
             ),
             Text(
-              entry.startTime,
+              formatTimeOfDay(entry.startTime),
               style: TextStyle(fontSize: AppType.sm, fontWeight: AppType.bold, color: palette.textMuted),
             ),
           ],

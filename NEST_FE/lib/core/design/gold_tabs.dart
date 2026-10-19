@@ -11,12 +11,21 @@ class GoldTabs<T> extends StatelessWidget {
     required this.labelOf,
     required this.selected,
     required this.onTap,
+    this.badgeOf,
+    this.alertBadges = false,
   });
 
   final List<T> options;
   final String Function(T) labelOf;
   final T selected;
   final ValueChanged<T> onTap;
+
+  /// A small count pill after the label ("Regular 2"). Return null or 0 to show none - except
+  /// when [showZeroBadges]-style callers want a 0, which they get by returning 0 with [alertBadges] off.
+  final int? Function(T)? badgeOf;
+
+  /// Red pills for "things needing attention" (fees due); otherwise neutral counts.
+  final bool alertBadges;
 
   @override
   Widget build(BuildContext context) {
@@ -42,15 +51,48 @@ class GoldTabs<T> extends StatelessWidget {
                   color: o == selected ? palette.gold : Colors.transparent,
                   borderRadius: BorderRadius.circular(11),
                 ),
-                child: Text(
-                  labelOf(o),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                    color: o == selected ? Colors.white : palette.textMuted,
-                  ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Flexible(
+                      child: Text(
+                        labelOf(o),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: o == selected ? Colors.white : palette.textMuted,
+                        ),
+                      ),
+                    ),
+                    if (badgeOf?.call(o) case final count? when count > 0 || !alertBadges) ...[
+                      const SizedBox(width: 5),
+                      Container(
+                        constraints: const BoxConstraints(minWidth: 16),
+                        height: 16,
+                        padding: const EdgeInsets.symmetric(horizontal: 4),
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: o == selected
+                              ? Colors.white.withValues(alpha: 0.28)
+                              : (alertBadges ? palette.notPaidSoft : palette.surface),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          '$count',
+                          style: TextStyle(
+                            fontSize: 9,
+                            fontWeight: FontWeight.w800,
+                            color: o == selected
+                                ? Colors.white
+                                : (alertBadges ? palette.notPaid : palette.textMuted),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
               ),
             ),

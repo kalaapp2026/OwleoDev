@@ -70,6 +70,10 @@ class StudentStatement {
     required this.rows,
   });
 
+  /// Nothing billed, nothing paid - what a screen uses while the real statement is still loading.
+  static const empty = StudentStatement(
+      membershipId: '', studentName: '', totalBilled: 0, totalPaid: 0, outstanding: 0, rows: []);
+
   final String membershipId;
   final String studentName;
   final num totalBilled;

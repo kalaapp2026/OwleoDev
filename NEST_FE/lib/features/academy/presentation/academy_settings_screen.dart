@@ -174,7 +174,7 @@ class AcademySettingsScreen extends ConsumerWidget {
                                   ],
                                 ),
                                 const SizedBox(height: AppSpacing.md),
-                                _ThemeTabs(selected: themeMode, onChanged: (m) => ref.read(themeModeProvider.notifier).setThemeMode(m)),
+                                SettingsThemeTabs(selected: themeMode, onChanged: (m) => ref.read(themeModeProvider.notifier).setThemeMode(m)),
                               ],
                             ),
                           ),
@@ -187,7 +187,7 @@ class AcademySettingsScreen extends ConsumerWidget {
                             subtitle: 'Used for receipts, reminders & broadcasts to students',
                             trailing: settings == null
                                 ? null
-                                : _LanguageDropdown(
+                                : SettingsLanguageDropdown(
                                     selected: language,
                                     onSelected: (l) => _setLanguage(context, ref, settings, l),
                                   ),
@@ -397,60 +397,6 @@ class AcademySettingsScreen extends ConsumerWidget {
   }
 }
 
-/// System / Light / Dark: a flat raised track, the selected option filled gold, each with its icon.
-class _ThemeTabs extends StatelessWidget {
-  const _ThemeTabs({required this.selected, required this.onChanged});
-
-  final ThemeMode selected;
-  final ValueChanged<ThemeMode> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    final palette = context.palette;
-    const options = [
-      (ThemeMode.system, 'System', Icons.monitor_outlined),
-      (ThemeMode.light, 'Light', Icons.wb_sunny_outlined),
-      (ThemeMode.dark, 'Dark', Icons.dark_mode_outlined),
-    ];
-    return Container(
-      padding: const EdgeInsets.all(4),
-      decoration: BoxDecoration(color: palette.surfaceRaised, borderRadius: BorderRadius.circular(12)),
-      child: Row(
-        children: [
-          for (var i = 0; i < options.length; i++) ...[
-            if (i > 0) const SizedBox(width: 4),
-            Expanded(
-              child: Pressable(
-                onTap: () => onChanged(options[i].$1),
-                child: AnimatedContainer(
-                  duration: AppMotion.fade,
-                  padding: const EdgeInsets.symmetric(vertical: 9),
-                  decoration: BoxDecoration(
-                    color: options[i].$1 == selected ? palette.gold : Colors.transparent,
-                    borderRadius: BorderRadius.circular(9),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(options[i].$3, size: 13, color: options[i].$1 == selected ? palette.onGold : palette.textMuted),
-                      const SizedBox(width: 6),
-                      Text(options[i].$2,
-                          style: TextStyle(
-                              fontSize: AppType.base,
-                              fontWeight: options[i].$1 == selected ? AppType.heavy : AppType.semi,
-                              color: options[i].$1 == selected ? palette.onGold : palette.textMuted)),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
 /// A non-tappable settings row with a widget on the right (the language dropdown).
 class _PlainRow extends StatelessWidget {
   const _PlainRow({required this.icon, required this.color, required this.soft, required this.title, required this.subtitle, this.trailing});
@@ -490,55 +436,3 @@ class _PlainRow extends StatelessWidget {
   }
 }
 
-/// "English ⌄" chip that opens a panel of languages under it, the selected one ticked.
-class _LanguageDropdown extends StatelessWidget {
-  const _LanguageDropdown({required this.selected, required this.onSelected});
-
-  final AppLanguage selected;
-  final ValueChanged<AppLanguage> onSelected;
-
-  @override
-  Widget build(BuildContext context) {
-    final palette = context.palette;
-    return PopupMenuButton<AppLanguage>(
-      onSelected: onSelected,
-      color: palette.surfaceHigh,
-      elevation: 8,
-      padding: EdgeInsets.zero,
-      offset: const Offset(0, 38),
-      constraints: const BoxConstraints(minWidth: 190),
-      shape: RoundedRectangleBorder(borderRadius: AppRadii.all(AppRadii.xl), side: BorderSide(color: palette.border)),
-      itemBuilder: (context) => [
-        for (final l in AppLanguage.values)
-          PopupMenuItem<AppLanguage>(
-            value: l,
-            height: 40,
-            child: Row(
-              children: [
-                Expanded(
-                  child: Text(l.nativeName, style: TextStyle(fontSize: AppType.md, fontWeight: AppType.semi, color: palette.text)),
-                ),
-                if (l == selected) Icon(Icons.check, size: 13, color: palette.primary),
-              ],
-            ),
-          ),
-      ],
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-        decoration: BoxDecoration(
-          color: palette.surfaceHigh,
-          borderRadius: AppRadii.all(AppRadii.md),
-          border: Border.all(color: palette.border),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(selected.nativeName, style: TextStyle(fontSize: AppType.base, fontWeight: AppType.bold, color: palette.text)),
-            const SizedBox(width: 6),
-            Icon(Icons.keyboard_arrow_down_rounded, size: 14, color: palette.textFaint),
-          ],
-        ),
-      ),
-    );
-  }
-}
