@@ -7,9 +7,11 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @RestController
@@ -24,8 +26,8 @@ public class ArtistApplicationController {
 
     /** Any authenticated Guest applies for themselves - the service checks role/duplicate state. */
     @PostMapping("/artist-applications")
-    public ArtistApplicationResponse apply() {
-        return applicationService.apply();
+    public ArtistApplicationResponse apply(@RequestBody(required = false) Map<String, Object> details) {
+        return applicationService.apply(details);
     }
 
     @GetMapping("/admin/artist-applications")

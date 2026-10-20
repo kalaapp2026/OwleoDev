@@ -8,6 +8,7 @@ import com.nest.app.billing.entity.BillingPlan;
 import com.nest.app.billing.entity.InvoiceStatus;
 import com.nest.app.billing.repository.AcademyInvoiceRepository;
 import com.nest.app.billing.repository.BillingPlanRepository;
+import com.nest.app.hq.service.HqBilling;
 import com.nest.common.exception.BadRequestException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -44,6 +45,8 @@ class BillingServiceTest {
     private AcademyInvoiceRepository invoiceRepository;
     @Mock
     private BillingPlanRepository planRepository;
+    @Mock
+    private HqBilling hqBilling;
 
     private BillingService service;
 
@@ -52,7 +55,7 @@ class BillingServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new BillingService(academyRepository, invoiceRepository, planRepository);
+        service = new BillingService(academyRepository, invoiceRepository, planRepository, hqBilling);
         when(planRepository.findAll()).thenReturn(List.of(
                 plan("STANDARD", "2999.00"),
                 plan("FREE", "0.00")));
@@ -66,55 +69,18 @@ class BillingServiceTest {
         return Academy.builder().id(academyId).name("Test Academy").plan(planCode).status(status).build();
     }
 
+    /**
+     * Who gets billed (active, not closed, not on a demo, paying plan only), and the guarantee that a
+     * re-run never charges twice, are enforced in {@link HqBilling#generate} by its query. They are
+     * covered by running it against a database, not here, because the rules ARE the SQL.
+     */
     @Test
-    void generatesOneInvoiceForAnActivePaidAcademy() {
-        when(academyRepository.findAll()).thenReturn(List.of(academy("STANDARD", AcademyStatus.ACTIVE)));
-        when(invoiceRepository.findByAcademyIdAndPeriod(academyId, PERIOD)).thenReturn(Optional.empty());
+    void generatingInvoicesUsesTheSharedBillingEngine() {
+        when(hqBilling.generate(PERIOD)).thenReturn(3);
 
-        assertThat(service.generateInvoices(PERIOD)).isEqualTo(1);
-        verify(invoiceRepository).save(any(AcademyInvoice.class));
-    }
-
-    @Test
-    void rerunningTheSamePeriodDoesNotChargeTwice() {
-        when(academyRepository.findAll()).thenReturn(List.of(academy("STANDARD", AcademyStatus.ACTIVE)));
-        when(invoiceRepository.findByAcademyIdAndPeriod(academyId, PERIOD))
-                .thenReturn(Optional.of(AcademyInvoice.builder().id(UUID.randomUUID()).build()));
-
-        assertThat(service.generateInvoices(PERIOD)).isZero();
+        assertThat(service.generateInvoices(PERIOD)).isEqualTo(3);
+        verify(hqBilling).generate(PERIOD);
         verify(invoiceRepository, never()).save(any());
-    }
-
-    @Test
-    void suspendedAcademiesAreNotInvoiced() {
-        when(academyRepository.findAll()).thenReturn(List.of(academy("STANDARD", AcademyStatus.SUSPENDED)));
-
-        assertThat(service.generateInvoices(PERIOD)).isZero();
-        verify(invoiceRepository, never()).save(any());
-    }
-
-    @Test
-    void freePlanGetsNoInvoiceRatherThanAZeroOne() {
-        when(academyRepository.findAll()).thenReturn(List.of(academy("FREE", AcademyStatus.ACTIVE)));
-        when(invoiceRepository.findByAcademyIdAndPeriod(academyId, PERIOD)).thenReturn(Optional.empty());
-
-        assertThat(service.generateInvoices(PERIOD)).isZero();
-        verify(invoiceRepository, never()).save(any());
-    }
-
-    @Test
-    void unknownPlanIsSkippedRatherThanCrashingTheWholeRun() {
-        when(academyRepository.findAll()).thenReturn(List.of(academy("LEGACY_GOLD", AcademyStatus.ACTIVE)));
-        when(invoiceRepository.findByAcademyIdAndPeriod(academyId, PERIOD)).thenReturn(Optional.empty());
-
-        assertThat(service.generateInvoices(PERIOD)).isZero();
-        verify(invoiceRepository, never()).save(any());
-    }
-
-    @Test
-    void malformedPeriodIsRejected() {
-        assertThatThrownBy(() -> service.generateInvoices("July 2026"))
-                .isInstanceOf(BadRequestException.class);
     }
 
     @Test

@@ -49,12 +49,14 @@ public class BillingService {
     private final AcademyRepository academyRepository;
     private final AcademyInvoiceRepository invoiceRepository;
     private final BillingPlanRepository planRepository;
+    private final com.nest.app.hq.service.HqBilling hqBilling;
 
     public BillingService(AcademyRepository academyRepository, AcademyInvoiceRepository invoiceRepository,
-                          BillingPlanRepository planRepository) {
+                          BillingPlanRepository planRepository, com.nest.app.hq.service.HqBilling hqBilling) {
         this.academyRepository = academyRepository;
         this.invoiceRepository = invoiceRepository;
         this.planRepository = planRepository;
+        this.hqBilling = hqBilling;
     }
 
     // ---- Plans ----
@@ -119,43 +121,9 @@ public class BillingService {
     @Transactional
     @Auditable(action = "INVOICES_GENERATED", entityType = "academy_invoice")
     public int generateInvoices(String period) {
-        YearMonth month = parsePeriod(period);
-        LocalDate issuedOn = month.atDay(1);
-        LocalDate dueOn = issuedOn.plusDays(PAYMENT_TERM_DAYS);
-
-        Map<String, BillingPlan> plans = plansByCode();
-        int created = 0;
-
-        for (Academy academy : academyRepository.findAll()) {
-            if (academy.getStatus() != AcademyStatus.ACTIVE) {
-                continue;
-            }
-            if (invoiceRepository.findByAcademyIdAndPeriod(academy.getId(), period).isPresent()) {
-                continue;
-            }
-            BillingPlan plan = plans.get(academy.getPlan());
-            if (plan == null) {
-                log.warn("Academy {} is on unknown plan '{}' - skipping invoice for {}",
-                        academy.getId(), academy.getPlan(), period);
-                continue;
-            }
-            // A zero-price plan gets no invoice at all rather than a ₹0 one - an invoice for
-            // nothing is noise in every list and dunning report it appears in.
-            if (plan.getMonthlyPrice().compareTo(BigDecimal.ZERO) <= 0) {
-                continue;
-            }
-            invoiceRepository.save(AcademyInvoice.builder()
-                    .academyId(academy.getId())
-                    .period(period)
-                    .planCode(plan.getCode())
-                    .amount(plan.getMonthlyPrice())
-                    .status(InvoiceStatus.DUE)
-                    .issuedOn(issuedOn)
-                    .dueOn(dueOn)
-                    .build());
-            created++;
-        }
-        return created;
+        // One implementation of bill-raising for both consoles: it writes the line items, any
+        // add-ons and the GST the HQ console's Collections page reads.
+        return hqBilling.generate(period);
     }
 
     @Transactional
@@ -166,15 +134,12 @@ public class BillingService {
         if (invoice.getStatus() == InvoiceStatus.PAID) {
             throw new BadRequestException("This invoice is already marked paid");
         }
-        invoice.setStatus(InvoiceStatus.PAID);
-        invoice.setPaidAt(Instant.now());
-        invoice.setPaidAmount(request.amount());
-        invoice.setPaymentMethod(request.method());
-        invoice.setPaymentRef(request.reference());
-        invoice.setNote(request.note());
-        invoice.setRecordedBy(TenantContext.currentUserId());
-        invoiceRepository.save(invoice);
-        return toResponse(invoice, academyNames(), LocalDate.now());
+        // A payment against the bill, so part-payments and the balance are tracked in one place.
+        hqBilling.recordPayment(invoiceId, request.amount(), request.method(), request.reference(), LocalDate.now());
+        AcademyInvoice fresh = invoiceRepository.findById(invoiceId).orElseThrow();
+        fresh.setNote(request.note());
+        invoiceRepository.save(fresh);
+        return toResponse(fresh, academyNames(), LocalDate.now());
     }
 
     /** Writing a charge off is recorded, not deleted - a disappeared invoice makes the history

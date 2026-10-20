@@ -40,14 +40,21 @@ public class ArtistApplicationService {
         this.notificationService = notificationService;
     }
 
+    public ArtistApplicationResponse apply() {
+        return apply(null);
+    }
+
     @Transactional
     @Auditable(action = "ARTIST_APPLICATION_SUBMITTED", entityType = "artist_application")
-    public ArtistApplicationResponse apply() {
+    public ArtistApplicationResponse apply(java.util.Map<String, Object> details) {
         UUID userId = TenantContext.currentUserId();
         User user = userRepository.findById(userId).orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
         if (user.getRole() == Role.ARTIST) {
             throw new BadRequestException("You're already an Artist");
+        }
+        if (applicationRepository.existsByUserIdAndStatus(userId, ArtistApplicationStatus.BANNED)) {
+            throw new BadRequestException("Your artist access was withdrawn and you cannot apply again");
         }
         applicationRepository.findFirstByUserIdAndStatusOrderByCreatedAtDesc(userId, ArtistApplicationStatus.PENDING)
                 .ifPresent(existing -> {
@@ -55,7 +62,7 @@ public class ArtistApplicationService {
                 });
 
         ArtistApplication application = applicationRepository.save(
-                ArtistApplication.builder().userId(userId).status(ArtistApplicationStatus.PENDING).build());
+                withDetails(ArtistApplication.builder().userId(userId).status(ArtistApplicationStatus.PENDING), details).build());
 
         // Every Super Admin gets an ERP-bell heads-up - this is an admin action item, not a social one.
         userRepository.findByRole(Role.SUPER_ADMIN).forEach(admin ->
@@ -109,6 +116,40 @@ public class ArtistApplicationService {
                 "Artist application update", "Your application wasn't approved this time. You can still view and enjoy posts as a Guest.", null);
 
         return toResponse(application, user);
+    }
+
+    /** Copies the optional art form, city, bio and linked profiles the applicant gave. Everything is optional and trimmed. */
+    private static ArtistApplication.ArtistApplicationBuilder withDetails(ArtistApplication.ArtistApplicationBuilder b, java.util.Map<String, Object> d) {
+        if (d == null) return b;
+        b.artForm(clip(d.get("form"), 80)).city(clip(d.get("city"), 80)).bio(clip(d.get("bio"), 500));
+        if (d.get("profiles") instanceof List<?> list) {
+            List<java.util.Map<String, Object>> out = new java.util.ArrayList<>();
+            for (Object o : list.stream().limit(6).toList()) {
+                if (!(o instanceof java.util.Map<?, ?> m)) continue;
+                String pl = clip(m.get("pl"), 20), h = clip(m.get("h"), 120);
+                if (pl == null || h == null || !java.util.Set.of("instagram", "youtube", "facebook", "x", "spotify", "website").contains(pl)) continue;
+                java.util.Map<String, Object> p = new java.util.LinkedHashMap<>();
+                p.put("pl", pl);
+                p.put("h", h);
+                p.put("f", clip(m.get("f"), 30) == null ? "" : clip(m.get("f"), 30));
+                p.put("s", "pending");
+                p.put("m", "Not yet");
+                out.add(p);
+            }
+            try {
+                b.profiles(new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(out));
+            } catch (com.fasterxml.jackson.core.JsonProcessingException ignored) {
+                // keep the default empty list
+            }
+        }
+        return b;
+    }
+
+    private static String clip(Object v, int max) {
+        if (v == null) return null;
+        String s = v.toString().trim();
+        if (s.isEmpty()) return null;
+        return s.length() > max ? s.substring(0, max) : s;
     }
 
     private ArtistApplication pendingOrThrow(UUID applicationId) {

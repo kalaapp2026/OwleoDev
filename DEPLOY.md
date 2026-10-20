@@ -213,3 +213,24 @@ cd NEST_FE
 flutter build apk --release --dart-define=API_BASE_URL=https://owleodev.onrender.com
 # -> build/app/outputs/flutter-apk/app-release.apk
 ```
+
+---
+
+## The HQ Console (platform super admin)
+
+A separate Flutter web app in `NEST_ADMIN`, on the same backend and login (role `SUPER_ADMIN`).
+Deploy it as its own static site, built the same way:
+
+```bash
+cd NEST_ADMIN
+flutter build web --release --dart-define=API_BASE_URL=https://owleodev.onrender.com
+```
+
+`render.yaml` defines it as `owleo-hq`. It uses hash URLs, so unlike the academy app it needs no
+rewrite rule. **Add its origin to `NEST_CORS_ALLOWED_ORIGINS`** (comma-separated with the academy
+app's) or every call fails exactly as in Step 1.
+
+The backend's Flyway migrations V48 to V59 (the HQ tables) apply on its next start. Two things to do
+before real use: replace the development OTP (`OtpService` always issues `123456`, which the Academy
+transfer module relies on) with a real sender, and note that Marketing audiences stay empty until
+something sets `users.marketing_consent`. Both are listed in `NEST_ADMIN/PLAN.md`.

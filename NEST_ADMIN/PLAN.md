@@ -1,0 +1,188 @@
+# Owleo HQ Console (NEST_ADMIN): handoff
+
+The platform super admin's web app. A separate Flutter project (package `owleo_hq`) on the **same
+Spring Boot backend and the same login** as the academy app, built from the prototype
+`Owleo HQ Console (2).html`. It is web-first; it is Flutter so it can become an app later.
+
+Why separate from `NEST_FE`: the academy bundle is already ~5 MB, super admin has ~25 modules, and it
+is a different audience and security surface. Nothing here imports `NEST_FE` (that would drag
+firebase/pdf plugins into the web build). Code the two share (Dio client, tokens) was copied; pulling
+it into a package is a later refactor.
+
+Check `git log` and the source before trusting anything below as still true.
+
+---
+
+## Run it
+
+```bash
+# backend (port 8081, schema `nest`) - from d:\NEST\NEST_BE
+mvn -pl monolith spring-boot:run
+
+# console (dev) - from d:\NEST\NEST_ADMIN
+flutter run -d web-server --release --web-hostname 0.0.0.0 --web-port 5100
+```
+
+Sign in as `superadmin` / `SuperAdmin@123` (the dev super admin seeded by the backend). Use
+`--release`, same reason as the academy app (debug web-server only serves the first browser).
+
+The API base URL is compiled in: `--dart-define=API_BASE_URL=http://localhost:8081` (default) or the
+deployed URL. Changing it needs a rebuild.
+
+### Demo data (a throwaway second backend)
+
+The real dev database holds one academy, so most screens look empty. A **demo backend** fills a
+separate schema with ~45 academies, 2,100 people, bills, tickets, artists, events, providers and so on:
+
+```bash
+# creates the schema if missing, seeds it on first start, refuses to run against `nest`
+SERVER_PORT=8082 DB_SCHEMA=nest_hqdemo NEST_HQ_DEMO_ENABLED=true mvn -pl monolith spring-boot:run
+
+flutter build web --release --dart-define=API_BASE_URL=http://localhost:8082 --output build/web_demo
+```
+
+Same login; demo people have password `Demo@1234`. To reseed: stop it, `DROP SCHEMA nest_hqdemo CASCADE;
+CREATE SCHEMA nest_hqdemo;`, start again. The seeder is `com.nest.app.hq.demo.HqDemoSeeder`. It is a
+fixed-seed generator, so the demo is the same every time. It runs as an `ApplicationRunner`, which can
+fire **before** the app's own super-admin bootstrap, so it must not assume that user exists.
+
+### Tests
+
+`mvn -q clean test-compile && mvn surefire:test` (kill any running Spring first, see the root
+CLAUDE.md): 334 backend tests. `flutter test` in this folder: 14 tests (formatting, JSON reading, role
+rules, CSV parsing).
+
+---
+
+## How it is built
+
+```
+lib/
+  app/            theme (tokens ported from the prototype CSS), router (go_router, hash URLs)
+  core/api        Dio client with refresh-token interceptor; session + roles in core/auth
+  core/ui         the widget kit: cards, KPIs, tables, charts, selects, drawers, modals, toasts
+  features/<m>/   one folder per module (screen + its drawers/modals/providers)
+  features/shell  header, floating dock, "More" sheet, logo flip HQ<->Social, module gate
+```
+
+State is Riverpod `FutureProvider.autoDispose` per read; a write calls the API and invalidates the
+providers it affects. Screens are built from `lib/core/ui` and the tokens in `lib/app/theme.dart`;
+reach for those before writing a widget. Pickers are structured (dropdown, chips, date picker), never
+raw ID fields.
+
+Backend: package `com.nest.app.hq`, everything under `/admin/hq/**`, every controller
+`@PreAuthorize("hasRole('SUPER_ADMIN')")` plus `HqAccess` (below). Read models are `JdbcTemplate` SQL
+(needs `spring.datasource.hikari.schema=${DB_SCHEMA:nest}`); anything that must go through existing
+services (creating accounts, onboarding an academy) calls them.
+
+### Roles
+
+`users.hq_role`: `SUPER`, `OPS`, `FINANCE`, `SUPPORT`. **NULL means SUPER** (the seeded owner has none).
+Read on every request, so a role change takes effect immediately. The server enforces; the app only
+locks tiles and hides buttons.
+
+| Role | Opens | Changes things |
+|---|---|---|
+| Super | everything (incl. Master data, Settings, Transfers, Providers) | yes |
+| Operations | users, academies, onboarding, approvals, courses, exits, reports, artists, events, support, alerts | yes |
+| Finance | finance, plans, growth, collections, marketing, reports, approvals, academies, support | plans, collections, marketing only |
+| Support | users, students, courses, exits, artists, events, support, alerts | replies on tickets |
+
+Writing = Super or Operations, except plans/collections/marketing (Super or Finance). Export = Super,
+Operations, Finance.
+
+---
+
+## Modules
+
+| Module | App | Backend | Tables (migration) |
+|---|---|---|---|
+| Dashboard (Business + Platform status) | `dashboard/` | `HqOverviewController`, `HqPlatform` | reads (V48) |
+| Entities / academies | `academies/` | `HqAcademyController`, `HqAcademyService`, `HqImport` | V49, V51 |
+| Onboarding | `onboarding/` | `HqOnboardingController`, `HqOnboarding` | `hq_leads` (V54) |
+| Collections | `collections/` | `HqCollectionsController`, `HqBilling`, `HqCatalog` | V50, V52 |
+| Plans | `plans/` | `HqPlansController` | V49 |
+| Growth, Finance | `growth/`, `finance/` | `HqInsightsController` | V50 |
+| Approvals | `approvals/` | `HqApprovalsController`, `HqApprovals` | V53 |
+| Academy transfer | `transfers/` | `HqTransfers` (real OTPs via `OtpService`) | V58 |
+| Users (Audience + Students) | `users/` | `HqUsersController`, `HqUsers`, `HqStudentsController`, `HqStudents` | V55, V59 (`marketing_consent`) |
+| Master data | `master/` | `HqMasterController`, `HqMaster` | V55 |
+| Courses | `courses/` | `HqCoursesController`, `HqCourses` | existing batch tables |
+| Exits | `exits/` | `HqExitsController`, `HqExits` (uses the EXIT workflow) | V55 |
+| Reports + audit trail | `reports/` | `HqReportsController`, `HqReports`, `HqAudit` | V48 |
+| Support tickets | `support/` | `HqSupportController`, `HqSupport` | V56 |
+| Artist verification | `artists/` | `HqArtistsController`, `HqArtists` | V57 (extends `artist_applications`) |
+| Events | `events/` | `HqEventsController`, `HqEvents` | V57 `hq_event_log` |
+| Marketing | `marketing/` | `HqMarketingController`, `HqMarketing` | V59 |
+| Service providers | `providers/` | `HqProvidersController`, `HqProviders` | V59 |
+| Platform settings + HQ team | `settings/` | `HqTeamController`, `HqPlatform`, `HqTeam` | `users.hq_role` |
+| Social (Post, Event, Search, Profile) | `social/` | `HqSocialController`, `HqSocial` | existing `posts` |
+| Alerts | `alerts/` | `HqOverviewController`, `HqAlerts` | derived |
+
+Behaviour worth knowing:
+
+- **Deactivating a person is real.** `AuthService.issueTokens` refuses `users.status = 'INACTIVE'`, so a
+  deactivated account cannot sign in or refresh; deactivation also revokes sessions and sets academy
+  memberships to `REVOKED` (reactivating restores them).
+- **Approving an artist with posting on makes them `ARTIST`** (the role the feed checks);
+  suspension/switch-off returns them to `GUEST`. A third upheld report bans for good and the account
+  can never re-apply.
+- **Contact details are masked everywhere.** Only `POST /admin/hq/users/{id}/reveal` returns one, and
+  it writes an audit line each time; the edit form's source is logged the same way.
+- **Billing is one engine.** The academy app's `BillingService` delegates to `HqBilling`, so both
+  consoles write the same lines, GST and numbers (`INV-YYMM-NNN`, numbered from the highest suffix, not
+  a count). Legacy invoices keep `gst_rate = 0`.
+- **Academy status is derived**, never stored: closed -> churned; suspended; has a demo end date ->
+  trial; overdue bill -> past due; else live. Health = attendance 30% + fee collection 35% + weekly
+  active 35% (missing parts reweighted).
+
+---
+
+## What is not built, or is a stand-in (be honest with the owner about these)
+
+- **Events have no ticketing**, so the prototype's registrations, capacity, price and 5% commission do
+  not exist. The screen shows "interested" (the only audience signal recorded). Billing the commission
+  needs ticket data first.
+- **Artists "can host events" is stored but not enforced**: only academies can create events today.
+  Reports on artists are logged by HQ staff; there is no in-app "report this artist" yet.
+- **Social**: no likes, comments or reports are recorded, so none are shown. Official posts are PUBLIC
+  only (no audience targeting). Removing a post is permanent.
+- **Providers**: academies cannot request a service from their app; HQ logs requests. "Send a warning"
+  is recorded in the history, not delivered. No media is stored by design.
+- **Marketing**: Owleo does not place ads. Spend, reach, clicks and leads are typed in from the ad
+  platform. Audience counts use `users.marketing_consent`, which defaults to **false** and which
+  nothing in the apps sets yet, so on real data every audience is 0 until consent is collected.
+- **Transfers**: codes go through the existing `OtpService`, which uses the fixed code **123456** in
+  development. Replace that and wire a real SMS sender before any real transfer.
+- **Platform status** shows what the database and JVM can report (latency, memory, uptime, sessions,
+  notification failures, who signed in). It is not infrastructure monitoring or error telemetry.
+- **Users**: the profile edit covers personal details; the academy mapping (course, batch, trainer) is
+  shown but not editable, and branch is not shown (no per-person branch exists).
+- **Not built from the prototype**: "Open as admin" (impersonation); a time-limited "give access" for a
+  bank-account change; logo upload on Add academy; WhatsApp/SMS delivery of payment reminders.
+- **Scale**: the Users list reads all non-HQ people into memory per request to compute the "missing
+  data" counts (fine for thousands, page it in SQL before 100k+).
+- **No Testcontainers integration tests** (same as the academy backend): the DB constraints in V48-V59
+  were verified by hand against the dev schema and the demo schema.
+- **i18n**: every string is hardcoded English.
+
+## Traps found while building (they cost real time)
+
+- **JPA saves are not flushed before JDBC.** After calling an existing service that persists through
+  JPA (`createUserWithPassword`, `onboardAcademy`, `createMembership`), call `EntityManager.flush()`
+  before a `JdbcTemplate` update/insert that depends on the new row. Without it the UPDATE silently
+  matches 0 rows or the insert hits a foreign key. This produced an invited staff member with no role
+  (treated as Super!) and a failing "start demo".
+- **`Set.of(...).contains(null)` throws NPE** (a 500, not a 400). Null-check input before `contains`.
+- **Count-based numbering collides** after any deletion; number from `max + 1`.
+- **A detached `flutter run` cannot hot reload**; rebuild and restart, and verify against the compiled
+  bundle, as in the root CLAUDE.md.
+- **Header titles** are resolved from the first path segment; strip the query string first
+  (`/users?tab=students`).
+
+## Deploying
+
+A second static site, same pattern as `owleo-web` (see `render.yaml` / `DEPLOY.md`): build with
+`flutter build web --release --dart-define=API_BASE_URL=<backend>` from `NEST_ADMIN`, and add the
+site's origin to `NEST_CORS_ALLOWED_ORIGINS` on the backend or every call fails. Flyway migrations
+V48-V59 run on backend start.

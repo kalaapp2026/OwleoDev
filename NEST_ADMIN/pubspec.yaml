@@ -1,0 +1,43 @@
+name: owleo_hq
+description: "Owleo HQ Console - the platform super admin web app for Owleo Nest"
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.12.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # State management and navigation: the same choices as the academy app (NEST_FE), so anyone who
+  # can read one can read the other.
+  flutter_riverpod: ^2.6.1
+  go_router: ^14.6.2
+
+  # Networking: same backend, same Dio setup, same token refresh behaviour as NEST_FE.
+  dio: ^5.7.0
+  flutter_secure_storage: ^9.2.2
+
+  intl: ^0.20.2
+
+  # The prototype is set in Inter. Unlike NEST_FE (12 languages, many non-Latin) this console is
+  # English-only, so a Latin font is the right call here.
+  google_fonts: ^6.2.1
+
+  # Browser file download / file picker for CSV export and bulk import.
+  web: ^1.1.0
+
+  # Opens a profile / map link in a new browser tab.
+  url_launcher: ^6.3.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/brand/

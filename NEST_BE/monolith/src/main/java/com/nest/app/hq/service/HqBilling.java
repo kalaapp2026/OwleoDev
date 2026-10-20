@@ -1,0 +1,321 @@
+package com.nest.app.hq.service;
+
+import com.nest.app.hq.HqAudit;
+import com.nest.app.notification.entity.NotificationModule;
+import com.nest.app.notification.entity.NotificationType;
+import com.nest.app.notification.service.NotificationService;
+import com.nest.common.exception.BadRequestException;
+import com.nest.common.exception.ResourceNotFoundException;
+import com.nest.common.security.TenantContext;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.time.LocalDate;
+import java.time.YearMonth;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+
+/**
+ * What academies owe Owleo, and every way that changes: raising the month's bills, recording a
+ * payment, adding a charge or credit, applying an offer, moving a due date, and nudging for payment.
+ *
+ * <p>A bill's money is always derived the same way, in {@link #recompute}:
+ * <pre>
+ *   gross    = sum of every line (a credit is a negative ADJUSTMENT line)
+ *   discount = the applied offer's worth, taken off the recurring part (plan + add-ons)
+ *   subtotal = gross - discount          (never below zero)
+ *   gst      = subtotal x the rate stored on the bill
+ *   total    = subtotal + gst
+ *   balance  = total - payments received
+ * </pre>
+ * Status follows the balance, so it can never disagree with the payments.
+ */
+@Service
+public class HqBilling {
+
+    private static final int PAYMENT_TERM_DAYS = 14;
+
+    private final JdbcTemplate jdbc;
+    private final HqAudit audit;
+    private final NotificationService notifications;
+
+    public HqBilling(JdbcTemplate jdbc, HqAudit audit, NotificationService notifications) {
+        this.jdbc = jdbc;
+        this.audit = audit;
+        this.notifications = notifications;
+    }
+
+    // ---- settings ----
+
+    public BigDecimal gstRate() {
+        return setting("gst_percent", "18");
+    }
+
+    public BigDecimal setupFee() {
+        return setting("setup_fee", "4999");
+    }
+
+    private BigDecimal setting(String key, String fallback) {
+        List<String> v = jdbc.queryForList("SELECT value FROM hq_settings WHERE key = ?", String.class, key);
+        return new BigDecimal(v.isEmpty() ? fallback : v.get(0));
+    }
+
+    // ---- raising bills ----
+
+    /**
+     * Raises the bills for [period] ('YYYY-MM'): one per live academy on a priced plan, carrying the plan
+     * charge, its add-ons and, in the month it went live, the one-off setup fee. Safe to run twice: an
+     * academy that already has a bill for the period is skipped, so a retried job never double-charges.
+     * An academy only owes for months that began after it existed.
+     *
+     * @return how many bills were created
+     */
+    @Transactional
+    public int generate(String period) {
+        return generate(period, null);
+    }
+
+    /** As {@link #generate(String)}, for one academy only: used when an academy goes live mid-month. */
+    @Transactional
+    public int generate(String period, UUID onlyAcademy) {
+        YearMonth month;
+        try {
+            month = YearMonth.parse(period);
+        } catch (Exception e) {
+            throw new BadRequestException("Period must look like 2026-10");
+        }
+        LocalDate issued = month.atDay(1);
+        LocalDate due = issued.plusDays(PAYMENT_TERM_DAYS);
+        BigDecimal rate = gstRate();
+        BigDecimal setup = setupFee();
+        int created = 0;
+
+        var academies = jdbc.queryForList("""
+                SELECT a.id, a.name, a.plan, p.display_name AS plan_name, p.monthly_price, a.go_live_on
+                FROM academies a JOIN billing_plans p ON p.code = a.plan
+                WHERE a.status = 'ACTIVE' AND a.closed_at IS NULL AND a.demo_ends_on IS NULL AND p.monthly_price > 0
+                  AND a.created_at < ? AND (?::uuid IS NULL OR a.id = ?::uuid)
+                  AND NOT EXISTS (SELECT 1 FROM academy_invoices i WHERE i.academy_id = a.id AND i.period = ?)
+                ORDER BY a.name""", java.sql.Timestamp.valueOf(issued.plusMonths(1).atStartOfDay()), onlyAcademy, onlyAcademy, period);
+
+        for (var a : academies) {
+            UUID academyId = (UUID) a.get("id");
+            UUID invoiceId = UUID.randomUUID();
+            BigDecimal planPrice = (BigDecimal) a.get("monthly_price");
+            jdbc.update("""
+                    INSERT INTO academy_invoices (id, academy_id, period, plan_code, amount, status, issued_on, due_on, total, gst_rate, number)
+                    VALUES (?, ?, ?, ?, ?, 'DUE', ?, ?, ?, ?, ?)""",
+                    invoiceId, academyId, period, a.get("plan"), planPrice, issued, due, planPrice, rate, nextNumber(period));
+            line(invoiceId, "PLAN", a.get("plan_name") + " plan", planPrice);
+
+            for (var ad : jdbc.queryForList("""
+                    SELECT d.name, d.price FROM academy_addons x JOIN hq_addons d ON d.id = x.addon_id
+                    WHERE x.academy_id = ? AND x.from_period <= ?
+                      AND (d.billing = 'MONTH' OR x.from_period = ?)""", academyId, period, period)) {
+                line(invoiceId, "ADDON", (String) ad.get("name"), (BigDecimal) ad.get("price"));
+            }
+
+            LocalDate live = a.get("go_live_on") == null ? null : ((java.sql.Date) a.get("go_live_on")).toLocalDate();
+            if (live != null && YearMonth.from(live).equals(month) && setup.signum() > 0) {
+                line(invoiceId, "SETUP", "Setup and onboarding", setup);
+            }
+            recompute(invoiceId);
+            created++;
+        }
+        if (created > 0) {
+            audit.log("collections", "Raised " + created + " bills for " + period);
+        }
+        return created;
+    }
+
+    private String nextNumber(String period) {
+        // Highest suffix + 1, not a count: a deleted bill leaves a gap, and counting would reuse a number.
+        Integer n = jdbc.queryForObject(
+                "SELECT COALESCE(MAX(substring(number FROM '[0-9]+$')::int), 0) FROM academy_invoices WHERE period = ?", Integer.class, period);
+        return "INV-" + period.substring(2, 4) + period.substring(5, 7) + "-" + String.format("%03d", (n == null ? 0 : n) + 1);
+    }
+
+    private void line(UUID invoiceId, String kind, String label, BigDecimal amount) {
+        jdbc.update("INSERT INTO invoice_lines (invoice_id, kind, label, amount) VALUES (?, ?, ?, ?)", invoiceId, kind, label, amount);
+    }
+
+    // ---- the arithmetic ----
+
+    /** Re-derives discount, GST and total from the bill's lines and offer, then re-syncs its status. */
+    @Transactional
+    public void recompute(UUID invoiceId) {
+        var inv = jdbc.queryForList("SELECT gst_rate, offer_id, plan_code FROM academy_invoices WHERE id = ?", invoiceId)
+                .stream().findFirst().orElseThrow(() -> new ResourceNotFoundException("Bill not found."));
+        BigDecimal rate = (BigDecimal) inv.get("gst_rate");
+
+        BigDecimal gross = BigDecimal.ZERO, recurring = BigDecimal.ZERO, plan = BigDecimal.ZERO;
+        for (var l : jdbc.queryForList("SELECT kind, amount FROM invoice_lines WHERE invoice_id = ?", invoiceId)) {
+            BigDecimal amt = (BigDecimal) l.get("amount");
+            gross = gross.add(amt);
+            String kind = (String) l.get("kind");
+            if (kind.equals("PLAN") || kind.equals("ADDON")) recurring = recurring.add(amt);
+            if (kind.equals("PLAN")) plan = plan.add(amt);
+        }
+
+        BigDecimal discount = BigDecimal.ZERO;
+        if (inv.get("offer_id") != null) {
+            var o = jdbc.queryForList("SELECT type, value FROM hq_offers WHERE id = ?", inv.get("offer_id")).stream().findFirst();
+            if (o.isPresent()) {
+                BigDecimal v = (BigDecimal) o.get().get("value");
+                discount = switch ((String) o.get().get("type")) {
+                    case "PCT" -> recurring.multiply(v).divide(BigDecimal.valueOf(100), 0, RoundingMode.HALF_UP);
+                    case "FLAT" -> v.min(recurring);
+                    default -> plan;
+                };
+            }
+        }
+        BigDecimal subtotal = gross.subtract(discount).max(BigDecimal.ZERO);
+        BigDecimal gst = subtotal.multiply(rate).divide(BigDecimal.valueOf(100), 0, RoundingMode.HALF_UP);
+        BigDecimal total = subtotal.add(gst);
+
+        jdbc.update("UPDATE academy_invoices SET discount = ?, gst = ?, total = ? WHERE id = ?", discount, gst, total, invoiceId);
+        syncStatus(invoiceId);
+    }
+
+    /** DUE or PAID by the balance; WAIVED is a deliberate write-off and is left alone. */
+    @Transactional
+    public void syncStatus(UUID invoiceId) {
+        var row = jdbc.queryForMap("""
+                SELECT i.status, i.total, COALESCE((SELECT SUM(p.amount) FROM invoice_payments p WHERE p.invoice_id = i.id), 0) AS paid,
+                       (SELECT max(p.created_at) FROM invoice_payments p WHERE p.invoice_id = i.id) AS last_paid
+                FROM academy_invoices i WHERE i.id = ?""", invoiceId);
+        if ("WAIVED".equals(row.get("status"))) {
+            return;
+        }
+        BigDecimal paid = (BigDecimal) row.get("paid");
+        boolean settled = paid.compareTo((BigDecimal) row.get("total")) >= 0;
+        jdbc.update("""
+                UPDATE academy_invoices SET status = ?, paid_amount = ?, paid_at = ? WHERE id = ?""",
+                settled ? "PAID" : "DUE", paid.signum() == 0 ? null : paid,
+                settled ? row.get("last_paid") : null, invoiceId);
+    }
+
+    // ---- things a person does to a bill ----
+
+    @Transactional
+    public void recordPayment(UUID invoiceId, BigDecimal amount, String mode, String reference, LocalDate paidOn) {
+        var bill = bill(invoiceId);
+        if ("WAIVED".equals(bill.get("status"))) throw new BadRequestException("This bill was waived.");
+        if (amount == null || amount.signum() <= 0) throw new BadRequestException("Enter the amount received.");
+        BigDecimal balance = balance(invoiceId);
+        if (balance.signum() <= 0) throw new BadRequestException("This bill is already paid.");
+        if (amount.compareTo(balance) > 0) throw new BadRequestException("That is more than the " + inr(balance) + " still to pay.");
+        LocalDate issued = ((java.sql.Date) bill.get("issued_on")).toLocalDate();
+        LocalDate day = paidOn == null ? LocalDate.now() : paidOn;
+        if (day.isAfter(LocalDate.now())) throw new BadRequestException("The payment date cannot be in the future.");
+        if (day.isBefore(issued)) throw new BadRequestException("The payment date is before the bill was issued.");
+        if (mode == null || mode.isBlank()) throw new BadRequestException("Say how it was paid.");
+        jdbc.update("""
+                INSERT INTO invoice_payments (invoice_id, paid_on, amount, mode, reference, recorded_by)
+                VALUES (?, ?, ?, ?, ?, ?)""", invoiceId, day, amount, mode, blankNull(reference), TenantContext.currentUserIdOrNull());
+        jdbc.update("UPDATE academy_invoices SET payment_method = ?, payment_ref = ?, recorded_by = ? WHERE id = ?",
+                mode, blankNull(reference), TenantContext.currentUserIdOrNull(), invoiceId);
+        syncStatus(invoiceId);
+        audit.log("collections", (UUID) bill.get("academy_id"), "Recorded " + inr(amount) + " (" + mode + ") on " + bill.get("number"));
+    }
+
+    @Transactional
+    public void addAdjustment(UUID invoiceId, String description, boolean credit, BigDecimal amount) {
+        var bill = bill(invoiceId);
+        if (balance(invoiceId).signum() <= 0) throw new BadRequestException("A paid bill cannot be changed.");
+        if (description == null || description.trim().length() < 3) throw new BadRequestException("Say what it is for.");
+        if (amount == null || amount.signum() <= 0) throw new BadRequestException("Enter the amount.");
+        line(invoiceId, "ADJUSTMENT", description.trim(), credit ? amount.negate() : amount);
+        recompute(invoiceId);
+        audit.log("collections", (UUID) bill.get("academy_id"), (credit ? "Credited " : "Charged ") + inr(amount) + " on " + bill.get("number") + ": " + description.trim());
+    }
+
+    @Transactional
+    public void setDueDate(UUID invoiceId, LocalDate due) {
+        var bill = bill(invoiceId);
+        if (balance(invoiceId).signum() <= 0) throw new BadRequestException("A paid bill cannot be changed.");
+        if (due == null) throw new BadRequestException("Choose the new due date.");
+        if (due.isBefore(((java.sql.Date) bill.get("issued_on")).toLocalDate())) throw new BadRequestException("The due date is before the bill was issued.");
+        jdbc.update("UPDATE academy_invoices SET due_on = ? WHERE id = ?", due, invoiceId);
+        audit.log("collections", (UUID) bill.get("academy_id"), "Moved the due date of " + bill.get("number") + " to " + due);
+    }
+
+    /** Applies (or, with a null offer, removes) an offer on one unpaid bill. */
+    @Transactional
+    public void setOffer(UUID invoiceId, UUID offerId) {
+        var bill = bill(invoiceId);
+        if (balance(invoiceId).signum() <= 0) throw new BadRequestException("A paid bill cannot be changed.");
+        if (offerId != null) {
+            var o = jdbc.queryForList("SELECT code, active, starts_on, ends_on, applies_to, use_limit FROM hq_offers WHERE id = ?", offerId)
+                    .stream().findFirst().orElseThrow(() -> new ResourceNotFoundException("Offer not found."));
+            LocalDate today = LocalDate.now();
+            if (!(Boolean) o.get("active")) throw new BadRequestException("That offer is paused.");
+            if (today.isBefore(((java.sql.Date) o.get("starts_on")).toLocalDate()) || today.isAfter(((java.sql.Date) o.get("ends_on")).toLocalDate())) {
+                throw new BadRequestException("That offer is not running today.");
+            }
+            String applies = (String) o.get("applies_to");
+            if (!applies.equals("all") && !applies.equals(bill.get("plan_code"))) throw new BadRequestException("That offer is not for this plan.");
+            Integer limit = (Integer) o.get("use_limit");
+            if (limit != null) {
+                Integer used = jdbc.queryForObject("SELECT count(*) FROM academy_invoices WHERE offer_id = ? AND id <> ?", Integer.class, offerId, invoiceId);
+                if (used != null && used >= limit) throw new BadRequestException("That offer has been used up.");
+            }
+            audit.log("collections", (UUID) bill.get("academy_id"), "Applied offer " + o.get("code") + " to " + bill.get("number"));
+        } else {
+            audit.log("collections", (UUID) bill.get("academy_id"), "Removed the offer from " + bill.get("number"));
+        }
+        jdbc.update("UPDATE academy_invoices SET offer_id = ? WHERE id = ?", offerId, invoiceId);
+        recompute(invoiceId);
+    }
+
+    /**
+     * Reminds an academy's admins about unpaid bills. Delivery is an in-app notification to each admin of the
+     * academy (a real message in their Owleo Nest bell); [channels] is recorded on the bill's history.
+     *
+     * @return how many people were notified
+     */
+    @Transactional
+    public int remind(UUID academyId, List<UUID> invoiceIds, String channels, String message) {
+        if (message == null || message.trim().length() < 10) throw new BadRequestException("Write a short message.");
+        if (invoiceIds.isEmpty()) throw new BadRequestException("Nothing is unpaid for this academy.");
+        UUID actor = TenantContext.currentUserIdOrNull();
+        for (UUID id : invoiceIds) {
+            jdbc.update("INSERT INTO invoice_reminders (invoice_id, channels, sent_by, message) VALUES (?, ?, ?, ?)",
+                    id, channels, actor, message.trim());
+        }
+        List<UUID> admins = jdbc.queryForList("""
+                SELECT user_id FROM academy_memberships WHERE academy_id = ? AND role_type = 'ACADEMY_ADMIN' AND status = 'ACTIVE'""",
+                UUID.class, academyId);
+        for (UUID u : admins) {
+            notifications.notify(u, NotificationModule.ERP, NotificationType.ADMIN_BROADCAST, "Payment reminder from Owleo", message.trim(), null);
+        }
+        String name = jdbc.queryForObject("SELECT name FROM academies WHERE id = ?", String.class, academyId);
+        audit.log("collections", academyId, "Sent a payment reminder to " + name);
+        return admins.size();
+    }
+
+    // ---- helpers ----
+
+    private Map<String, Object> bill(UUID id) {
+        return jdbc.queryForList("SELECT id, academy_id, number, status, issued_on, plan_code FROM academy_invoices WHERE id = ?", id)
+                .stream().findFirst().orElseThrow(() -> new ResourceNotFoundException("Bill not found."));
+    }
+
+    public BigDecimal balance(UUID invoiceId) {
+        return jdbc.queryForObject("""
+                SELECT i.total - COALESCE((SELECT SUM(p.amount) FROM invoice_payments p WHERE p.invoice_id = i.id), 0)
+                FROM academy_invoices i WHERE i.id = ?""", BigDecimal.class, invoiceId);
+    }
+
+    public static String inr(BigDecimal v) {
+        return "₹" + java.text.NumberFormat.getIntegerInstance(new java.util.Locale("en", "IN")).format(v.setScale(0, RoundingMode.HALF_UP));
+    }
+
+    private static String blankNull(String s) {
+        return s == null || s.isBlank() ? null : s.trim();
+    }
+}

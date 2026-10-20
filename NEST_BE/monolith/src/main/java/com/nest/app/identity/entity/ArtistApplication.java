@@ -51,6 +51,21 @@ public class ArtistApplication {
     @Column(name = "decided_at")
     private Instant decidedAt;
 
+    /** What the applicant told us, kept for HQ's review (V57). */
+    @Column(name = "art_form", length = 80)
+    private String artForm;
+
+    @Column(length = 80)
+    private String city;
+
+    @Column(length = 500)
+    private String bio;
+
+    /** JSON list of {pl, h, f, s, m, note}: the profiles they linked and HQ's check of each. */
+    @Column(nullable = false)
+    @Builder.Default
+    private String profiles = "[]";
+
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)
     private Instant createdAt;

@@ -96,6 +96,33 @@ class AuthServiceTest {
     }
 
     @Test
+    void aDeactivatedAccountCannotSignInEvenWithTheRightPassword() {
+        User user = adminUser();
+        user.setStatus("INACTIVE");
+        when(userRepository.findByUsername("meera")).thenReturn(Optional.of(user));
+        when(passwordEncoder.matches("correct", "hashed")).thenReturn(true);
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> authService.loginWithPassword("meera", "correct"))
+                .isInstanceOf(com.nest.common.exception.UnauthorizedException.class);
+        verify(refreshTokenRepository, org.mockito.Mockito.never()).save(any(RefreshToken.class));
+    }
+
+    @Test
+    void aDeactivatedAccountCannotRefreshAnExistingSession() {
+        UUID jti = UUID.randomUUID();
+        String refreshTokenString = tokenProvider.generateRefreshToken(userId, jti);
+        RefreshToken tracked = RefreshToken.builder().id(jti).userId(userId)
+                .issuedAt(Instant.now()).expiresAt(Instant.now().plus(30, ChronoUnit.DAYS)).revoked(false).build();
+        User user = adminUser();
+        user.setStatus("INACTIVE");
+        when(refreshTokenRepository.findById(jti)).thenReturn(Optional.of(tracked));
+        when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> authService.refresh(refreshTokenString))
+                .isInstanceOf(com.nest.common.exception.UnauthorizedException.class);
+    }
+
+    @Test
     void refreshWithValidTokenRotatesItAndIssuesANewOne() {
         UUID jti = UUID.randomUUID();
         String refreshTokenString = tokenProvider.generateRefreshToken(userId, jti);

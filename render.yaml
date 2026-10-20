@@ -55,3 +55,30 @@ services:
       - path: /index.html
         name: Cache-Control
         value: no-cache
+
+  # The HQ Console (platform super admin) - a second static site on the same backend.
+  # It uses hash URLs (/#/overview), so no rewrite rule is needed. Add THIS site's origin to
+  # NEST_CORS_ALLOWED_ORIGINS on owleodev too, or every call fails - see DEPLOY.md.
+  - type: web
+    name: owleo-hq
+    runtime: static
+    buildCommand: |
+      set -e
+      if [ ! -d "$HOME/flutter" ]; then
+        git clone https://github.com/flutter/flutter.git --depth 1 -b stable "$HOME/flutter"
+      fi
+      export PATH="$HOME/flutter/bin:$PATH"
+      cd NEST_ADMIN
+      flutter pub get
+      flutter build web --release --dart-define=API_BASE_URL=$API_BASE_URL
+    staticPublishPath: NEST_ADMIN/build/web
+    envVars:
+      - key: API_BASE_URL
+        value: https://owleodev.onrender.com
+    headers:
+      - path: /assets/*
+        name: Cache-Control
+        value: public, max-age=31536000, immutable
+      - path: /index.html
+        name: Cache-Control
+        value: no-cache

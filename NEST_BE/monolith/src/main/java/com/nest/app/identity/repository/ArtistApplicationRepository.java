@@ -11,5 +11,7 @@ import java.util.UUID;
 public interface ArtistApplicationRepository extends JpaRepository<ArtistApplication, UUID> {
     List<ArtistApplication> findByStatusOrderByCreatedAtAsc(ArtistApplicationStatus status);
 
+    boolean existsByUserIdAndStatus(UUID userId, ArtistApplicationStatus status);
+
     Optional<ArtistApplication> findFirstByUserIdAndStatusOrderByCreatedAtDesc(UUID userId, ArtistApplicationStatus status);
 }

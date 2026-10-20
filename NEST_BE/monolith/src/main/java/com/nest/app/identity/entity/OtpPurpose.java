@@ -12,5 +12,7 @@ public enum OtpPurpose {
     MEMBERSHIP_CONFIRMATION,
     PASSWORD_RESET,
     /** Proves the new address is reachable before it replaces the login email. */
-    EMAIL_CHANGE
+    EMAIL_CHANGE,
+    /** HQ academy transfer: the current owner and the new owner each confirm the handover. */
+    OWNERSHIP_TRANSFER
 }

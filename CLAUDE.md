@@ -20,6 +20,7 @@ several.
 d:\NEST
 ├── NEST_FE\          Flutter app
 ├── NEST_BE\          Maven multi-module: `common` (shared) + `monolith` (the app)
+├── NEST_ADMIN\       Flutter web app for the platform super admin (HQ Console), same backend
 ├── DEPLOY.md         web deployment, host comparison, CORS setup
 └── CLAUDE.md         this file
 ```
@@ -200,9 +201,25 @@ Study Material is complete as of `ac8db0c`: per-student visibility, cross-batch 
 Image libraries, playlists (drag-reorder, repeat a song, per-entry actions), a file viewer, and a
 practice player with tempo/volume arcs, loop and multi-segment trims saved per person per track.
 
-Suites: **188 backend tests**, **150 Flutter tests**.
+Suites: **334 backend tests**; Flutter **150** tests in `NEST_FE` (counted earlier, not re-run since) and **14** in `NEST_ADMIN`.
 
 ---
+
+## HQ Console (`NEST_ADMIN`)
+
+A separate Flutter web app for the platform super admin, on this same backend and login (role
+`SUPER_ADMIN`, narrowed by `users.hq_role`: SUPER/OPS/FINANCE/SUPPORT, NULL = SUPER). Backend code is
+package `com.nest.app.hq` under `/admin/hq/**`; migrations **V48-V59**. It covers dashboard, entities,
+onboarding, collections, plans, growth, finance, approvals, transfers, users and students, master data,
+courses, exits, reports, support, artist verification, events, marketing, service providers, platform
+settings and the HQ team, and the Social tabs. **Read `NEST_ADMIN/PLAN.md`**: it has how to run it
+(including the demo-data backend on port 8082), the module map, the role table and an honest list of
+what is a stand-in (events have no ticketing, marketing consent is never set, the dev OTP is fixed).
+
+Two traps from that work apply everywhere: after calling a service that saves through JPA, call
+`EntityManager.flush()` before a `JdbcTemplate` statement that needs the new row (otherwise an UPDATE
+silently matches nothing or an insert hits a foreign key), and `Set.of(..).contains(null)` throws.
+A deactivated user (`users.status = 'INACTIVE'`) is now refused at sign-in and refresh.
 
 ## Outstanding
 

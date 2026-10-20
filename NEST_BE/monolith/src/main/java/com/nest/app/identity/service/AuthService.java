@@ -269,6 +269,10 @@ public class AuthService {
     }
 
     private AuthResponse issueTokens(User user) {
+        // An account HQ has deactivated cannot sign in or refresh, whatever its password.
+        if ("INACTIVE".equalsIgnoreCase(user.getStatus())) {
+            throw new UnauthorizedException("This account has been deactivated. Contact your academy.");
+        }
         NestPrincipal principal = principalAssembler.assemble(user);
         String accessToken = tokenProvider.generateAccessToken(principal);
 
