@@ -234,3 +234,13 @@ The backend's Flyway migrations V48 to V59 (the HQ tables) apply on its next sta
 before real use: replace the development OTP (`OtpService` always issues `123456`, which the Academy
 transfer module relies on) with a real sender, and note that Marketing audiences stay empty until
 something sets `users.marketing_consent`. Both are listed in `NEST_ADMIN/PLAN.md`.
+
+**Live HQ Console:** `https://owleo-admin.pages.dev` (Cloudflare Pages project `owleo-admin`). Redeploy with:
+
+```bash
+cd NEST_ADMIN
+flutter build web --release --dart-define=API_BASE_URL=https://owleodev.onrender.com
+wrangler pages deploy build/web --project-name=owleo-admin --branch main
+```
+
+`NEST_CORS_ALLOWED_ORIGINS` on `owleodev` must include `https://owleo-admin.pages.dev`.
