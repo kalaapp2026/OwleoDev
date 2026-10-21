@@ -11,7 +11,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.lang.management.ManagementFactory;
-import java.math.BigDecimal;
 import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -60,32 +59,10 @@ public class HqPlatform {
         out.put("admins", jdbc.queryForObject("SELECT count(*) FROM academy_memberships WHERE role_type = 'ACADEMY_ADMIN' AND status = 'ACTIVE'", Integer.class));
         out.put("hqStaff", jdbc.queryForObject("SELECT count(*) FROM users WHERE role_type = 'SUPER_ADMIN' AND status = 'ACTIVE'", Integer.class));
 
-        // Dues: platform fees that are overdue, biggest first.
-        List<Map<String, Object>> dues = new ArrayList<>();
-        BigDecimal owed = BigDecimal.ZERO;
-        for (var r : jdbc.queryForList("""
-                SELECT a.id, a.name, p.display_name AS plan, sum(i.total - COALESCE((SELECT sum(x.amount) FROM invoice_payments x WHERE x.invoice_id = i.id), 0)) AS balance,
-                       max(current_date - i.due_on) AS days_late, count(*) AS bills
-                FROM academy_invoices i JOIN academies a ON a.id = i.academy_id LEFT JOIN billing_plans p ON p.code = a.plan
-                WHERE i.status <> 'PAID' AND i.due_on < current_date AND a.closed_at IS NULL
-                GROUP BY a.id, a.name, p.display_name HAVING sum(i.total - COALESCE((SELECT sum(x.amount) FROM invoice_payments x WHERE x.invoice_id = i.id), 0)) > 0
-                ORDER BY balance DESC""")) {
-            owed = owed.add((BigDecimal) r.get("balance"));
-            if (dues.size() < 4) {
-                Map<String, Object> m = new LinkedHashMap<>();
-                m.put("academyId", r.get("id"));
-                m.put("academy", r.get("name"));
-                m.put("plan", r.get("plan"));
-                m.put("amount", r.get("balance"));
-                m.put("daysLate", r.get("days_late"));
-                dues.add(m);
-            }
-        }
-        out.put("owed", owed);
+        // Only the NUMBER of overdue academies is shown here. The amounts belong to the Finance workspace.
         out.put("overdueCount", jdbc.queryForObject("""
                 SELECT count(DISTINCT i.academy_id) FROM academy_invoices i JOIN academies a ON a.id = i.academy_id
                 WHERE i.status <> 'PAID' AND i.due_on < current_date AND a.closed_at IS NULL""", Integer.class));
-        out.put("dues", dues);
 
         // Users and how complete their data is.
         Map<String, Object> u = users.summary();

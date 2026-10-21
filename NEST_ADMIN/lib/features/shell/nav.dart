@@ -8,6 +8,9 @@ abstract final class NavHistory {
   static final List<String> hq = [];
   static final List<String> social = [];
 
+  /// The page the business side starts from and goes back to: the dashboard, or Revenue while Finance is open.
+  static String home = '/overview';
+
   static List<String> stackFor(String path) => path.startsWith('/social') ? social : hq;
 }
 
@@ -31,11 +34,11 @@ void hqBack(BuildContext context) {
   } else if (current.startsWith('/social')) {
     context.go('/social/post');
   } else {
-    context.go('/overview');
+    context.go(NavHistory.home);
   }
 }
 
 bool canGoBack(String path) {
   if (path.startsWith('/social')) return NavHistory.social.isNotEmpty;
-  return NavHistory.hq.isNotEmpty || path != '/overview';
+  return NavHistory.hq.isNotEmpty || path != NavHistory.home;
 }

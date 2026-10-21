@@ -126,6 +126,7 @@ public class HqInsightsController {
     @GetMapping("/admin/hq/finance")
     public Map<String, Object> finance() {
         access.requireModule("finance");
+        access.requireFinanceWorkspace();
         Map<String, Object> out = new LinkedHashMap<>(series.compute());
         List<Map<String, Object>> overdue = new ArrayList<>();
         jdbc.query("""
@@ -144,6 +145,7 @@ public class HqInsightsController {
     @Transactional
     public void saveExpenses(@RequestBody Map<String, Object> body) {
         access.requireModule("finance");
+        access.requireFinanceWorkspace();
         if (!access.role().name().equals("SUPER") && !access.role().name().equals("FINANCE")) {
             throw new BadRequestException("Only a Super admin or Finance admin can edit expenses.");
         }

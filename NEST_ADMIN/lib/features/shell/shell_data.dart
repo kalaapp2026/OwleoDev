@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/auth/session.dart';
+import 'workspace.dart';
 
 /// One thing that needs a look today (the bell and the Alerts page).
 class HqAlert {
@@ -32,8 +33,11 @@ class HqAlert {
 
 /// Open alerts, computed on the server from live data.
 final alertsProvider = FutureProvider.autoDispose<List<HqAlert>>((ref) async {
+  // Payment alerts are finance matters: they appear only in the Finance workspace, and the bell is not shown there.
+  final finance = ref.watch(workspaceProvider);
+  if (finance) return const [];
   final rows = await ref.watch(dioClientProvider).getList('/admin/hq/alerts');
-  return rows.map(HqAlert.fromJson).toList();
+  return rows.map(HqAlert.fromJson).where((a) => a.icon != 'wallet').toList();
 });
 
 /// The little red counts on the More tiles and dock: module id -> number waiting.

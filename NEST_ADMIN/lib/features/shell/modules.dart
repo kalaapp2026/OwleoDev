@@ -32,7 +32,9 @@ const Map<String, HqModule> hqModules = {
   'transfers': HqModule('transfers', 'Academy transfer', 'Handover to a new owner, confirmed by both with an OTP', 'swap', Tone.gold),
   'exits': HqModule('exits', 'Exits', 'Offboarding and access removal', 'exit', Tone.coral),
   'support': HqModule('support', 'Support', 'Tickets, enquiries and feedback', 'msg', Tone.blue),
-  'finance': HqModule('finance', 'Finance', 'Revenue, expenses and profit by month', 'rupee', Tone.gold),
+  'finance': HqModule('finance', 'Finance', 'Where Owleo revenue comes from, month by month', 'rupee', Tone.gold, label: 'Revenue'),
+  'invoicing': HqModule('invoicing', 'Invoicing', 'Monthly bills to academies, sent to their admins', 'file', Tone.gold),
+  'notifs': HqModule('notifs', 'Notification templates', 'Design what people are told, and link it to a module', 'bell', Tone.violet),
   'growth': HqModule('growth', 'Growth tracker', 'Users, academies and revenue against our targets', 'trend', Tone.primary, label: 'Growth'),
   'plans': HqModule('plans', 'Plans', 'What each plan includes and what it earns', 'layers', Tone.blue),
   'users': HqModule('users', 'Users', 'Who they are, and every student by academy', 'users', Tone.primary),
@@ -48,14 +50,18 @@ const Map<String, HqModule> hqModules = {
 /// course and batch monitor with no way in.
 const List<(String, List<String>)> moreGroups = [
   ('Operations', ['onboarding', 'courses', 'providers', 'events', 'artists', 'approvals', 'transfers', 'exits', 'support']),
-  ('Business', ['finance', 'growth', 'plans']),
+  ('Business', ['finance', 'collections', 'growth', 'plans', 'invoicing']),
   ('Market analysis', ['users', 'marketing', 'reports']),
-  ('Platform', ['master', 'settings', 'alerts']),
+  ('Platform', ['master', 'settings', 'notifs', 'alerts']),
 ];
 
 /// The bottom dock on the business side: two tabs left of the logo, one right, then More.
-const List<String> dockLeft = ['overview', 'collections'];
+const List<String> dockLeft = ['overview', 'support'];
 const List<String> dockRight = ['academies'];
+
+/// The dock while the Finance workspace is open.
+const List<String> financeDockLeft = ['finance', 'collections'];
+const List<String> financeDockRight = ['invoicing'];
 
 /// The Owleo Social side (HQ's own posting account), which the logo in the dock flips to.
 class SocialTab {

@@ -3,6 +3,7 @@ import 'package:owleo_hq/core/auth/hq_access.dart';
 import 'package:owleo_hq/core/csv_parse.dart';
 import 'package:owleo_hq/core/format.dart';
 import 'package:owleo_hq/core/json.dart';
+import 'package:owleo_hq/features/shell/workspace.dart';
 
 void main() {
   group('money and names', () {
@@ -90,6 +91,28 @@ void main() {
 
     test('blank lines and a byte order mark are ignored', () {
       expect(parseCsv('\u{feff}name\r\n\r\nx\r\n'), [['name'], ['x']]);
+    });
+  });
+
+  group('demo period and workspaces', () {
+    test('a demo length reads as days or months', () {
+      expect(demoTxt(15), '15 days');
+      expect(demoTxt(30), '1 month');
+      expect(demoTxt(45), '45 days');
+      expect(demoTxt(60), '2 months');
+      expect(demoTxt(90), '3 months');
+    });
+
+    test('business operations and finance never show together', () {
+      for (final m in ['finance', 'collections', 'invoicing']) {
+        expect(workspaceAllows(m, finance: true), isTrue);
+        expect(workspaceAllows(m, finance: false), isFalse);
+      }
+      for (final m in ['overview', 'academies', 'notifs', 'support']) {
+        expect(workspaceAllows(m, finance: false), isTrue);
+        expect(workspaceAllows(m, finance: true), isFalse);
+      }
+      expect(workspaceAllows('welcome', finance: true), isTrue);
     });
   });
 }

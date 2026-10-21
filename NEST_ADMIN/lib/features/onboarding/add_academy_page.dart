@@ -60,7 +60,8 @@ class _AddAcademyPageState extends ConsumerState<AddAcademyPage> {
   int _primary = 0;
   String? _plan;
   final _est = TextEditingController();
-  String _months = '2';
+  String _demo = '60';
+  final _customDays = TextEditingController(text: '60');
   final Set<String> _open = {'details'};
   bool _busy = false;
 
@@ -82,6 +83,7 @@ class _AddAcademyPageState extends ConsumerState<AddAcademyPage> {
       a.dispose();
     }
     _est.dispose();
+    _customDays.dispose();
     super.dispose();
   }
 
@@ -94,8 +96,11 @@ class _AddAcademyPageState extends ConsumerState<AddAcademyPage> {
     if (nums.toSet().length < nums.length) out.add(('bank', 'The same account number is used twice.'));
     if (_plan == null) out.add(('plan', 'Choose a plan.'));
     if ((int.tryParse(_est.text.trim()) ?? 0) <= 0) out.add(('plan', 'Enter the expected number of students.'));
+    if (_demoDays < 15 || _demoDays > 90) out.add(('plan', 'The demo period is 15 to 90 days.'));
     return out;
   }
+
+  int get _demoDays => _demo == 'custom' ? (int.tryParse(_customDays.text.trim()) ?? 0) : int.parse(_demo);
 
   Future<void> _submit() async {
     final issues = _issues();
@@ -110,7 +115,7 @@ class _AddAcademyPageState extends ConsumerState<AddAcademyPage> {
         ..._data.toJson(),
         'plan': _plan,
         'est': int.parse(_est.text.trim()),
-        'months': int.parse(_months),
+        'demo': _demoDays,
         'accts': [for (var i = 0; i < _shown; i++) _accts[i].toJson()],
         'primary': _primary,
       });
@@ -162,7 +167,7 @@ class _AddAcademyPageState extends ConsumerState<AddAcademyPage> {
               CollapsibleSection(
                 icon: 'rocket',
                 title: 'Plan and demo',
-                summary: '${plan?.str('name') ?? 'Choose a plan'} · $_months-month demo',
+                summary: '${plan?.str('name') ?? 'Choose a plan'} · ${demoTxt(_demoDays)} demo',
                 open: _open.contains('plan'),
                 onToggle: () => toggle('plan'),
                 badge: ok('plan') ? 'Done' : 'Incomplete',
@@ -178,13 +183,17 @@ class _AddAcademyPageState extends ConsumerState<AddAcademyPage> {
                     ),
                     HqField(label: 'Expected students', controller: _est, hint: 'e.g. 150', keyboard: TextInputType.number, formatters: [FilteringTextInputFormatter.digitsOnly]),
                   ]),
-                  HqSelect<String>(
-                    label: 'Demo period',
-                    value: _months,
-                    searchable: false,
-                    options: const [SelectOption('2', '2 months'), SelectOption('3', '3 months')],
-                    onChanged: (v) => setState(() => _months = v),
-                  ),
+                  FieldRow([
+                    HqSelect<String>(
+                      label: 'Demo period',
+                      value: _demo,
+                      searchable: false,
+                      options: const [SelectOption('15', '15 days'), SelectOption('30', '1 month'), SelectOption('45', '45 days'), SelectOption('60', '2 months'), SelectOption('90', '3 months'), SelectOption('custom', 'Custom')],
+                      onChanged: (v) => setState(() => _demo = v),
+                    ),
+                    if (_demo == 'custom')
+                      HqField(label: 'Days (15 to 90)', controller: _customDays, hint: 'e.g. 21', keyboard: TextInputType.number, formatters: [FilteringTextInputFormatter.digitsOnly], onChanged: (_) => setState(() {})),
+                  ]),
                 ]),
               ),
               HqButton('Create academy', icon: 'check', kind: BtnKind.primary, expand: true, busy: _busy, onPressed: issues.isEmpty ? _submit : null),

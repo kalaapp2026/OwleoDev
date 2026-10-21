@@ -186,6 +186,7 @@ class _AdjustModalState extends ConsumerState<AdjustModal> with _Submit {
   final _desc = TextEditingController();
   final _amount = TextEditingController();
   String _type = 'charge';
+  String _category = 'adjustment';
 
   @override
   void dispose() {
@@ -208,7 +209,7 @@ class _AdjustModalState extends ConsumerState<AdjustModal> with _Submit {
           if (amt == null || amt <= 0) return fail('Enter the amount.');
           submit(() async {
             await ref.read(dioClientProvider).postMap('/admin/hq/collections/bills/${widget.bill.str('id')}/adjustments',
-                body: {'description': _desc.text.trim(), 'type': _type, 'amount': amt});
+                body: {'description': _desc.text.trim(), 'type': _type, 'category': _category, 'amount': amt});
           });
         }),
       ],
@@ -220,6 +221,13 @@ class _AdjustModalState extends ConsumerState<AdjustModal> with _Submit {
           searchable: false,
           options: const [SelectOption('charge', 'Charge (adds to the bill)'), SelectOption('credit', 'Credit (takes off the bill)')],
           onChanged: (v) => setState(() => _type = v),
+        ),
+        HqSelect<String>(
+          label: 'Counts as revenue from',
+          value: _category,
+          searchable: false,
+          options: const [SelectOption('adjustment', 'Platform fees (credits and other)'), SelectOption('marketing', 'Marketing fees'), SelectOption('commission', 'Other service fees (event commission)')],
+          onChanged: (v) => setState(() => _category = v),
         ),
         HqField(label: 'Amount (₹)', controller: _amount, keyboard: TextInputType.number, formatters: _money),
         Text('GST is worked out again on the new total.', style: HqText.sub),

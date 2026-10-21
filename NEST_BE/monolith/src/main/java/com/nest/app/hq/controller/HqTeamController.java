@@ -3,8 +3,10 @@ package com.nest.app.hq.controller;
 import com.nest.app.hq.HqAccess;
 import com.nest.app.hq.service.HqPlatform;
 import com.nest.app.hq.service.HqTeam;
+import com.nest.app.hq.service.HqWorkspace;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -26,11 +28,36 @@ public class HqTeamController {
     private final HqAccess access;
     private final HqTeam team;
     private final HqPlatform platform;
+    private final HqWorkspace workspace;
 
-    public HqTeamController(HqAccess access, HqTeam team, HqPlatform platform) {
+    public HqTeamController(HqAccess access, HqTeam team, HqPlatform platform, HqWorkspace workspace) {
         this.access = access;
         this.team = team;
         this.platform = platform;
+        this.workspace = workspace;
+    }
+
+    /** Whether the Finance workspace is open for the signed-in person. */
+    @GetMapping("/workspace")
+    public Map<String, Object> workspace() {
+        return workspace.status();
+    }
+
+    @PostMapping("/workspace/finance/code")
+    public Map<String, String> workspaceCode() {
+        access.requireModule("finance");
+        return workspace.sendCode();
+    }
+
+    @PostMapping("/workspace/finance/open")
+    public void workspaceOpen(@RequestBody Map<String, String> body) {
+        access.requireModule("finance");
+        workspace.open(body.get("code"));
+    }
+
+    @DeleteMapping("/workspace/finance")
+    public void workspaceClose() {
+        workspace.close();
     }
 
     @GetMapping("/platform")

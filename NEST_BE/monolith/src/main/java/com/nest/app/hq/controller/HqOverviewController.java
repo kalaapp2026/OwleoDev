@@ -62,6 +62,20 @@ public class HqOverviewController {
         now.put("month", ym);
         out.put("now", now);
 
+        // Money belongs to the Finance workspace; the business dashboard shows people and health only.
+        for (String k : List.of("mrr", "revenue", "expenses", "profit", "streams", "expenseLines")) {
+            out.remove(k);
+        }
+
+        // Academy health across live academies: Healthy >= 80, Watch 62-79, At risk < 62.
+        var liveRows = rows.stream().filter(r -> HqAcademies.LIVE.equals(r.status())).toList();
+        Map<String, Object> hm = new LinkedHashMap<>();
+        hm.put("healthy", liveRows.stream().filter(r -> r.health() >= 80).count());
+        hm.put("watch", liveRows.stream().filter(r -> r.health() >= 62 && r.health() < 80).count());
+        hm.put("atRisk", liveRows.stream().filter(r -> r.health() < 62).count());
+        hm.put("average", liveRows.isEmpty() ? 0 : (int) Math.round(liveRows.stream().mapToInt(HqAcademies.Row::health).average().orElse(0)));
+        out.put("healthMix", hm);
+
         // Plan mix across paying academies.
         Map<String, Map<String, Object>> mix = new LinkedHashMap<>();
         for (var r : rows) {

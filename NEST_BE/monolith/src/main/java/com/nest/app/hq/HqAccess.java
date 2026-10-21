@@ -54,6 +54,15 @@ public class HqAccess {
         }
     }
 
+    /** Finance data needs the Finance workspace to have been opened with an emailed code. */
+    public void requireFinanceWorkspace() {
+        Boolean open = jdbc.queryForObject(
+                "SELECT EXISTS (SELECT 1 FROM hq_workspace_grants WHERE user_id = ? AND expires_at > now())", Boolean.class, TenantContext.currentUserId());
+        if (!Boolean.TRUE.equals(open)) {
+            throw new ForbiddenException("Open the Finance workspace first. It is kept apart from business operations.");
+        }
+    }
+
     public void requireExport() {
         if (!role().canExport()) {
             throw new ForbiddenException("The " + role().label() + " role cannot export");

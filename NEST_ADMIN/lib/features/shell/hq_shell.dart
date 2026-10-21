@@ -17,6 +17,7 @@ import 'logo_flip.dart';
 import 'modules.dart';
 import 'nav.dart';
 import 'shell_data.dart';
+import 'workspace.dart';
 
 /// The frame around every page: the brand header, the floating dock with the HQ/Social logo in
 /// the middle, and the "More" sheet. Pages are plain column content; this scrolls them.
@@ -101,6 +102,7 @@ class _HqShellState extends ConsumerState<HqShell> {
     final t = _titles;
     final alerts = ref.watch(alertsProvider);
     final alertCount = alerts.valueOrNull?.length ?? 0;
+    final finance = ref.watch(workspaceProvider);
     final onOnboarding = widget.location.startsWith('/onboarding');
     Future<void> signOut() async {
       final ok = await confirmHq(context, title: 'Sign out?', body: 'You will need to sign in again to use the console.', confirmLabel: 'Sign out');
@@ -132,7 +134,7 @@ class _HqShellState extends ConsumerState<HqShell> {
                     subtitle: t.subtitle,
                     social: _social,
                     showBack: canGoBack(widget.location),
-                    showBell: !_social,
+                    showBell: !_social && !finance,
                     alertCount: alertCount,
                     bellOpen: _bell,
                     onLogout: signOut,
@@ -174,7 +176,7 @@ class _HqShellState extends ConsumerState<HqShell> {
               left: 0,
               right: 0,
               bottom: 112,
-              child: Center(child: _MoreSheet(user: user, onPick: (id) => hqGo(context, '/$id'), onClose: () => setState(() => _more = false), onSignOut: signOut)),
+              child: Center(child: _MoreSheet(finance: finance, onSwitch: () { setState(() => _more = false); finance ? backToOperations(context, ref) : showOpenFinance(context, ref); }, user: user, onPick: (id) => hqGo(context, '/$id'), onClose: () => setState(() => _more = false), onSignOut: signOut)),
             ),
           ],
           Positioned(
@@ -183,6 +185,7 @@ class _HqShellState extends ConsumerState<HqShell> {
             bottom: 10,
             child: _Dock(
               social: _social,
+              finance: finance,
               location: widget.location,
               moreOpen: _more,
               logoKey: _logoKey,
@@ -334,6 +337,7 @@ class _Header extends StatelessWidget {
 class _Dock extends ConsumerWidget {
   const _Dock({
     required this.social,
+    required this.finance,
     required this.location,
     required this.moreOpen,
     required this.logoKey,
@@ -344,7 +348,7 @@ class _Dock extends ConsumerWidget {
     required this.onTab,
   });
 
-  final bool social, moreOpen, hideLogo;
+  final bool social, finance, moreOpen, hideLogo;
   final String location;
   final GlobalKey logoKey;
   final HqUser user;
@@ -362,11 +366,11 @@ class _Dock extends ConsumerWidget {
       right = [for (final t in socialTabs.skip(2)) _TabSpec(t.path, t.label, t.icon, 0)];
     } else {
       _TabSpec spec(String id) => _TabSpec(hqModules[id]!.path, hqModules[id]!.tileLabel, hqModules[id]!.icon, badges[id] ?? 0);
-      left = dockLeft.map(spec).toList();
-      right = dockRight.map(spec).toList();
+      left = (finance ? financeDockLeft : dockLeft).map(spec).toList();
+      right = (finance ? financeDockRight : dockRight).map(spec).toList();
     }
     final inMore = !social &&
-        ![...dockLeft, ...dockRight].any((id) => location.startsWith('/$id'));
+        ![...(finance ? financeDockLeft : dockLeft), ...(finance ? financeDockRight : dockRight)].any((id) => location.startsWith('/$id'));
 
     Widget tab(_TabSpec s, {bool active = false, bool expanded = false}) => Expanded(
           child: MouseRegion(
@@ -571,8 +575,10 @@ class _LogoButtonState extends State<_LogoButton> with SingleTickerProviderState
 }
 
 class _MoreSheet extends ConsumerWidget {
-  const _MoreSheet({required this.user, required this.onPick, required this.onClose, required this.onSignOut});
+  const _MoreSheet({required this.finance, required this.onSwitch, required this.user, required this.onPick, required this.onClose, required this.onSignOut});
 
+  final bool finance;
+  final VoidCallback onSwitch;
   final HqUser user;
   final ValueChanged<String> onPick;
   final VoidCallback onClose, onSignOut;
@@ -607,13 +613,28 @@ class _MoreSheet extends ConsumerWidget {
             ],
           ),
           const SizedBox(height: 14),
+          HqCard(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            margin: const EdgeInsets.only(bottom: 14),
+            child: Row(children: [
+              IconTile(finance ? 'wallet' : 'bld', tone: finance ? Tone.gold : Tone.primary, size: 36, iconSize: 17),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(finance ? 'Finance' : 'Business operations', style: HqText.row.copyWith(fontSize: 13.5)),
+                  Text(finance ? 'Business operations are hidden while Finance is open' : 'Revenue and billing are hidden while you work here', style: HqText.small.copyWith(fontSize: 11.5)),
+                ]),
+              ),
+              if (finance || user.can('finance')) HqButton(finance ? 'Back to operations' : 'Open Finance', small: true, onPressed: onSwitch),
+            ]),
+          ),
           Flexible(
             child: SingleChildScrollView(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  for (var g = 0; g < moreGroups.length; g++) ...[
-                    SectionLabel(moreGroups[g].$1, top: g == 0 ? 0 : 16),
+                  for (final (g, group) in [for (final grp in moreGroups) (grp.$1, [for (final id in grp.$2) if (workspaceAllows(id, finance: finance)) id])].where((x) => x.$2.isNotEmpty).indexed) ...[
+                    SectionLabel(group.$1, top: g == 0 ? 0 : 16),
                     LayoutBuilder(
                       builder: (_, c) {
                         const cols = 4;
@@ -623,7 +644,7 @@ class _MoreSheet extends ConsumerWidget {
                           spacing: gap,
                           runSpacing: gap,
                           children: [
-                            for (final id in moreGroups[g].$2)
+                            for (final id in group.$2)
                               SizedBox(
                                 width: tileW,
                                 child: _MoreTile(

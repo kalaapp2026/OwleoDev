@@ -72,3 +72,6 @@ int int0(Object? v) => v is num ? v.round() : int.tryParse('$v') ?? 0;
 const _mon = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 String monthShort(String ym) => _mon[int.parse(ym.substring(5, 7)) - 1];
 String monthLong(String ym) => '${monthShort(ym)} ${ym.substring(0, 4)}';
+
+/// A demo length in plain words: 15 days, 1 month, 45 days, 2 months.
+String demoTxt(int days) => days >= 30 && days % 30 == 0 ? '${days ~/ 30} ${days == 30 ? 'month' : 'months'}' : '$days days';

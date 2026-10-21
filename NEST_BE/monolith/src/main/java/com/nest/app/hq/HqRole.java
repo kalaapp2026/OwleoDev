@@ -14,9 +14,9 @@ import java.util.Set;
 public enum HqRole {
     SUPER("Super admin", Set.of("*")),
     OPS("Operations admin", Set.of("artists", "events", "support", "overview", "users", "academies",
-            "onboarding", "approvals", "courses", "exits", "reports", "alerts", "students")),
+            "onboarding", "approvals", "courses", "exits", "reports", "alerts", "students", "notifs")),
     FINANCE("Finance admin", Set.of("support", "overview", "finance", "plans", "growth", "approvals",
-            "reports", "academies", "marketing", "collections")),
+            "reports", "academies", "marketing", "collections", "invoicing")),
     SUPPORT("Support admin", Set.of("artists", "events", "support", "overview", "users", "exits",
             "alerts", "students", "courses"));
 

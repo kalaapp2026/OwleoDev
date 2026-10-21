@@ -32,7 +32,6 @@ class _PlatformStatusState extends ConsumerState<PlatformStatus> {
       final ap = d.obj('approvals');
       final sup = d.obj('support');
       final uo = d.obj('userOverview');
-      final dues = d.maps('dues');
       final health = d.obj('health');
       final tr = d.obj('traffic');
       final open = (ap.integer('pending')) + ap.integer('delayed') + ap.integer('escalated');
@@ -50,21 +49,10 @@ class _PlatformStatusState extends ConsumerState<PlatformStatus> {
         HqGrid(GridKind.g4, [
           Kpi(icon: 'bld', tone: Tone.primary, label: 'Active academies', value: '${d.integer('liveAcademies')}', foot: '${d.integer('demoAcademies')} on demo · ${d.integer('closedAcademies')} closed'),
           Kpi(icon: 'users', tone: Tone.blue, label: 'Active admins', value: '${d.integer('admins')}', foot: 'academy owners and admins, ${d.integer('hqStaff')} at HQ'),
-          Kpi(icon: 'wallet', tone: Tone.gold, label: 'Pending platform fees', value: short(d.number('owed')), foot: '${d.integer('overdueCount')} academies overdue'),
+          Kpi(icon: 'warn', tone: d.integer('overdueCount') > 0 ? Tone.red : Tone.green, label: 'Overdue academies', value: '${d.integer('overdueCount')}', foot: d.integer('overdueCount') == 0 ? 'All up to date' : 'Details in Finance'),
           Kpi(icon: 'flow', tone: Tone.violet, label: 'Open approvals', value: '$open', foot: '${ap.integer('delayed')} delayed, ${ap.integer('escalated')} escalated'),
         ]),
         HqGrid(GridKind.g2, [
-          card('Dues and payments', 'Platform fees owed by academies', dues.isEmpty
-              ? const EmptyNote('Nothing overdue')
-              : HqList([
-                  for (final r in dues)
-                    HqRow(
-                      leading: const IconTile('wallet', tone: Tone.red),
-                      title: r.str('academy'),
-                      sub: '${inr(r.number('amount'))} · ${r.strOrNull('plan') ?? 'no plan'} · ${r.integer('daysLate')} days late',
-                      trailing: HqButton('Open', small: true, onPressed: () => hqGo(context, '/collections')),
-                    ),
-                ])),
           card('User overview', 'Active users and profile completeness', Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
             MiniStats([(num0(uo.integer('active')), 'Active in 30 days', null), (pct(rate * 100), 'Profiles missing data', rate > .2 ? Hq.red : Hq.gold)]),
             for (final t in top) Meter(t.str('label'), '${t.integer('n')} profiles', t.integer('n') / topMax * 100, tone: Tone.red),

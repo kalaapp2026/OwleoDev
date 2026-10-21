@@ -363,9 +363,11 @@ class HqField extends StatelessWidget {
     this.maxLength,
     this.bottom = 13,
     this.helper,
+    this.focusNode,
   });
 
   final String label;
+  final FocusNode? focusNode;
   final TextEditingController? controller;
   final String? hint;
   final String? error;
@@ -394,6 +396,7 @@ class HqField extends StatelessWidget {
           const SizedBox(height: 6),
           TextField(
             controller: controller,
+            focusNode: focusNode,
             keyboardType: keyboard,
             obscureText: obscure,
             maxLines: obscure ? 1 : maxLines,

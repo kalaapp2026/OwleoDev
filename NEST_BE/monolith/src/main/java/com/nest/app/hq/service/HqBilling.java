@@ -66,6 +66,10 @@ public class HqBilling {
 
     // ---- raising bills ----
 
+    /** One charge on a bill. kind is PLAN, ADDON, SETUP, COMMISSION, MARKETING or ADJUSTMENT. */
+    public record Line(String kind, String label, BigDecimal amount) {
+    }
+
     /**
      * Raises the bills for [period] ('YYYY-MM'): one per live academy on a priced plan, carrying the plan
      * charge, its add-ons and, in the month it went live, the one-off setup fee. Safe to run twice: an
@@ -82,54 +86,87 @@ public class HqBilling {
     /** As {@link #generate(String)}, for one academy only: used when an academy goes live mid-month. */
     @Transactional
     public int generate(String period, UUID onlyAcademy) {
-        YearMonth month;
-        try {
-            month = YearMonth.parse(period);
-        } catch (Exception e) {
-            throw new BadRequestException("Period must look like 2026-10");
-        }
+        YearMonth month = parse(period);
         LocalDate issued = month.atDay(1);
-        LocalDate due = issued.plusDays(PAYMENT_TERM_DAYS);
+        // These bills are already visible in the academy's Billing screen, so they count as announced.
+        return generate(period, onlyAcademy, issued, PAYMENT_TERM_DAYS, true).size();
+    }
+
+    /**
+     * The full form: bills are dated [issuedOn] and fall due [dueDays] later. When [announced] is false the
+     * bill waits to be sent to the academy's admins (see HqInvoicing); otherwise it is marked as already shown.
+     *
+     * @return the ids of the bills created
+     */
+    @Transactional
+    public List<UUID> generate(String period, UUID onlyAcademy, LocalDate issuedOn, int dueDays, boolean announced) {
+        YearMonth month = parse(period);
+        LocalDate due = issuedOn.plusDays(dueDays);
         BigDecimal rate = gstRate();
-        BigDecimal setup = setupFee();
-        int created = 0;
+        List<UUID> created = new java.util.ArrayList<>();
 
-        var academies = jdbc.queryForList("""
-                SELECT a.id, a.name, a.plan, p.display_name AS plan_name, p.monthly_price, a.go_live_on
-                FROM academies a JOIN billing_plans p ON p.code = a.plan
-                WHERE a.status = 'ACTIVE' AND a.closed_at IS NULL AND a.demo_ends_on IS NULL AND p.monthly_price > 0
-                  AND a.created_at < ? AND (?::uuid IS NULL OR a.id = ?::uuid)
-                  AND NOT EXISTS (SELECT 1 FROM academy_invoices i WHERE i.academy_id = a.id AND i.period = ?)
-                ORDER BY a.name""", java.sql.Timestamp.valueOf(issued.plusMonths(1).atStartOfDay()), onlyAcademy, onlyAcademy, period);
-
-        for (var a : academies) {
+        for (var a : billable(period, onlyAcademy)) {
             UUID academyId = (UUID) a.get("id");
             UUID invoiceId = UUID.randomUUID();
             BigDecimal planPrice = (BigDecimal) a.get("monthly_price");
             jdbc.update("""
-                    INSERT INTO academy_invoices (id, academy_id, period, plan_code, amount, status, issued_on, due_on, total, gst_rate, number)
-                    VALUES (?, ?, ?, ?, ?, 'DUE', ?, ?, ?, ?, ?)""",
-                    invoiceId, academyId, period, a.get("plan"), planPrice, issued, due, planPrice, rate, nextNumber(period));
-            line(invoiceId, "PLAN", a.get("plan_name") + " plan", planPrice);
-
-            for (var ad : jdbc.queryForList("""
-                    SELECT d.name, d.price FROM academy_addons x JOIN hq_addons d ON d.id = x.addon_id
-                    WHERE x.academy_id = ? AND x.from_period <= ?
-                      AND (d.billing = 'MONTH' OR x.from_period = ?)""", academyId, period, period)) {
-                line(invoiceId, "ADDON", (String) ad.get("name"), (BigDecimal) ad.get("price"));
-            }
-
-            LocalDate live = a.get("go_live_on") == null ? null : ((java.sql.Date) a.get("go_live_on")).toLocalDate();
-            if (live != null && YearMonth.from(live).equals(month) && setup.signum() > 0) {
-                line(invoiceId, "SETUP", "Setup and onboarding", setup);
+                    INSERT INTO academy_invoices (id, academy_id, period, plan_code, amount, status, issued_on, due_on, total, gst_rate, number, sent_at, sent_via)
+                    VALUES (?, ?, ?, ?, ?, 'DUE', ?, ?, ?, ?, ?, ?, ?)""",
+                    invoiceId, academyId, period, a.get("plan"), planPrice, issuedOn, due, planPrice, rate, nextNumber(period),
+                    announced ? new java.sql.Timestamp(System.currentTimeMillis()) : null, announced ? "Shown in Billing" : null);
+            for (Line l : standardLines(academyId, period)) {
+                line(invoiceId, l.kind(), l.label(), l.amount());
             }
             recompute(invoiceId);
-            created++;
+            created.add(invoiceId);
         }
-        if (created > 0) {
-            audit.log("collections", "Raised " + created + " bills for " + period);
+        if (!created.isEmpty()) {
+            audit.log("collections", "Raised " + created.size() + " bills for " + period);
         }
         return created;
+    }
+
+    /** Live academies on a priced plan that have no bill for [period] yet (all of them, or just [onlyAcademy]). */
+    public List<Map<String, Object>> billable(String period, UUID onlyAcademy) {
+        YearMonth month = parse(period);
+        return jdbc.queryForList("""
+                SELECT a.id, a.name, a.plan, p.display_name AS plan_name, p.monthly_price, a.go_live_on, a.owner_name, a.owner_email, a.owner_phone
+                FROM academies a JOIN billing_plans p ON p.code = a.plan
+                WHERE a.status = 'ACTIVE' AND a.closed_at IS NULL AND a.demo_ends_on IS NULL AND p.monthly_price > 0
+                  AND a.created_at < ? AND (?::uuid IS NULL OR a.id = ?::uuid)
+                  AND NOT EXISTS (SELECT 1 FROM academy_invoices i WHERE i.academy_id = a.id AND i.period = ?)
+                ORDER BY a.name""", java.sql.Timestamp.valueOf(month.atDay(1).plusMonths(1).atStartOfDay()), onlyAcademy, onlyAcademy, period);
+    }
+
+    /** The standard charges on an academy's bill for [period]: its plan, its add-ons, and the setup fee in its first month. */
+    public List<Line> standardLines(UUID academyId, String period) {
+        YearMonth month = parse(period);
+        var a = jdbc.queryForList("""
+                SELECT a.plan, p.display_name, p.monthly_price, a.go_live_on FROM academies a JOIN billing_plans p ON p.code = a.plan WHERE a.id = ?""", academyId)
+                .stream().findFirst().orElseThrow(() -> new ResourceNotFoundException("Academy not found."));
+        List<Line> lines = new java.util.ArrayList<>();
+        lines.add(new Line("PLAN", a.get("display_name") + " plan", (BigDecimal) a.get("monthly_price")));
+        for (var ad : jdbc.queryForList("""
+                SELECT d.name, d.price FROM academy_addons x JOIN hq_addons d ON d.id = x.addon_id
+                WHERE x.academy_id = ? AND x.from_period <= ?
+                  AND (d.billing = 'MONTH' OR x.from_period = ?)
+                ORDER BY d.name""", academyId, period, period)) {
+            lines.add(new Line("ADDON", (String) ad.get("name"), (BigDecimal) ad.get("price")));
+        }
+        LocalDate live = a.get("go_live_on") == null ? null : ((java.sql.Date) a.get("go_live_on")).toLocalDate();
+        BigDecimal setup = setupFee();
+        if (live != null && YearMonth.from(live).equals(month) && setup.signum() > 0) {
+            lines.add(new Line("SETUP", "Setup and onboarding", setup));
+        }
+        return lines;
+    }
+
+    private static YearMonth parse(String period) {
+        try {
+            return YearMonth.parse(period);
+        } catch (Exception e) {
+            throw new BadRequestException("Period must look like 2026-10");
+        }
     }
 
     private String nextNumber(String period) {
@@ -225,13 +262,24 @@ public class HqBilling {
 
     @Transactional
     public void addAdjustment(UUID invoiceId, String description, boolean credit, BigDecimal amount) {
+        addCharge(invoiceId, "ADJUSTMENT", description, credit, amount);
+    }
+
+    /**
+     * Adds a line to an unpaid bill. [kind] is ADJUSTMENT (a charge or a credit), MARKETING (the fee for
+     * promotion) or COMMISSION (event commission); only an adjustment can be a credit.
+     */
+    @Transactional
+    public void addCharge(UUID invoiceId, String kind, String description, boolean credit, BigDecimal amount) {
+        if (!java.util.Set.of("ADJUSTMENT", "MARKETING", "COMMISSION").contains(kind)) throw new BadRequestException("Unknown kind of charge.");
+        if (credit && !"ADJUSTMENT".equals(kind)) throw new BadRequestException("Only an adjustment can be a credit.");
         var bill = bill(invoiceId);
         if (balance(invoiceId).signum() <= 0) throw new BadRequestException("A paid bill cannot be changed.");
         if (description == null || description.trim().length() < 3) throw new BadRequestException("Say what it is for.");
         if (amount == null || amount.signum() <= 0) throw new BadRequestException("Enter the amount.");
-        line(invoiceId, "ADJUSTMENT", description.trim(), credit ? amount.negate() : amount);
+        line(invoiceId, kind, description.trim(), credit ? amount.negate() : amount);
         recompute(invoiceId);
-        audit.log("collections", (UUID) bill.get("academy_id"), (credit ? "Credited " : "Charged ") + inr(amount) + " on " + bill.get("number") + ": " + description.trim());
+        audit.log("collections", (UUID) bill.get("academy_id"), (credit ? "Credited " : "Charged ") + inr(amount) + ("ADJUSTMENT".equals(kind) ? "" : " (" + kind.toLowerCase() + ")") + " on " + bill.get("number") + ": " + description.trim());
     }
 
     @Transactional

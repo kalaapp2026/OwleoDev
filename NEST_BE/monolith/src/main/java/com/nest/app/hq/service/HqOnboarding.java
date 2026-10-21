@@ -87,9 +87,9 @@ public class HqOnboarding {
             m.put("planName", rs.getString("plan_name"));
             m.put("planPrice", rs.getBigDecimal("monthly_price"));
             m.put("est", rs.getInt("est_students"));
-            m.put("months", rs.getInt("demo_months"));
+            m.put("demoDays", rs.getInt("demo_days"));
             LocalDate started = rs.getObject("demo_started_on", LocalDate.class);
-            int total = rs.getInt("demo_months") * 30;
+            int total = rs.getInt("demo_days");
             long dayIn = started == null ? 0 : Math.min(total, ChronoUnit.DAYS.between(started, today));
             boolean done = "DEMO".equals(rs.getString("stage")) && (rs.getBoolean("demo_done") || dayIn >= total);
             m.put("dayIn", dayIn);
@@ -135,7 +135,7 @@ public class HqOnboarding {
         String a1 = s(b, "a1"), city = s(b, "city"), state = s(b, "state"), pin = s(b, "pin");
         String owner = s(b, "owner"), ophone = s(b, "ophone"), oemail = s(b, "oemail"), plan = s(b, "plan");
         int est = intOf(b.get("est"));
-        int months = intOf(b.get("months")) == 3 ? 3 : 2;
+        int demoDays = intOf(b.get("demo"));
 
         if (name.length() < 3) throw new BadRequestException("Enter the academy name.");
         if (!EMAIL.matcher(aemail).matches()) throw new BadRequestException("Enter a valid academy email address.");
@@ -148,6 +148,7 @@ public class HqOnboarding {
         if (!MOBILE.matcher(ophone).matches()) throw new BadRequestException("Enter the owner's 10-digit mobile number.");
         if (!EMAIL.matcher(oemail).matches()) throw new BadRequestException("Enter a valid owner email address.");
         if (est <= 0) throw new BadRequestException("Enter the expected number of students.");
+        if (demoDays < 15 || demoDays > 90) throw new BadRequestException("The demo period is a whole number of days, from 15 to 90 (3 months).");
         if (jdbc.queryForObject("SELECT count(*) FROM billing_plans WHERE code = ? AND active", Integer.class, plan) == 0) {
             throw new BadRequestException("Choose a plan.");
         }
@@ -164,10 +165,10 @@ public class HqOnboarding {
         UUID id = UUID.randomUUID();
         jdbc.update("""
                 INSERT INTO hq_leads (id, name, type, academy_email, academy_phone, address_line1, address_line2, landmark, city, district, state, country, pin,
-                                      owner_name, owner_phone, owner_email, plan_code, est_students, demo_months, banks)
+                                      owner_name, owner_phone, owner_email, plan_code, est_students, demo_days, banks)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 id, name, type, aemail, aphone, a1, nullIfBlank(s(b, "a2")), nullIfBlank(s(b, "landmark")), city, nullIfBlank(s(b, "district")), state,
-                s(b, "country").isEmpty() ? "India" : s(b, "country"), pin, owner, ophone, oemail, plan, est, months, write(banks));
+                s(b, "country").isEmpty() ? "India" : s(b, "country"), pin, owner, ophone, oemail, plan, est, demoDays, write(banks));
         audit.log("onboarding", "Registered " + name + " as a lead");
         return id;
     }
@@ -221,11 +222,11 @@ public class HqOnboarding {
         UUID academyId = res.academy().id();
         // The academy was saved through JPA; flush so the JDBC statements below can see the row.
         em.flush();
-        int months = (Integer) l.get("demo_months");
+        int days = ((Number) l.get("demo_days")).intValue();
         jdbc.update("""
                 UPDATE academies SET demo_ends_on = ?, go_live_on = NULL, address_line2 = ?, landmark = ?, district = ?, country = ?, pin_code = ?,
                        owner_name = ?, owner_phone = ?, owner_email = ?, updated_at = now() WHERE id = ?""",
-                LocalDate.now().plusDays(months * 30L), l.get("address_line2"), l.get("landmark"), l.get("district"), l.get("country"), l.get("pin"),
+                LocalDate.now().plusDays(days), l.get("address_line2"), l.get("landmark"), l.get("district"), l.get("country"), l.get("pin"),
                 owner, l.get("owner_phone"), l.get("owner_email"), academyId);
         for (var bank : read((String) l.get("banks"))) {
             jdbc.update("""
@@ -234,7 +235,7 @@ public class HqOnboarding {
                     bank.get("ifsc"), bank.get("primary"), bank.get("gateway"));
         }
         jdbc.update("UPDATE hq_leads SET stage = 'DEMO', academy_id = ?, demo_started_on = current_date WHERE id = ?", academyId, id);
-        audit.log("onboarding", academyId, "Started a " + months + "-month demo for " + name);
+        audit.log("onboarding", academyId, "Started a " + (days % 30 == 0 ? (days / 30) + "-month" : days + "-day") + " demo for " + name);
         Map<String, Object> out = new LinkedHashMap<>();
         out.put("academyId", academyId);
         out.put("username", res.adminUsername());

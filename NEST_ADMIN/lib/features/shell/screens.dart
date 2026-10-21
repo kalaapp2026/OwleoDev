@@ -13,6 +13,8 @@ import '../plans/plans_screen.dart';
 import '../artists/artists_screen.dart';
 import '../events/events_screen.dart';
 import '../marketing/marketing_screen.dart';
+import '../invoicing/invoicing_screen.dart';
+import '../notifications/notifications_screen.dart';
 import '../providers/providers_screen.dart';
 import '../settings/settings_screen.dart';
 import '../social/social_screens.dart';
@@ -69,6 +71,10 @@ Widget screenFor(String id) {
       return const ProvidersScreen();
     case 'marketing':
       return const MarketingScreen();
+    case 'notifs':
+      return const NotificationsScreen();
+    case 'invoicing':
+      return const InvoicingScreen();
     case 'settings':
       return const SettingsScreen();
     case 'students':

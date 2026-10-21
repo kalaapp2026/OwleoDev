@@ -522,6 +522,17 @@ public class HqDemoSeeder implements ApplicationRunner {
                     r[0], a.id(), r[2], r[3], r[4], r[5], days, r[7], r[8], r[9], r[10], r[11],
                     "DRAFT".equals(r[7]) ? null : LocalDate.now().minusDays(liveNow ? days / 2 : days + 20),
                     "DRAFT".equals(r[7]) ? null : LocalDate.now().plusDays(liveNow ? days / 2 : -20));
+            // What the academy pays Owleo for promotion: the ad spend so far plus a service fee, on the bill of the month it started.
+            int spend = (Integer) r[8];
+            if (spend > 0) {
+                String period = YearMonth.from(LocalDate.now().minusDays(liveNow ? days / 2 : days + 20)).toString();
+                var inv = jdbc.queryForList("SELECT id FROM academy_invoices WHERE academy_id = ? AND period = ?", a.id(), period);
+                if (!inv.isEmpty()) {
+                    UUID invoice = (UUID) inv.get(0).get("id");
+                    jdbc.update("INSERT INTO invoice_lines (invoice_id, kind, label, amount) VALUES (?, 'MARKETING', ?, ?)", invoice, "Marketing: " + r[0], BigDecimal.valueOf(Math.round(spend * 1.15)));
+                    billing.recompute(invoice);
+                }
+            }
         }
     }
 
@@ -750,14 +761,14 @@ public class HqDemoSeeder implements ApplicationRunner {
     /** Leads waiting for a demo, a demo record for every academy still on trial, and a few open requests. */
     private void seedPipeline(List<Acad> academies) {
         String[][] leads = {
-                {"Nartana Kendra", "Dance", "Anjali Rao", "Mysuru", "Karnataka", "570001", "GROWTH", "180", "2"},
-                {"Sapta Swara Music School", "Music", "Dinesh Pai", "Kochi", "Kerala", "682001", "STARTER", "70", "3"},
-                {"Rang Tarang Arts", "Fine Arts", "Farida Sheikh", "Pune", "Maharashtra", "411001", "PRO", "420", "2"}};
+                {"Nartana Kendra", "Dance", "Anjali Rao", "Mysuru", "Karnataka", "570001", "GROWTH", "180", "45"},
+                {"Sapta Swara Music School", "Music", "Dinesh Pai", "Kochi", "Kerala", "682001", "STARTER", "70", "90"},
+                {"Rang Tarang Arts", "Fine Arts", "Farida Sheikh", "Pune", "Maharashtra", "411001", "PRO", "420", "60"}};
         for (String[] l : leads) {
             String slug = slug(l[0]);
             jdbc.update("""
                     INSERT INTO hq_leads (name, type, academy_email, academy_phone, address_line1, city, state, pin, owner_name, owner_phone, owner_email,
-                                          plan_code, est_students, demo_months, banks)
+                                          plan_code, est_students, demo_days, banks)
                     VALUES (?, ?, ?, ?, '12 MG Road', ?, ?, ?, ?, ?, ?, ?, ?, ?, '[]')""",
                     l[0], l[1], "hello@" + slug + ".in", phone(), l[3], l[4], l[5], l[2], phone(), slug(l[2]) + "@gmail.com", l[6], Integer.parseInt(l[7]), Integer.parseInt(l[8]));
         }
@@ -765,14 +776,14 @@ public class HqDemoSeeder implements ApplicationRunner {
         for (Acad a : academies) {
             if (!"trial".equals(a.fate())) continue;
             LocalDate ends = jdbc.queryForObject("SELECT demo_ends_on FROM academies WHERE id = ?", LocalDate.class, a.id());
-            int months = n % 2 == 0 ? 2 : 3;
+            int days = new int[]{60, 90, 45, 30}[n % 4];
             boolean done = ends != null && ends.isBefore(LocalDate.now().plusDays(10));
             jdbc.update("""
                     INSERT INTO hq_leads (stage, name, type, academy_email, academy_phone, address_line1, city, state, pin, owner_name, owner_phone, owner_email,
-                                          plan_code, est_students, demo_months, banks, academy_id, demo_started_on, demo_done)
+                                          plan_code, est_students, demo_days, banks, academy_id, demo_started_on, demo_done)
                     VALUES ('DEMO', ?, ?, ?, ?, '1 Main Road', ?, ?, ?, ?, ?, ?, ?, ?, ?, '[]', ?, ?, ?)""",
                     a.name(), a.type(), "info@" + slug(a.name()) + ".in", phone(), a.city(), a.state(), a.pin() + "001", a.owner(), phone(), slug(a.owner()) + "@gmail.com",
-                    a.plan(), Math.max(40, a.students()), months, a.id(), ends == null ? LocalDate.now() : ends.minusDays(months * 30L), done);
+                    a.plan(), Math.max(40, a.students()), days, a.id(), ends == null ? LocalDate.now() : ends.minusDays(days), done);
             n++;
         }
         int live = 0;
@@ -780,8 +791,8 @@ public class HqDemoSeeder implements ApplicationRunner {
             if (!"live".equals(a.fate()) || live >= 3 || a.joined().isBefore(LocalDateTime.now().minusDays(60))) continue;
             jdbc.update("""
                     INSERT INTO hq_leads (stage, name, type, academy_email, academy_phone, address_line1, city, state, pin, owner_name, owner_phone, owner_email,
-                                          plan_code, est_students, demo_months, banks, academy_id, demo_done, v_details, v_gateway, approved, live_since)
-                    VALUES ('LIVE', ?, ?, ?, ?, '1 Main Road', ?, ?, ?, ?, ?, ?, ?, ?, 2, '[]', ?, TRUE, TRUE, TRUE, TRUE, ?)""",
+                                          plan_code, est_students, demo_days, banks, academy_id, demo_done, v_details, v_gateway, approved, live_since)
+                    VALUES ('LIVE', ?, ?, ?, ?, '1 Main Road', ?, ?, ?, ?, ?, ?, ?, ?, 60, '[]', ?, TRUE, TRUE, TRUE, TRUE, ?)""",
                     a.name(), a.type(), "live@" + slug(a.name()) + ".in", phone(), a.city(), a.state(), a.pin() + "001", a.owner(), phone(), slug(a.owner()) + "@gmail.com",
                     a.plan(), Math.max(40, a.students()), a.id(), a.joined().toLocalDate());
             live++;

@@ -2,7 +2,7 @@
 
 The platform super admin's web app. A separate Flutter project (package `owleo_hq`) on the **same
 Spring Boot backend and the same login** as the academy app, built from the prototype
-`Owleo HQ Console (2).html`. It is web-first; it is Flutter so it can become an app later.
+`Owleo HQ Console (3).html` (earlier builds followed (2); (3) is the current reference). It is web-first; it is Flutter so it can become an app later.
 
 Why separate from `NEST_FE`: the academy bundle is already ~5 MB, super admin has ~25 modules, and it
 is a different audience and security surface. Nothing here imports `NEST_FE` (that would drag
@@ -49,8 +49,8 @@ fire **before** the app's own super-admin bootstrap, so it must not assume that 
 ### Tests
 
 `mvn -q clean test-compile && mvn surefire:test` (kill any running Spring first, see the root
-CLAUDE.md): 334 backend tests. `flutter test` in this folder: 14 tests (formatting, JSON reading, role
-rules, CSV parsing).
+CLAUDE.md): backend tests (HQ ones in `monolith/src/test/.../hq`). `flutter test` in this folder: formatting, JSON
+reading, role rules, CSV parsing, demo-period text and the workspace split.
 
 ---
 
@@ -84,11 +84,11 @@ locks tiles and hides buttons.
 | Role | Opens | Changes things |
 |---|---|---|
 | Super | everything (incl. Master data, Settings, Transfers, Providers) | yes |
-| Operations | users, academies, onboarding, approvals, courses, exits, reports, artists, events, support, alerts | yes |
-| Finance | finance, plans, growth, collections, marketing, reports, approvals, academies, support | plans, collections, marketing only |
+| Operations | users, academies, onboarding, approvals, courses, exits, reports, artists, events, support, alerts, notifs | yes |
+| Finance | finance, plans, growth, collections, invoicing, marketing, reports, approvals, academies, support | plans, collections, invoicing, marketing only |
 | Support | users, students, courses, exits, artists, events, support, alerts | replies on tickets |
 
-Writing = Super or Operations, except plans/collections/marketing (Super or Finance). Export = Super,
+Writing = Super or Operations, except plans/collections/invoicing/marketing (Super or Finance). Export = Super,
 Operations, Finance.
 
 ---
@@ -102,7 +102,10 @@ Operations, Finance.
 | Onboarding | `onboarding/` | `HqOnboardingController`, `HqOnboarding` | `hq_leads` (V54) |
 | Collections | `collections/` | `HqCollectionsController`, `HqBilling`, `HqCatalog` | V50, V52 |
 | Plans | `plans/` | `HqPlansController` | V49 |
-| Growth, Finance | `growth/`, `finance/` | `HqInsightsController` | V50 |
+| Growth, Finance (revenue only) | `growth/`, `finance/` | `HqInsightsController` | V50 |
+| Invoicing (monthly bill run) | `invoicing/` | `HqInvoicingController`, `HqInvoicing`, `HqBilling` | V62 |
+| Notification templates | `notifications/` | `HqNotificationsController`, `HqNotifications`, `HqNotificationCatalogue`, `HqChannels` | V62 |
+| Finance workspace gate | `shell/workspace.dart` | `HqTeamController` `/workspace`, `HqWorkspace`, `HqAccess.requireFinanceWorkspace` | V61 |
 | Approvals | `approvals/` | `HqApprovalsController`, `HqApprovals` | V53 |
 | Academy transfer | `transfers/` | `HqTransfers` (real OTPs via `OtpService`) | V58 |
 | Users (Audience + Students) | `users/` | `HqUsersController`, `HqUsers`, `HqStudentsController`, `HqStudents` | V55, V59 (`marketing_consent`) |
@@ -120,6 +123,30 @@ Operations, Finance.
 | Alerts | `alerts/` | `HqOverviewController`, `HqAlerts` | derived |
 
 Behaviour worth knowing:
+
+- **Two workspaces, never open together (prototype 3).** Business operations and Finance (Revenue,
+  Collections, Invoicing) are separate. Opening Finance needs a 6-digit code emailed to the signed-in
+  person (`OtpPurpose.FINANCE_WORKSPACE`, fixed `123456` in dev) and lasts 8 hours (`hq_workspace_grants`).
+  The **server** refuses finance data without it (`requireFinanceWorkspace` on the collections, finance and
+  invoicing controllers) and the Dashboard no longer returns money at all; the app only hides the other
+  workspace's tiles. The Finance page is revenue only: no costs, profit or P&L (expenses still exist in the
+  database from V50 but nothing reads them).
+- **Revenue groups**: Platform fees = plan + setup + credits/other adjustments; Marketing fees =
+  `MARKETING` lines; Other service fees = add-ons + `COMMISSION` lines. Marketing and commission lines are
+  added by hand from Collections ("Counts as revenue from") because the apps do not bill them yet.
+- **Demo length is in days** (`hq_leads.demo_days`, 15 to 90; the form offers 15 days, 1 month, 45 days,
+  2 months, 3 months or custom).
+- **Invoicing** makes real `academy_invoices` rows (so they appear in Collections). One schedule row
+  (`hq_invoice_settings`), one draft per academy for the next run (`hq_invoice_drafts`: edited lines, offer or
+  % or ₹ discount for 1 to 12 bills, note, skip, keep), and a run row per month (`hq_invoice_runs`). The daily
+  job (`HqCollectionsJobs.monthlyBills`) generates on the generate day and sends on the send day when
+  "Run automatically" is on. Bills are sent to the academy admins in the Owleo Nest app (a real bell
+  notification) and by email; a bill counts as sent only if someone was reached. Email counts as set up only
+  when `MAIL_HOST` is not localhost; WhatsApp only with its credentials (`HqChannels`).
+- **Notification templates** are a design store (`hq_notification_templates`), seeded once with 18
+  starting templates. Only the in-app test send and the Monthly bill message are used by anything real; the
+  four events the platform fires today still read the older `notification_templates` (V42). The delivery
+  log is the real `notification_deliveries` table.
 
 - **Deactivating a person is real.** `AuthService.issueTokens` refuses `users.status = 'INACTIVE'`, so a
   deactivated account cannot sign in or refresh; deactivation also revokes sessions and sets academy
@@ -152,6 +179,11 @@ Behaviour worth knowing:
 - **Marketing**: Owleo does not place ads. Spend, reach, clicks and leads are typed in from the ad
   platform. Audience counts use `users.marketing_consent`, which defaults to **false** and which
   nothing in the apps sets yet, so on real data every audience is 0 until consent is collected.
+- **Notification templates do not drive sending yet** (except the Monthly bill message). Wiring a moment
+  such as "Fee overdue" means calling the dispatcher where it happens; the page says so. Email sends have no
+  row in the delivery log (it has no email channel). Push and WhatsApp tests are logged as skipped.
+- **Invoicing**: event commission is not on these bills (no ticketing). WhatsApp bills are not sent (the
+  option is saved and reported as not set up). The Finance code is emailed through the existing OTP sender.
 - **Transfers**: codes go through the existing `OtpService`, which uses the fixed code **123456** in
   development. Replace that and wire a real SMS sender before any real transfer.
 - **Platform status** shows what the database and JVM can report (latency, memory, uptime, sessions,
@@ -162,7 +194,7 @@ Behaviour worth knowing:
   bank-account change; logo upload on Add academy; WhatsApp/SMS delivery of payment reminders.
 - **Scale**: the Users list reads all non-HQ people into memory per request to compute the "missing
   data" counts (fine for thousands, page it in SQL before 100k+).
-- **No Testcontainers integration tests** (same as the academy backend): the DB constraints in V48-V59
+- **No Testcontainers integration tests** (same as the academy backend): the DB constraints in V48-V62
   were verified by hand against the dev schema and the demo schema.
 - **i18n**: every string is hardcoded English.
 
@@ -185,4 +217,5 @@ Behaviour worth knowing:
 A second static site, same pattern as `owleo-web` (see `render.yaml` / `DEPLOY.md`): build with
 `flutter build web --release --dart-define=API_BASE_URL=<backend>` from `NEST_ADMIN`, and add the
 site's origin to `NEST_CORS_ALLOWED_ORIGINS` on the backend or every call fails. Flyway migrations
-V48-V59 run on backend start.
+V48-V62 run on backend start. (V60 is the academy app's `payment_orders`; HQ jumped to V61/V62 because
+it landed first on the user's database.)

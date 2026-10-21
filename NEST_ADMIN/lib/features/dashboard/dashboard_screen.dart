@@ -53,18 +53,14 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     final months = d.strings('months');
     final labels = months.map(monthShort).toList();
     final tips = months.map(monthLong).toList();
-    final users = d.doubles('users'), academies = d.doubles('academies'), mrr = d.doubles('mrr');
-    final revenue = d.doubles('revenue'), expenses = d.doubles('expenses'), profit = d.doubles('profit');
+    final users = d.doubles('users'), academies = d.doubles('academies'), paying = d.doubles('paying');
+    final hm = d.obj('healthMix');
     final now = d.obj('now');
     final alerts = ref.watch(alertsProvider).valueOrNull ?? const <HqAlert>[];
-    final cur = months.length - 1;
-    final p = cur >= 0 && profit.isNotEmpty ? profit[cur] : 0.0;
-    final rev = cur >= 0 && revenue.isNotEmpty ? revenue[cur] : 0.0;
-    final inProfit = profit.length >= 6 ? profit.sublist(profit.length - 6).where((x) => x > 0).length : 0;
+    final healthy = hm.integer('healthy'), watch = hm.integer('watch'), atRisk = hm.integer('atRisk');
 
     final metric = switch (_metric) {
       'academies' => (name: 'Academies', values: academies, color: Hq.primary, axis: (double v) => num0(v), tip: (double v) => num0(v)),
-      'mrr' => (name: 'MRR', values: mrr, color: Hq.gold, axis: (double v) => short(v), tip: (double v) => inr(v)),
       _ => (name: 'Owleo users', values: users, color: Hq.blue, axis: (double v) => num0(v), tip: (double v) => num0(v)),
     };
 
@@ -100,20 +96,18 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           Kpi(
             tone: Tone.gold,
             icon: 'rupee',
-            label: 'Monthly recurring revenue',
-            value: short(mrr.isEmpty ? 0 : mrr.last),
-            foot: 'ARR ${short((mrr.isEmpty ? 0 : mrr.last) * 12)}',
-            delta: Delta(_delta(mrr)),
-            spark: Spark(mrr, Hq.gold),
+            label: 'Paying academies',
+            value: num0(paying.isEmpty ? 0 : paying.last),
+            foot: '${now.integer('demo')} on demo',
+            delta: Delta(_delta(paying)),
+            spark: Spark(paying, Hq.gold),
           ),
           Kpi(
-            tone: p >= 0 ? Tone.green : Tone.red,
-            icon: 'wallet',
-            label: 'Net profit · ${months.isEmpty ? '' : monthShort(months.last)}',
-            value: short(p),
-            valueColor: p >= 0 ? Hq.green : Hq.red,
-            foot: rev > 0 ? '${pct(p / rev * 100)} margin · $inProfit of last 6 months in profit' : 'Add expenses in Finance to see profit',
-            spark: Spark(profit, p >= 0 ? Hq.green : Hq.red),
+            tone: hm.integer('average') >= 80 ? Tone.green : (hm.integer('average') >= 62 ? Tone.gold : Tone.red),
+            icon: 'heart',
+            label: 'Academy health',
+            value: healthy + watch + atRisk == 0 ? '–' : '${hm.integer('average')}',
+            foot: '$atRisk at risk · $watch to watch',
           ),
         ]),
         HqGrid(GridKind.g21, [
@@ -123,7 +117,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                 'Growth',
                 sub: 'Last 12 months',
                 trailing: SegControl<String>(
-                  items: const [('users', 'Users'), ('academies', 'Academies'), ('mrr', 'MRR')],
+                  items: const [('users', 'Users'), ('academies', 'Academies')],
                   value: _metric,
                   onChanged: (v) => setState(() => _metric = v),
                 ),
@@ -162,19 +156,29 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         HqGrid(GridKind.g21, [
           HqCard(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              const CardHeader('Revenue, expenses and profit', sub: 'Monthly, in ₹'),
-              HqChart(
-                labels: labels,
-                tipLabels: tips,
-                height: 250,
-                axisFmt: short,
-                tipFmt: inr,
-                series: [
-                  ChartSeries('Revenue', Hq.primary, SeriesType.bar, revenue),
-                  ChartSeries('Expenses', Hq.coral, SeriesType.bar, expenses),
-                  ChartSeries('Profit', Hq.gold, SeriesType.line, profit),
-                ],
-              ),
+              CardHeader('Academy health', sub: 'Attendance, fee collection and weekly activity', trailing: HqButton('View all', small: true, onPressed: () => hqGo(context, '/academies'))),
+              if (healthy + watch + atRisk == 0)
+                const EmptyNote('No live academies yet.')
+              else
+                Wrap(spacing: 18, runSpacing: 14, crossAxisAlignment: WrapCrossAlignment.center, children: [
+                  Donut(
+                    [DonutSegment(healthy.toDouble(), Hq.green), DonutSegment(watch.toDouble(), Hq.gold), DonutSegment(atRisk.toDouble(), Hq.red)],
+                    size: 150,
+                    stroke: 18,
+                    center: Column(mainAxisSize: MainAxisSize.min, children: [
+                      Text('${healthy + watch + atRisk}', style: HqText.h2),
+                      Text('live', style: HqText.small.copyWith(fontSize: 10, fontWeight: FontWeight.w600)),
+                    ]),
+                  ),
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(minWidth: 180, maxWidth: 320),
+                    child: HqList([
+                      HqRow(leading: Container(width: 10, height: 10, decoration: BoxDecoration(color: Hq.green, borderRadius: BorderRadius.circular(3))), title: 'Healthy', sub: '80 and above', trailing: Text('$healthy', style: HqText.row)),
+                      HqRow(leading: Container(width: 10, height: 10, decoration: BoxDecoration(color: Hq.gold, borderRadius: BorderRadius.circular(3))), title: 'Watch', sub: '62 to 79', trailing: Text('$watch', style: HqText.row)),
+                      HqRow(leading: Container(width: 10, height: 10, decoration: BoxDecoration(color: Hq.red, borderRadius: BorderRadius.circular(3))), title: 'At risk', sub: 'Below 62', trailing: Text('$atRisk', style: HqText.row)),
+                    ]),
+                  ),
+                ]),
             ]),
           ),
           HqCard(
@@ -257,7 +261,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             ]),
           ),
         ]),
-        const PageNote('Figures are live from the platform. Revenue is what has been billed, before GST.'),
+        const PageNote('Figures are live from the platform. Revenue lives in the Finance workspace.'),
       ],
     );
   }

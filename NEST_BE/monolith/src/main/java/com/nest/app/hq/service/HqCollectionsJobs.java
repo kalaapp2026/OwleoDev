@@ -8,7 +8,6 @@ import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
-import java.time.YearMonth;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -24,20 +23,22 @@ public class HqCollectionsJobs {
     private static final Logger log = LoggerFactory.getLogger(HqCollectionsJobs.class);
 
     private final HqBilling billing;
+    private final HqInvoicing invoicing;
     private final JdbcTemplate jdbc;
 
-    public HqCollectionsJobs(HqBilling billing, JdbcTemplate jdbc) {
+    public HqCollectionsJobs(HqBilling billing, HqInvoicing invoicing, JdbcTemplate jdbc) {
         this.billing = billing;
+        this.invoicing = invoicing;
         this.jdbc = jdbc;
     }
 
-    @Scheduled(cron = "0 30 2 1 * *")
-    public void raiseBills() {
+    /** Follows the bill schedule on the Invoicing page: makes the month's bills on the generate day and sends them on the send day. */
+    @Scheduled(cron = "0 30 2 * * *")
+    public void monthlyBills() {
         try {
-            int n = billing.generate(YearMonth.now().toString());
-            log.info("Raised {} bills for {}", n, YearMonth.now());
+            invoicing.automatic(LocalDate.now());
         } catch (RuntimeException e) {
-            log.error("Could not raise this month's bills", e);
+            log.error("Could not run the monthly bills", e);
         }
     }
 

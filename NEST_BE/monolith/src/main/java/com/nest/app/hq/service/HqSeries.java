@@ -98,7 +98,7 @@ public class HqSeries {
 
         // ---- money ----
         Map<String, double[]> byKind = new LinkedHashMap<>();
-        for (String k : new String[]{"PLAN", "ADDON", "COMMISSION", "SETUP", "ADJUSTMENT"}) {
+        for (String k : new String[]{"PLAN", "ADDON", "COMMISSION", "SETUP", "ADJUSTMENT", "MARKETING"}) {
             byKind.put(k, new double[n]);
         }
         jdbc.query("""

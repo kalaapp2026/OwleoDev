@@ -77,7 +77,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
       return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         HqGrid(GridKind.g4, [
           Kpi(icon: 'rocket', tone: Tone.violet, label: 'In pipeline', value: '${leads.length + demos.length}', foot: '${leads.length} leads · ${demos.length} demos'),
-          Kpi(icon: 'clock', tone: Tone.blue, label: 'Demos running', value: '${running.length}', foot: '2 or 3 month demo period'),
+          Kpi(icon: 'clock', tone: Tone.blue, label: 'Demos running', value: '${running.length}', foot: '15 days to 3 months'),
           Kpi(icon: 'check', tone: Tone.green, label: 'Ready to go live', value: '${ready.length}', foot: 'demo completed'),
           Kpi(icon: 'rupee', tone: Tone.gold, label: 'Potential MRR', value: short(d.number('potentialMrr')), foot: 'if all go live on chosen plans'),
         ]),
@@ -162,18 +162,18 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
 
   Widget _leadCard(Map<String, dynamic> p) => _card([
         _head(p),
-        _tags(p, extra: Tag('${p.integer('months')}-month demo', tone: Tone.violet)),
-        if (_write) HqButton('Start ${p.integer('months')}-month demo', small: true, onPressed: () => _call('/admin/hq/onboarding/leads/${p.str('id')}/start-demo', '', showCreds: true)),
+        _tags(p, extra: Tag('${demoTxt(p.integer('demoDays'))} demo', tone: Tone.violet)),
+        if (_write) HqButton('Start ${demoTxt(p.integer('demoDays'))} demo', small: true, onPressed: () => _call('/admin/hq/onboarding/leads/${p.str('id')}/start-demo', '', showCreds: true)),
       ]);
 
   Widget _runningCard(Map<String, dynamic> p) {
-    final tot = p.integer('months') * 30, left = p.integer('daysLeft'), low = left <= 14;
+    final tot = p.integer('demoDays'), left = p.integer('daysLeft'), low = left <= 14;
     return _card([
       _head(p),
       _tags(p),
       Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-          Text('${p.integer('months')}-month demo · day ${p.integer('dayIn')} of $tot', style: HqText.small.copyWith(fontSize: 12)),
+          Text('${demoTxt(tot)} demo · day ${p.integer('dayIn')} of $tot', style: HqText.small.copyWith(fontSize: 12)),
           Text('$left days left', style: HqText.row.copyWith(fontSize: 12, color: low ? Hq.gold : Hq.text)),
         ]),
         const SizedBox(height: 6),
@@ -204,7 +204,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     final id = p.str('id');
     return _card([
       _head(p),
-      _tags(p, extra: Tag('${p.integer('months')}-month demo completed', tone: Tone.green)),
+      _tags(p, extra: Tag('${demoTxt(p.integer('demoDays'))} demo completed', tone: Tone.green)),
       Column(children: [
         step(c.flag('details'), 'Details validated', 'Required fields, duplicates and formats', HqButton('Validate', small: true, onPressed: () => _call('/admin/hq/onboarding/leads/$id/validate', 'Validation passed: required fields, duplicates and formats'))),
         step(c.flag('gateway'), 'Payment gateway', 'Mapped on the primary bank account', HqButton('Verify', small: true, onPressed: () => _call('/admin/hq/onboarding/leads/$id/verify-gateway', 'Gateway verified'))),

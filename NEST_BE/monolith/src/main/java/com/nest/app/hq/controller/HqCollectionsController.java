@@ -47,10 +47,12 @@ public class HqCollectionsController {
 
     private void read() {
         access.requireModule("collections");
+        access.requireFinanceWorkspace();
     }
 
     private void write() {
         access.requireModule("collections");
+        access.requireFinanceWorkspace();
         HqRole r = access.role();
         if (r != HqRole.SUPER && r != HqRole.FINANCE) throw new ForbiddenException("Only a Super admin or Finance admin can change collections");
     }
@@ -96,7 +98,9 @@ public class HqCollectionsController {
     @PostMapping("/bills/{id}/adjustments")
     public void adjust(@PathVariable UUID id, @RequestBody Map<String, Object> b) {
         write();
-        billing.addAdjustment(id, str(b.get("description")), "credit".equals(str(b.get("type"))), dec(b.get("amount")));
+        String cat = str(b.get("category"));
+        String kind = "marketing".equals(cat) ? "MARKETING" : "commission".equals(cat) ? "COMMISSION" : "ADJUSTMENT";
+        billing.addCharge(id, kind, str(b.get("description")), "credit".equals(str(b.get("type"))), dec(b.get("amount")));
     }
 
     @PutMapping("/bills/{id}/due")

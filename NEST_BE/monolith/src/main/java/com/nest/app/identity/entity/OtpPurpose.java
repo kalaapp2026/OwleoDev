@@ -14,5 +14,7 @@ public enum OtpPurpose {
     /** Proves the new address is reachable before it replaces the login email. */
     EMAIL_CHANGE,
     /** HQ academy transfer: the current owner and the new owner each confirm the handover. */
-    OWNERSHIP_TRANSFER
+    OWNERSHIP_TRANSFER,
+    /** HQ: opening the Finance workspace, confirmed with a code sent to the signed-in person. */
+    FINANCE_WORKSPACE
 }
