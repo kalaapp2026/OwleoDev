@@ -365,7 +365,9 @@ class _ClassRow extends StatelessWidget {
                   ),
                   const SizedBox(height: 1),
                   Text(
-                    '${entry.instructorSummary} · ${entry.studentCount} student${entry.studentCount == 1 ? '' : 's'}',
+                    _isStudent(context)
+                        ? entry.instructorSummary
+                        : '${entry.instructorSummary} · ${entry.studentCount} student${entry.studentCount == 1 ? '' : 's'}',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(fontSize: AppType.xs, color: palette.textFaint),
@@ -384,17 +386,12 @@ class _ClassRow extends StatelessWidget {
   }
 }
 
-/// The prototype's admin/trainer calendar is gold in light and teal in dark; a student's is teal in
-/// both.
-bool _goldAccent(BuildContext context) {
-  if (Theme.of(context).brightness == Brightness.dark) return false;
-  final role = ProviderScope.containerOf(context, listen: false)
-      .read(sessionControllerProvider)
-      .user
-      ?.activeMembership
-      ?.roleType;
-  return role != 'STUDENT';
-}
+bool _isStudent(BuildContext context) =>
+    ProviderScope.containerOf(context, listen: false).read(sessionControllerProvider).user?.activeMembership?.roleType ==
+    'STUDENT';
+
+/// The calendar is gold in light and teal in dark - the same for a student, trainer and admin.
+bool _goldAccent(BuildContext context) => Theme.of(context).brightness != Brightness.dark;
 
 Color _accent(AppPalette palette, BuildContext context) => _goldAccent(context) ? palette.gold : palette.primary;
 

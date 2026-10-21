@@ -13,6 +13,7 @@ import 'package:nest_fe/features/dashboard/presentation/widgets/revenue_dues_car
 import 'package:nest_fe/features/dashboard/presentation/widgets/stats_row.dart';
 import 'package:nest_fe/features/dashboard/presentation/widgets/student_home_sections.dart';
 import 'package:nest_fe/features/dashboard/presentation/widgets/student_material_strip.dart';
+import 'package:nest_fe/features/dashboard/presentation/widgets/todays_schedule_card.dart';
 import 'package:nest_fe/features/dashboard/presentation/widgets/student_summary.dart';
 import 'package:nest_fe/features/dashboard/presentation/widgets/student_welcome_header.dart';
 import 'package:nest_fe/features/dashboard/presentation/widgets/upcoming_events_card.dart';
@@ -80,7 +81,7 @@ class _StudentDashboardBody extends ConsumerWidget {
                   StudentAttendanceSummary(membershipId: membershipId),
                   const SizedBox(height: AppSpacing.xxl),
                 ],
-                const StudentClassesSection(),
+                const TodaysScheduleCard(),
                 if (academyId != null) ...[
                   const SizedBox(height: AppSpacing.xxl),
                   StudentUpcomingEvents(academyId: academyId),
@@ -136,11 +137,7 @@ class _AdminTrainerDashboardBody extends ConsumerWidget {
                   const _GlobalSearchBar(),
                   const SizedBox(height: AppSpacing.xxl),
                 ],
-                if (canSeeSchedule)
-                  StudentClassesSection(
-                    feature: 'ALL',
-                    onOpenClass: holdsAny([FeatureKeys.attendance]) ? () => context.push('/erp/attendance') : null,
-                  ),
+                if (canSeeSchedule) const TodaysScheduleCard(),
                 if (canSeeFees) ...[
                   const SizedBox(height: AppSpacing.xxl),
                   const RevenueDuesCard(),

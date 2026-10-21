@@ -11,7 +11,6 @@ import 'package:nest_fe/core/format/money.dart';
 import 'package:nest_fe/features/attendance/data/student_attendance.dart';
 import 'package:nest_fe/features/fees/data/student_statement.dart' show FeeCategory;
 import 'package:nest_fe/features/fees/presentation/fees_screen.dart' show feesApiProvider;
-import 'package:nest_fe/features/dashboard/presentation/widgets/student_home_sections.dart' show openStudentClassCalendar;
 import 'package:nest_fe/features/scheduling/data/scheduling_api.dart';
 import 'package:nest_fe/features/shell/presentation/app_shell.dart';
 
@@ -124,7 +123,6 @@ class StudentQuickStats extends ConsumerWidget {
             value: todayLabel,
             color: palette.gateway,
             softColor: palette.gatewaySoft,
-            onTap: () => openStudentClassCalendar(context, ref),
           ),
         ),
       ],
