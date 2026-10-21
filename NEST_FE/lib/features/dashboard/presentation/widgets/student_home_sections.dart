@@ -24,8 +24,8 @@ String _dayLabel(DateTime d) => '${d.day} ${monthsShort[d.month - 1]} ${d.year}'
 final studentHomeDayProvider = StateProvider<DateTime>((ref) => _dateOnly(DateTime.now()));
 
 /// Opens the class calendar and, if a day was picked, shows that day's classes on the home screen.
-Future<void> openStudentClassCalendar(BuildContext context, WidgetRef ref) async {
-  final picked = await showStudentClassCalendar(context, selected: ref.read(studentHomeDayProvider));
+Future<void> openStudentClassCalendar(BuildContext context, WidgetRef ref, {String? feature}) async {
+  final picked = await showStudentClassCalendar(context, selected: ref.read(studentHomeDayProvider), feature: feature);
   if (picked != null) ref.read(studentHomeDayProvider.notifier).state = picked;
 }
 
@@ -64,8 +64,15 @@ class StudentSectionHeader extends StatelessWidget {
 
 /// "Today's classes" - the classes on one day, with a Calendar button that opens a month view to
 /// jump to another day ("Classes on 21 Oct 2026").
+///
+/// Trainers and admins use it too, so the calendar looks and works the same for everyone: pass
+/// [feature] (`ALL`) to scope the classes by the person's permissions, and [onOpenClass] to make a
+/// class tappable (the attendance screen, for staff who can mark it).
 class StudentClassesSection extends ConsumerStatefulWidget {
-  const StudentClassesSection({super.key});
+  const StudentClassesSection({super.key, this.feature, this.onOpenClass});
+
+  final String? feature;
+  final VoidCallback? onOpenClass;
 
   @override
   ConsumerState<StudentClassesSection> createState() => _StudentClassesSectionState();
@@ -77,18 +84,20 @@ class _StudentClassesSectionState extends ConsumerState<StudentClassesSection> {
     final palette = context.palette;
     final view = ref.watch(studentHomeDayProvider);
     final isToday = view == _dateOnly(DateTime.now());
-    final feed = ref.watch(scheduleFeedProvider((from: view, to: view, courseId: null)));
+    final key = (from: view, to: view, courseId: null);
+    final provider = widget.feature == null ? scheduleFeedProvider(key) : dashboardFeedProvider(key);
+    final feed = ref.watch(provider);
 
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       StudentSectionHeader(
         title: isToday ? "Today's classes" : 'Classes on ${_dayLabel(view)}',
         actionLabel: 'Calendar',
         actionIcon: Icons.calendar_today_outlined,
-        onAction: () => openStudentClassCalendar(context, ref),
+        onAction: () => openStudentClassCalendar(context, ref, feature: widget.feature),
       ),
       AsyncValueView<List<ScheduleEntry>>(
         value: feed,
-        onRetry: () => ref.invalidate(scheduleFeedProvider((from: view, to: view, courseId: null))),
+        onRetry: () => ref.invalidate(provider),
         data: (context, entries) {
           final day = entries.where((e) => !e.status.isGhost && _dateOnly(e.date) == view).toList()
             ..sort((a, b) => a.startTime.compareTo(b.startTime));
@@ -106,7 +115,15 @@ class _StudentClassesSectionState extends ConsumerState<StudentClassesSection> {
             );
           }
           return Column(children: [
-            for (final e in day) Padding(padding: const EdgeInsets.only(bottom: 8), child: _ClassCard(entry: e)),
+            for (final e in day)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Pressable(
+                  onTap: widget.onOpenClass,
+                  borderRadius: AppRadii.all(AppRadii.xl),
+                  child: _ClassCard(entry: e),
+                ),
+              ),
           ]);
         },
       ),
@@ -188,17 +205,18 @@ class _ClassCard extends StatelessWidget {
 
 /// The month calendar behind the Calendar button: a dot per category on every day that has
 /// classes, tap a day to list them and jump to it. Returns the day to show, or null if closed.
-Future<DateTime?> showStudentClassCalendar(BuildContext context, {required DateTime selected}) {
+Future<DateTime?> showStudentClassCalendar(BuildContext context, {required DateTime selected, String? feature}) {
   return showDialog<DateTime>(
     context: context,
     barrierColor: const Color(0x73241B10),
-    builder: (_) => _ClassCalendarDialog(selected: selected),
+    builder: (_) => _ClassCalendarDialog(selected: selected, feature: feature),
   );
 }
 
 class _ClassCalendarDialog extends ConsumerStatefulWidget {
-  const _ClassCalendarDialog({required this.selected});
+  const _ClassCalendarDialog({required this.selected, this.feature});
   final DateTime selected;
+  final String? feature;
 
   @override
   ConsumerState<_ClassCalendarDialog> createState() => _ClassCalendarDialogState();
@@ -224,6 +242,7 @@ class _ClassCalendarDialogState extends ConsumerState<_ClassCalendarDialog> {
             from: DateTime(month.year, month.month, 1),
             to: DateTime(month.year, month.month + 1, 0),
             courseId: null,
+            feature: widget.feature,
           );
       if (!mounted || request != _request) return;
       setState(() {

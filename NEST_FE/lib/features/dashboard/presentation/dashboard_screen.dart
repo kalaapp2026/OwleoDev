@@ -15,7 +15,6 @@ import 'package:nest_fe/features/dashboard/presentation/widgets/student_home_sec
 import 'package:nest_fe/features/dashboard/presentation/widgets/student_material_strip.dart';
 import 'package:nest_fe/features/dashboard/presentation/widgets/student_summary.dart';
 import 'package:nest_fe/features/dashboard/presentation/widgets/student_welcome_header.dart';
-import 'package:nest_fe/features/dashboard/presentation/widgets/todays_schedule_card.dart';
 import 'package:nest_fe/features/dashboard/presentation/widgets/upcoming_events_card.dart';
 import 'package:nest_fe/features/scheduling/data/scheduling_api.dart';
 
@@ -137,7 +136,11 @@ class _AdminTrainerDashboardBody extends ConsumerWidget {
                   const _GlobalSearchBar(),
                   const SizedBox(height: AppSpacing.xxl),
                 ],
-                if (canSeeSchedule) const TodaysScheduleCard(),
+                if (canSeeSchedule)
+                  StudentClassesSection(
+                    feature: 'ALL',
+                    onOpenClass: holdsAny([FeatureKeys.attendance]) ? () => context.push('/erp/attendance') : null,
+                  ),
                 if (canSeeFees) ...[
                   const SizedBox(height: AppSpacing.xxl),
                   const RevenueDuesCard(),

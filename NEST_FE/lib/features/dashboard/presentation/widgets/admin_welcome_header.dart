@@ -4,7 +4,7 @@ import 'package:nest_fe/app/theme/app_tokens.dart';
 import 'package:nest_fe/app/theme/app_typography.dart';
 import 'package:nest_fe/core/auth/session_controller.dart';
 import 'package:nest_fe/features/academy/presentation/academy_profile_shared.dart' show AcademyLogoMark, academyProfileProvider;
-import 'package:nest_fe/features/dashboard/presentation/widgets/student_welcome_header.dart' show DashboardCoverBackdrop;
+import 'package:nest_fe/features/dashboard/presentation/widgets/student_welcome_header.dart' show AcademySwitchChip, DashboardCoverBackdrop;
 
 /// The Admin/Trainer dashboard's cover hero: same treatment as [StudentWelcomeHeader], but
 /// showing the academy's own identity (logo, name, tagline) instead of a personal greeting -
@@ -18,7 +18,9 @@ class AdminWelcomeHeader extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final palette = context.palette;
-    final membership = ref.watch(sessionControllerProvider).user?.activeMembership;
+    final user = ref.watch(sessionControllerProvider).user;
+    final membership = user?.activeMembership;
+    final firstName = (user?.fullName ?? '').trim().split(RegExp(r'\s+')).firstOrNull ?? '';
     final profileAsync = ref.watch(academyProfileProvider);
     final name = profileAsync.maybeWhen(
       data: (p) => p.name,
@@ -56,8 +58,11 @@ class AdminWelcomeHeader extends ConsumerWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              Text('Welcome back',
+                  style: TextStyle(fontSize: AppType.sm, fontWeight: AppType.semi, color: palette.textMuted)),
+              const SizedBox(height: 2),
               Text(
-                name,
+                '$firstName 👋',
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
@@ -67,8 +72,12 @@ class AdminWelcomeHeader extends ConsumerWidget {
                   color: palette.text,
                 ),
               ),
+              if (user != null && membership != null) ...[
+                const SizedBox(height: AppSpacing.md),
+                AcademySwitchChip(user: user, membership: membership, academyName: name),
+              ],
               if (tagline != null && tagline.isNotEmpty) ...[
-                const SizedBox(height: 2),
+                const SizedBox(height: AppSpacing.sm),
                 Text(
                   tagline,
                   maxLines: 1,

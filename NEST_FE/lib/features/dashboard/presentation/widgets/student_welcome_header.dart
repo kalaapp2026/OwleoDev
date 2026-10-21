@@ -127,7 +127,7 @@ class StudentWelcomeHeader extends ConsumerWidget {
               ),
               if (academyName != null) ...[
                 const SizedBox(height: AppSpacing.md),
-                _AcademyChip(user: user, membership: membership!, academyName: academyName),
+                AcademySwitchChip(user: user, membership: membership!, academyName: academyName),
               ],
             ],
           ),
@@ -137,8 +137,10 @@ class StudentWelcomeHeader extends ConsumerWidget {
   }
 }
 
-class _AcademyChip extends ConsumerWidget {
-  const _AcademyChip({required this.user, required this.membership, required this.academyName});
+/// The gold academy chip under the greeting - with a menu to switch academy when the person belongs
+/// to more than one. Every role's dashboard header uses it, so switching looks the same for all.
+class AcademySwitchChip extends ConsumerWidget {
+  const AcademySwitchChip({super.key, required this.user, required this.membership, required this.academyName});
 
   final UserProfile user;
   final MembershipSummary membership;
