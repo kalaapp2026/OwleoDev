@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:nest_fe/app/theme/app_tokens.dart';
+import 'package:nest_fe/core/design/pressable.dart';
 
 /// App Lock: a 4-digit PIN asked for on a cold start and after the app has been in the background
 /// for a while.
@@ -170,9 +171,9 @@ class _PinEntryScreenState extends State<PinEntryScreen> with SingleTickerProvid
         child: Stack(children: [
           if (widget.onCancel != null)
             Positioned(
-              left: 8,
-              top: 8,
-              child: IconButton(onPressed: widget.onCancel, icon: const Icon(Icons.arrow_back)),
+              left: AppSpacing.page,
+              top: AppSpacing.md,
+              child: AppIconButton(icon: Icons.arrow_back, onTap: widget.onCancel),
             ),
           Center(
             child: Padding(

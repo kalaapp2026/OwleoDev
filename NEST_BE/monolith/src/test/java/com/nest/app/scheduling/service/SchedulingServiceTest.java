@@ -4,7 +4,6 @@ import com.nest.app.enrolment.entity.Batch;
 import com.nest.app.enrolment.entity.BatchType;
 import com.nest.app.enrolment.repository.BatchRepository;
 import com.nest.app.identity.service.CourseFeatureGuard;
-import com.nest.app.scheduling.dto.AddClassInstanceRequest;
 import com.nest.app.scheduling.dto.SetScheduleRequest;
 import com.nest.app.scheduling.dto.SlotRequest;
 import com.nest.app.scheduling.repository.ClassInstanceRepository;
@@ -136,28 +135,4 @@ class SchedulingServiceTest {
         assertThat(classes.get(8).getDate()).isEqualTo(MONDAY.plusWeeks(8));
     }
 
-    @Test
-    void addingAnAdHocClassIsRejectedWhenCallerLacksAttendanceOnThisCourse() {
-        newService();
-        doThrow(new ForbiddenException("nope")).when(courseFeatureGuard)
-                .assertCourseFeature(courseId, FeatureKey.ATTENDANCE);
-
-        var request = new AddClassInstanceRequest(LocalDate.now(), LocalTime.of(17, 0), LocalTime.of(18, 0));
-
-        assertThatThrownBy(() -> schedulingService.addAdHocInstance(batchId, request))
-                .isInstanceOf(ForbiddenException.class);
-    }
-
-    @Test
-    void addingAnAdHocClassSucceedsWhenCallerHoldsAttendanceOnThisCourse() {
-        newService();
-        when(classInstanceRepository.existsByBatchIdAndDateAndStartTime(
-                batchId, LocalDate.now(), LocalTime.of(17, 0))).thenReturn(false);
-        when(classInstanceRepository.save(org.mockito.ArgumentMatchers.any()))
-                .thenAnswer(inv -> inv.getArgument(0));
-
-        var request = new AddClassInstanceRequest(LocalDate.now(), LocalTime.of(17, 0), LocalTime.of(18, 0));
-
-        assertThatCode(() -> schedulingService.addAdHocInstance(batchId, request)).doesNotThrowAnyException();
-    }
 }

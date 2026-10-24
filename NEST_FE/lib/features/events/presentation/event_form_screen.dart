@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:nest_fe/core/design/app_text_field.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:nest_fe/app/theme/app_tokens.dart';
 import 'package:nest_fe/app/theme/app_typography.dart';
@@ -206,7 +207,17 @@ class _EventFormScreenState extends ConsumerState<EventFormScreen> {
     setState(() => _interestDeadline = picked);
   }
 
-  bool get _canSave => _titleController.text.trim().isNotEmpty && _locationController.text.trim().isNotEmpty;
+  // The same rules the fields show under themselves, so the button and the messages agree.
+  static final _titleRule = FieldPreset.title(label: 'event title', min: 3, max: 80);
+  static final _locationRule = FieldPreset.text(label: 'venue', min: 3, max: 120);
+  static final _descriptionRule = FieldPreset.text(label: 'description', max: 200, required: false);
+  static final _mapsRule = FieldPreset.url(label: 'map link', required: false);
+
+  bool get _canSave =>
+      _titleRule.check(_titleController.text) == null &&
+      _locationRule.check(_locationController.text) == null &&
+      _descriptionRule.check(_descriptionController.text) == null &&
+      (!_showMapsLink || _mapsRule.check(_mapsController.text) == null);
 
   Future<void> _submit() async {
     if (!_canSave) return;
@@ -280,7 +291,7 @@ class _EventFormScreenState extends ConsumerState<EventFormScreen> {
         padding: const EdgeInsets.all(AppSpacing.page),
         children: [
           _label('Event title'),
-          _textField(_titleController, 'e.g. Annual Day 2026'),
+          _textField(_titleController, 'e.g. Annual Day 2026', preset: _titleRule),
           const SizedBox(height: AppSpacing.xxl),
           // There is no Category row: a new event is always a Programme (Looking for Artist is not
           // open yet), and an existing event keeps whatever type it already has via [_type].
@@ -310,17 +321,22 @@ class _EventFormScreenState extends ConsumerState<EventFormScreen> {
               Text('${_descriptionController.text.length}/200', style: TextStyle(fontSize: AppType.sm, color: palette.textFaint)),
             ],
           ),
-          TextField(
+          CheckedField(
             controller: _descriptionController,
-            maxLines: 4,
-            maxLength: 200,
-            onChanged: (_) => setState(() {}),
-            style: TextStyle(color: palette.text),
-            decoration: _decoration("What's this event about?"),
+            preset: _descriptionRule,
+            builder: (context, hasError) => TextField(
+              controller: _descriptionController,
+              maxLines: 4,
+              maxLength: 200,
+              onChanged: (_) => setState(() {}),
+              textCapitalization: _descriptionRule.textCapitalization,
+              style: TextStyle(color: palette.text),
+              decoration: _decoration("What's this event about?"),
+            ),
           ),
           const SizedBox(height: AppSpacing.md),
           _label('Venue'),
-          _textField(_locationController, 'e.g. Academy Auditorium', icon: Icons.place_outlined),
+          _textField(_locationController, 'e.g. Academy Auditorium', icon: Icons.place_outlined, preset: _locationRule),
           const SizedBox(height: AppSpacing.md),
           // The map link is optional, so it stays out of the way until asked for - and clearing
           // it with the X puts it away again.
@@ -329,6 +345,7 @@ class _EventFormScreenState extends ConsumerState<EventFormScreen> {
               _mapsController,
               'Paste Google Maps link',
               icon: Icons.link,
+              preset: _mapsRule,
               onClear: () => setState(() {
                 _mapsController.clear();
                 _showMapsLink = false;
@@ -594,13 +611,22 @@ class _EventFormScreenState extends ConsumerState<EventFormScreen> {
             style: TextStyle(fontSize: AppType.xs, fontWeight: AppType.bold, color: context.palette.textMuted, letterSpacing: 0.5)),
       );
 
-  Widget _textField(TextEditingController controller, String hint, {IconData? icon, VoidCallback? onClear}) => TextField(
+  Widget _textField(TextEditingController controller, String hint,
+          {IconData? icon, VoidCallback? onClear, FieldPreset? preset}) =>
+      CheckedField(
         controller: controller,
-        onChanged: (_) => setState(() {}),
-        style: TextStyle(color: context.palette.text),
-        decoration: _decoration(hint).copyWith(
-          prefixIcon: icon == null ? null : Icon(icon, size: 16, color: context.palette.gold),
-          suffixIcon: onClear == null ? null : IconButton(icon: Icon(Icons.close, size: 14, color: context.palette.textFaint), onPressed: onClear),
+        preset: preset,
+        builder: (context, hasError) => TextField(
+          controller: controller,
+          onChanged: (_) => setState(() {}),
+          keyboardType: preset?.keyboardType,
+          textCapitalization: preset?.textCapitalization ?? TextCapitalization.none,
+          inputFormatters: preset?.formatters,
+          style: TextStyle(color: context.palette.text),
+          decoration: _decoration(hint).copyWith(
+            prefixIcon: icon == null ? null : Icon(icon, size: 16, color: context.palette.gold),
+            suffixIcon: onClear == null ? null : IconButton(icon: Icon(Icons.close, size: 14, color: context.palette.textFaint), onPressed: onClear),
+          ),
         ),
       );
 

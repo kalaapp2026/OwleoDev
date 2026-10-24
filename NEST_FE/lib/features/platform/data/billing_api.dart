@@ -201,6 +201,4 @@ class BillingApi {
         (data) => Invoice.fromJson(data as Map<String, dynamic>),
       );
 
-  Future<void> changePlan(String academyId, String planCode) =>
-      _client.callVoid((dio) => dio.put('/admin/billing/academies/$academyId/plan', data: {'planCode': planCode}));
 }

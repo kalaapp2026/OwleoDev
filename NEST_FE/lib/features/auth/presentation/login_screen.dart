@@ -8,10 +8,15 @@ import 'package:nest_fe/app/theme/app_typography.dart';
 import 'package:nest_fe/app/theme/theme_controller.dart';
 import 'package:nest_fe/core/auth/session_controller.dart';
 import 'package:nest_fe/core/design/buttons.dart';
+import 'package:nest_fe/core/design/app_text_field.dart';
 import 'package:nest_fe/core/design/calendar_modal.dart';
 import 'package:nest_fe/core/design/pressable.dart';
 import 'package:nest_fe/core/design/segmented_control.dart';
 import 'package:nest_fe/core/error/api_exception.dart';
+import 'package:nest_fe/core/validation/countries.dart';
+import 'package:nest_fe/core/validation/input_formats.dart';
+import 'package:nest_fe/core/validation/phone_rules.dart';
+import 'package:nest_fe/core/validation/validators.dart';
 import 'package:nest_fe/core/widgets/app_notice.dart';
 import 'package:nest_fe/features/auth/data/auth_api.dart';
 import 'package:nest_fe/l10n/app_localizations.dart';
@@ -40,7 +45,7 @@ class LoginScreen extends StatelessWidget {
 
 /// Public self-signup (PRD 7.4 addendum) - the account is created from five required fields
 /// (username/password/fullName/phone/email); everything else on this form (DOB, gender, blood
-/// group, guardian, address) is optional and layered on afterward via the same PersonDetails merge
+/// group, address) is optional and layered on afterward via the same PersonDetails merge
 /// the staff-side student/trainer registration forms use. See [LoginScreen] - both routes share
 /// [_AuthScreen].
 class SignupScreen extends StatelessWidget {
@@ -96,7 +101,6 @@ class _AuthScreenState extends ConsumerState<_AuthScreen> {
   final _confirmPasswordController = TextEditingController();
   final _phoneController = TextEditingController();
   final _altPhoneController = TextEditingController();
-  final _guardianNameController = TextEditingController();
   final _addressLine1Controller = TextEditingController();
   final _addressLine2Controller = TextEditingController();
   final _cityController = TextEditingController();
@@ -108,6 +112,16 @@ class _AuthScreenState extends ConsumerState<_AuthScreen> {
   String? _bloodGroup;
   bool _obscureSignupPassword = true;
   bool _obscureConfirmPassword = true;
+
+  // Phone numbers: the calling code and country live beside the digits, so the number is checked
+  // against its own country's rules.
+  String _signupDial = '+91';
+  Country? _signupCountry;
+  String _altDial = '+91';
+  Country? _altCountry;
+
+  /// Set by a failed Create account, so every error shows at once.
+  bool _showSignupErrors = false;
 
   bool _isLoading = false;
 
@@ -130,7 +144,6 @@ class _AuthScreenState extends ConsumerState<_AuthScreen> {
     _confirmPasswordController.dispose();
     _phoneController.dispose();
     _altPhoneController.dispose();
-    _guardianNameController.dispose();
     _addressLine1Controller.dispose();
     _addressLine2Controller.dispose();
     _cityController.dispose();
@@ -183,6 +196,11 @@ class _AuthScreenState extends ConsumerState<_AuthScreen> {
   }
 
   Future<void> _submitOtp() async {
+    final codeError = Validators.otp()(_codeController.text);
+    if (codeError != null) {
+      AppNotice.error(context, codeError);
+      return;
+    }
     setState(() => _isLoading = true);
     try {
       await ref.read(sessionControllerProvider.notifier).verifyOtp(
@@ -211,25 +229,21 @@ class _AuthScreenState extends ConsumerState<_AuthScreen> {
     final username = _usernameController.text.trim();
     final email = _emailController.text.trim();
     final password = _signupPasswordController.text;
-    final confirm = _confirmPasswordController.text;
-    final phone = _phoneController.text.trim();
-
-    if (firstName.isEmpty || lastName.isEmpty || username.isEmpty || phone.isEmpty || email.isEmpty) {
-      AppNotice.error(context, 'Fill in your name, username, phone and email.');
+    final problem = _signupProblem();
+    if (problem != null) {
+      setState(() => _showSignupErrors = true);
+      AppNotice.error(context, problem);
       return;
     }
-    if (!email.contains('@') || !email.contains('.')) {
-      AppNotice.error(context, 'Enter a valid email address.');
-      return;
-    }
-    if (password.length < 6) {
-      AppNotice.error(context, 'Password should be at least 6 characters.');
-      return;
-    }
-    if (password != confirm) {
-      AppNotice.error(context, "Passwords don't match.");
-      return;
-    }
+    // Stored with its calling code (+91 9876543210), like every number entered by staff.
+    final phone = PhoneRules.format(
+      _signupDial,
+      PhoneRules.check(dial: _signupDial, digits: _phoneController.text, iso: _signupCountry?.iso).nsn,
+    );
+    final altPhone = PhoneRules.format(
+      _altDial,
+      PhoneRules.check(dial: _altDial, digits: _altPhoneController.text, iso: _altCountry?.iso, kind: PhoneKind.any, required: false).nsn,
+    );
 
     setState(() => _isLoading = true);
     try {
@@ -245,14 +259,13 @@ class _AuthScreenState extends ConsumerState<_AuthScreen> {
               lastName: lastName,
               gender: _gender,
               bloodGroup: _bloodGroup,
-              altPhone: _emptyToNull(_altPhoneController.text),
+              altPhone: _emptyToNull(altPhone),
               addressLine1: _emptyToNull(_addressLine1Controller.text),
               addressLine2: _emptyToNull(_addressLine2Controller.text),
               city: _emptyToNull(_cityController.text),
               district: _emptyToNull(_districtController.text),
               state: _emptyToNull(_stateController.text),
               pinCode: _emptyToNull(_pinCodeController.text),
-              guardianName: _emptyToNull(_guardianNameController.text),
             ),
           );
       if (mounted) context.go('/become-artist');
@@ -262,6 +275,30 @@ class _AuthScreenState extends ConsumerState<_AuthScreen> {
       if (mounted) setState(() => _isLoading = false);
     }
   }
+
+  /// The first thing wrong with the sign-up form, in the order it is laid out; null when it can be
+  /// submitted. The same rules as every other screen (core/validation), and as the server.
+  String? _signupProblem() =>
+      Validators.personName(label: 'first name')(_firstNameController.text) ??
+      Validators.personName(label: 'last name')(_lastNameController.text) ??
+      Validators.username()(_usernameController.text) ??
+      Validators.email()(_emailController.text) ??
+      Validators.password()(_signupPasswordController.text) ??
+      (_confirmPasswordController.text != _signupPasswordController.text ? "Passwords don't match." : null) ??
+      PhoneRules.validate(dial: _signupDial, digits: _phoneController.text, iso: _signupCountry?.iso) ??
+      PhoneRules.validate(
+        dial: _altDial,
+        digits: _altPhoneController.text,
+        iso: _altCountry?.iso,
+        kind: PhoneKind.any,
+        required: false,
+      ) ??
+      Validators.text(label: 'address line 1', min: 4, max: 120, required: false)(_addressLine1Controller.text) ??
+      Validators.text(label: 'address line 2', max: 120, required: false)(_addressLine2Controller.text) ??
+      Validators.title(label: 'city', max: 60, required: false)(_cityController.text) ??
+      Validators.pinCode(countryName: _signupDial == '+91' ? null : 'elsewhere', required: false)(_pinCodeController.text) ??
+      Validators.title(label: 'district', max: 60, required: false)(_districtController.text) ??
+      Validators.title(label: 'state', max: 60, required: false)(_stateController.text);
 
   String? _emptyToNull(String raw) {
     final trimmed = raw.trim();
@@ -310,7 +347,7 @@ class _AuthScreenState extends ConsumerState<_AuthScreen> {
                       children: [
                         if (widget.isAddingAccount)
                           AppIconButton(
-                            icon: Icons.arrow_back_rounded,
+                            icon: Icons.arrow_back,
                             tooltip: 'Back',
                             onTap: () => Navigator.of(context).maybePop(),
                           )
@@ -398,6 +435,7 @@ class _AuthScreenState extends ConsumerState<_AuthScreen> {
           label: 'Email or Username',
           controller: _identifierController,
           autofocus: true,
+          preset: FieldPreset(formatters: InputFormats.noSpaces(max: 254)),
           trailingIcon: Icons.mail_outline,
           textInputAction: TextInputAction.next,
         ),
@@ -443,7 +481,7 @@ class _AuthScreenState extends ConsumerState<_AuthScreen> {
           label: '6-digit code',
           controller: _codeController,
           autofocus: true,
-          keyboardType: TextInputType.number,
+          preset: FieldPreset.otp(),
           trailingIcon: Icons.sms_outlined,
           textInputAction: TextInputAction.done,
           onSubmitted: (_) => _submitOtp(),
@@ -475,11 +513,22 @@ class _AuthScreenState extends ConsumerState<_AuthScreen> {
         Row(
           children: [
             Expanded(
-              child: _AuthField(label: 'First name', controller: _firstNameController, autofocus: true),
+              child: _AuthField(
+                label: 'First name',
+                controller: _firstNameController,
+                autofocus: true,
+                preset: FieldPreset.personName(label: 'first name'),
+                showErrors: _showSignupErrors,
+              ),
             ),
             const SizedBox(width: AppSpacing.lg),
             Expanded(
-              child: _AuthField(label: 'Last name', controller: _lastNameController),
+              child: _AuthField(
+                label: 'Last name',
+                controller: _lastNameController,
+                preset: FieldPreset.personName(label: 'last name'),
+                showErrors: _showSignupErrors,
+              ),
             ),
           ],
         ),
@@ -487,19 +536,24 @@ class _AuthScreenState extends ConsumerState<_AuthScreen> {
         _AuthField(
           label: AppLocalizations.of(context).authUsername,
           controller: _usernameController,
+          preset: FieldPreset.username(),
+          showErrors: _showSignupErrors,
           trailingIcon: Icons.alternate_email,
         ),
         const SizedBox(height: AppSpacing.xl),
         _AuthField(
           label: AppLocalizations.of(context).authEmail,
           controller: _emailController,
-          keyboardType: TextInputType.emailAddress,
+          preset: FieldPreset.email(),
+          showErrors: _showSignupErrors,
           trailingIcon: Icons.mail_outline,
         ),
         const SizedBox(height: AppSpacing.xl),
         _AuthField(
           label: AppLocalizations.of(context).authPassword,
           controller: _signupPasswordController,
+          validator: Validators.password(),
+          showErrors: _showSignupErrors,
           obscured: _obscureSignupPassword,
           onToggleObscured: () => setState(() => _obscureSignupPassword = !_obscureSignupPassword),
         ),
@@ -508,24 +562,38 @@ class _AuthScreenState extends ConsumerState<_AuthScreen> {
         _AuthField(
           label: 'Confirm password',
           controller: _confirmPasswordController,
+          validator: (v) => v == _signupPasswordController.text ? null : "Passwords don't match.",
+          showErrors: _showSignupErrors,
           obscured: _obscureConfirmPassword,
           onToggleObscured: () => setState(() => _obscureConfirmPassword = !_obscureConfirmPassword),
         ),
         const SizedBox(height: AppSpacing.x5l),
         _AuthSectionDivider(label: 'Personal details'),
         const SizedBox(height: AppSpacing.xl),
-        _AuthField(
+        _AuthPhone(
           label: AppLocalizations.of(context).authMobileNumber,
+          dial: _signupDial,
+          country: _signupCountry,
           controller: _phoneController,
-          keyboardType: TextInputType.phone,
-          trailingIcon: Icons.phone_outlined,
+          showErrors: _showSignupErrors,
+          onChanged: (dial, country) => setState(() {
+            _signupDial = dial;
+            _signupCountry = country;
+          }),
         ),
         const SizedBox(height: AppSpacing.xl),
-        _AuthField(
+        _AuthPhone(
           label: 'Alternate phone (optional)',
+          dial: _altDial,
+          country: _altCountry,
           controller: _altPhoneController,
-          keyboardType: TextInputType.phone,
-          trailingIcon: Icons.phone_outlined,
+          kind: PhoneKind.any,
+          required: false,
+          showErrors: _showSignupErrors,
+          onChanged: (dial, country) => setState(() {
+            _altDial = dial;
+            _altCountry = country;
+          }),
         ),
         const SizedBox(height: AppSpacing.xl),
         _AuthDateField(label: 'Date of birth', value: _dob, onTap: _pickDob),
@@ -533,28 +601,64 @@ class _AuthScreenState extends ConsumerState<_AuthScreen> {
         _AuthGenderToggle(value: _gender, onChanged: (v) => setState(() => _gender = v)),
         const SizedBox(height: AppSpacing.xl),
         _AuthBloodGroupPicker(value: _bloodGroup, onChanged: (v) => setState(() => _bloodGroup = v)),
-        const SizedBox(height: AppSpacing.xl),
-        _AuthField(label: 'Guardian name', controller: _guardianNameController, trailingIcon: Icons.badge_outlined),
         const SizedBox(height: AppSpacing.x5l),
         _AuthSectionDivider(label: 'Address'),
         const SizedBox(height: AppSpacing.xl),
-        _AuthField(label: 'Address line 1', controller: _addressLine1Controller),
+        _AuthField(
+          label: 'Address line 1',
+          controller: _addressLine1Controller,
+          preset: FieldPreset.text(label: 'address line 1', min: 4, max: 120, required: false),
+          showErrors: _showSignupErrors,
+        ),
         const SizedBox(height: AppSpacing.xl),
-        _AuthField(label: 'Address line 2 (optional)', controller: _addressLine2Controller),
+        _AuthField(
+          label: 'Address line 2 (optional)',
+          controller: _addressLine2Controller,
+          preset: FieldPreset.text(label: 'address line 2', max: 120, required: false),
+          showErrors: _showSignupErrors,
+        ),
         const SizedBox(height: AppSpacing.xl),
         Row(
           children: [
-            Expanded(child: _AuthField(label: 'City', controller: _cityController)),
+            Expanded(
+              child: _AuthField(
+                label: 'City',
+                controller: _cityController,
+                preset: FieldPreset.title(label: 'city', max: 60, required: false),
+                showErrors: _showSignupErrors,
+              ),
+            ),
             const SizedBox(width: AppSpacing.lg),
-            Expanded(child: _AuthField(label: 'Pin code', controller: _pinCodeController, keyboardType: TextInputType.number)),
+            Expanded(
+              child: _AuthField(
+                label: 'Pin code',
+                controller: _pinCodeController,
+                preset: FieldPreset.pinCode(countryName: _signupDial == '+91' ? null : 'elsewhere', required: false),
+                showErrors: _showSignupErrors,
+              ),
+            ),
           ],
         ),
         const SizedBox(height: AppSpacing.xl),
         Row(
           children: [
-            Expanded(child: _AuthField(label: 'District', controller: _districtController)),
+            Expanded(
+              child: _AuthField(
+                label: 'District',
+                controller: _districtController,
+                preset: FieldPreset.title(label: 'district', max: 60, required: false),
+                showErrors: _showSignupErrors,
+              ),
+            ),
             const SizedBox(width: AppSpacing.lg),
-            Expanded(child: _AuthField(label: 'State', controller: _stateController)),
+            Expanded(
+              child: _AuthField(
+                label: 'State',
+                controller: _stateController,
+                preset: FieldPreset.title(label: 'state', max: 60, required: false),
+                showErrors: _showSignupErrors,
+              ),
+            ),
           ],
         ),
         const SizedBox(height: AppSpacing.x5l),
@@ -641,12 +745,14 @@ class _ForgotPasswordSheetState extends ConsumerState<_ForgotPasswordSheet> {
   Future<void> _resetPassword() async {
     final code = _codeController.text.trim();
     final newPassword = _newPasswordController.text;
-    if (code.isEmpty) {
-      AppNotice.error(context, 'Enter the code we emailed you.');
+    final codeError = Validators.otp()(code);
+    if (codeError != null) {
+      AppNotice.error(context, codeError);
       return;
     }
-    if (newPassword.length < 6) {
-      AppNotice.error(context, 'Password should be at least 6 characters.');
+    final passwordError = Validators.password()(newPassword);
+    if (passwordError != null) {
+      AppNotice.error(context, passwordError);
       return;
     }
     if (newPassword != _confirmPasswordController.text) {
@@ -719,13 +825,14 @@ class _ForgotPasswordSheetState extends ConsumerState<_ForgotPasswordSheet> {
                 label: '6-digit code',
                 controller: _codeController,
                 autofocus: true,
-                keyboardType: TextInputType.number,
+                preset: FieldPreset.otp(),
                 trailingIcon: Icons.sms_outlined,
               ),
               const SizedBox(height: AppSpacing.xl),
               _AuthField(
                 label: 'New password',
                 controller: _newPasswordController,
+                validator: Validators.password(),
                 obscured: _obscureNewPassword,
                 onToggleObscured: () => setState(() => _obscureNewPassword = !_obscureNewPassword),
               ),
@@ -734,6 +841,7 @@ class _ForgotPasswordSheetState extends ConsumerState<_ForgotPasswordSheet> {
               _AuthField(
                 label: 'Confirm new password',
                 controller: _confirmPasswordController,
+                validator: (v) => v == _newPasswordController.text ? null : "Passwords don't match.",
                 obscured: _obscureNewPassword,
                 textInputAction: TextInputAction.done,
                 onSubmitted: (_) => _resetPassword(),
@@ -845,18 +953,19 @@ class _AuthField extends StatefulWidget {
     required this.label,
     required this.controller,
     this.autofocus = false,
-    this.keyboardType,
     this.textInputAction,
     this.onSubmitted,
     this.trailingIcon,
     this.obscured,
     this.onToggleObscured,
+    this.preset,
+    this.validator,
+    this.showErrors = false,
   });
 
   final String label;
   final TextEditingController controller;
   final bool autofocus;
-  final TextInputType? keyboardType;
   final TextInputAction? textInputAction;
   final ValueChanged<String>? onSubmitted;
   final IconData? trailingIcon;
@@ -866,6 +975,15 @@ class _AuthField extends StatefulWidget {
   final bool? obscured;
   final VoidCallback? onToggleObscured;
 
+  /// Keyboard, keystroke filters and the rule the value must satisfy, from core/validation.
+  final FieldPreset? preset;
+
+  /// A rule on its own, for a field with no preset (a password).
+  final Validator? validator;
+
+  /// Show the error even before the field has been visited (after a failed submit).
+  final bool showErrors;
+
   @override
   State<_AuthField> createState() => _AuthFieldState();
 }
@@ -873,23 +991,42 @@ class _AuthField extends StatefulWidget {
 class _AuthFieldState extends State<_AuthField> {
   final _focusNode = FocusNode();
   bool _focused = false;
+  bool _visited = false;
 
   @override
   void initState() {
     super.initState();
-    _focusNode.addListener(() => setState(() => _focused = _focusNode.hasFocus));
+    _focusNode.addListener(() => setState(() {
+          _focused = _focusNode.hasFocus;
+          // Leaving the field is when its first attempt is judged; edits after that are live.
+          if (!_focused) _visited = true;
+        }));
+    widget.controller.addListener(_onText);
   }
 
   @override
   void dispose() {
+    widget.controller.removeListener(_onText);
     _focusNode.dispose();
     super.dispose();
+  }
+
+  void _onText() {
+    if (mounted && _visited) setState(() {});
+  }
+
+  String? get _error {
+    final rule = widget.validator ?? widget.preset?.validator;
+    if (rule == null || !(widget.showErrors || _visited)) return null;
+    return rule(widget.controller.text);
   }
 
   @override
   Widget build(BuildContext context) {
     final palette = context.palette;
     final isPassword = widget.obscured != null;
+    final error = _error;
+    final preset = widget.preset;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -907,15 +1044,21 @@ class _AuthFieldState extends State<_AuthField> {
           decoration: BoxDecoration(
             color: _focused ? palette.surfaceHigh : palette.surfaceRaised,
             borderRadius: AppRadii.all(AppRadii.pill),
-            border: Border.all(color: _focused ? palette.primary : palette.borderSoft, width: 1.5),
-            boxShadow: _focused ? AppShadows.focusGlow(palette.primary) : null,
+            border: Border.all(
+              color: error != null ? palette.notPaid : (_focused ? palette.primary : palette.borderSoft),
+              width: 1.5,
+            ),
+            boxShadow: _focused && error == null ? AppShadows.focusGlow(palette.primary) : null,
           ),
           child: TextField(
             controller: widget.controller,
             focusNode: _focusNode,
             autofocus: widget.autofocus,
             obscureText: isPassword && widget.obscured!,
-            keyboardType: widget.keyboardType,
+            keyboardType: preset?.keyboardType,
+            textCapitalization: preset?.textCapitalization ?? TextCapitalization.none,
+            inputFormatters: preset?.formatters,
+            autofillHints: preset?.autofillHints,
             textInputAction: widget.textInputAction,
             onSubmitted: widget.onSubmitted,
             style: TextStyle(fontSize: AppType.xl, fontWeight: AppType.semi, color: palette.text),
@@ -943,6 +1086,63 @@ class _AuthFieldState extends State<_AuthField> {
                         )),
             ),
           ),
+        ),
+        if (error != null)
+          Padding(
+            padding: const EdgeInsets.only(left: AppSpacing.xl, top: AppSpacing.xs),
+            child: Text(error, style: TextStyle(fontSize: AppType.sm, color: palette.notPaid, height: 1.4)),
+          ),
+      ],
+    );
+  }
+}
+
+/// A phone number in the sign-in screens' pill style: label, then the calling-code button and the
+/// digits. A thin shell over [PhoneInput], which does the country list and the checking.
+class _AuthPhone extends StatelessWidget {
+  const _AuthPhone({
+    required this.label,
+    required this.dial,
+    required this.country,
+    required this.controller,
+    required this.onChanged,
+    this.kind = PhoneKind.mobile,
+    this.required = true,
+    this.showErrors = false,
+  });
+
+  final String label;
+  final String dial;
+  final Country? country;
+  final TextEditingController controller;
+  final void Function(String dial, Country? country) onChanged;
+  final PhoneKind kind;
+  final bool required;
+  final bool showErrors;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.palette;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(left: AppSpacing.xxs, bottom: AppSpacing.xs),
+          child: Text(
+            label,
+            style: TextStyle(fontSize: AppType.xs, fontWeight: AppType.bold, color: palette.textFaint),
+          ),
+        ),
+        PhoneInput(
+          dial: dial,
+          country: country,
+          controller: controller,
+          kind: kind,
+          required: required,
+          showErrors: showErrors,
+          radius: AppRadii.pill,
+          onDialChanged: (d) => onChanged(d, null),
+          onCountryChanged: (c) => onChanged(c.dial, c),
         ),
       ],
     );

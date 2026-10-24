@@ -81,7 +81,10 @@ class _FileViewerScreenState extends ConsumerState<FileViewerScreen> {
     }
     final url = ApiConfig.resolveMediaUrl(material.url);
     if (url == null) return;
-    final launched = await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+    final launched = await launchUrl(
+      Uri.parse(url),
+      mode: LaunchMode.externalApplication,
+    );
     if (!launched && mounted) showAppToast(context, "Couldn't open this file.");
     if (launched && mounted) showAppToast(context, 'Download started');
   }
@@ -109,9 +112,14 @@ class _FileViewerScreenState extends ConsumerState<FileViewerScreen> {
             if ((material.description ?? '').isNotEmpty)
               Padding(
                 padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
-                child: Text(material.description!,
-                    style: TextStyle(
-                        fontSize: AppType.base, color: palette.textMuted, height: 1.5)),
+                child: Text(
+                  material.description!,
+                  style: TextStyle(
+                    fontSize: AppType.base,
+                    color: palette.textMuted,
+                    height: 1.5,
+                  ),
+                ),
               ),
             Expanded(child: _preview(fullscreen: false)),
             _footer(palette),
@@ -124,31 +132,42 @@ class _FileViewerScreenState extends ConsumerState<FileViewerScreen> {
   Widget _header(AppPalette palette) {
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
-      decoration:
-          BoxDecoration(border: Border(bottom: BorderSide(color: palette.borderSoft))),
+      decoration: BoxDecoration(
+        border: Border(bottom: BorderSide(color: palette.borderSoft)),
+      ),
       child: Row(
         children: [
           AppIconButton(
-              icon: Icons.arrow_back, onTap: () => Navigator.of(context).maybePop()),
+            icon: Icons.arrow_back,
+            onTap: () => Navigator.of(context).maybePop(),
+          ),
           const SizedBox(width: AppSpacing.lg),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(material.title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                        fontSize: AppType.title,
-                        fontWeight: AppType.bold,
-                        letterSpacing: AppType.titleTracking,
-                        color: palette.text)),
+                Text(
+                  material.title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: AppType.title,
+                    fontWeight: AppType.bold,
+                    letterSpacing: AppType.titleTracking,
+                    color: palette.text,
+                  ),
+                ),
                 const SizedBox(height: 2),
-                Text(material.fileName,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(fontSize: AppType.smd, color: palette.textMuted)),
+                Text(
+                  material.fileName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: AppType.smd,
+                    color: palette.textMuted,
+                  ),
+                ),
               ],
             ),
           ),
@@ -162,14 +181,21 @@ class _FileViewerScreenState extends ConsumerState<FileViewerScreen> {
   Widget _preview({required bool fullscreen}) {
     switch (material.fileType) {
       case StudyMaterialType.audio:
-        return SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(14, 14, 14, 16),
-          child: Center(
-            child: AudioPlayerPanel(
-              material: material,
-              autoPlay: widget.autoPlay,
-              playlistNav: widget.playlistNav,
-              onOpenLibrary: widget.onOpenLibrary,
+        // Centred in the space rather than pinned to the top, so a tall phone does not leave the
+        // controls floating over an empty lower half.
+        return LayoutBuilder(
+          builder: (context, box) => SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(8, 14, 8, 16),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minHeight: box.maxHeight - 30),
+              child: Center(
+                child: AudioPlayerPanel(
+                  material: material,
+                  autoPlay: widget.autoPlay,
+                  playlistNav: widget.playlistNav,
+                  onOpenLibrary: widget.onOpenLibrary,
+                ),
+              ),
             ),
           ),
         );
@@ -194,8 +220,9 @@ class _FileViewerScreenState extends ConsumerState<FileViewerScreen> {
   Widget _footer(AppPalette palette) {
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 14, 20, 18),
-      decoration:
-          BoxDecoration(border: Border(top: BorderSide(color: palette.borderSoft))),
+      decoration: BoxDecoration(
+        border: Border(top: BorderSide(color: palette.borderSoft)),
+      ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -219,11 +246,14 @@ class _FileViewerScreenState extends ConsumerState<FileViewerScreen> {
                 children: [
                   Icon(Icons.lock_outline, size: 14, color: palette.textMuted),
                   const SizedBox(width: 8),
-                  Text('View only — download disabled',
-                      style: TextStyle(
-                          fontSize: AppType.md,
-                          fontWeight: AppType.bold,
-                          color: palette.textMuted)),
+                  Text(
+                    'View only — download disabled',
+                    style: TextStyle(
+                      fontSize: AppType.md,
+                      fontWeight: AppType.bold,
+                      color: palette.textMuted,
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -232,12 +262,15 @@ class _FileViewerScreenState extends ConsumerState<FileViewerScreen> {
               onTap: widget.onEdit,
               child: Padding(
                 padding: const EdgeInsets.only(top: 10),
-                child: Text('Edit file details',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                        fontSize: AppType.base,
-                        fontWeight: AppType.bold,
-                        color: palette.primary)),
+                child: Text(
+                  'Edit file details',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: AppType.base,
+                    fontWeight: AppType.bold,
+                    color: palette.primary,
+                  ),
+                ),
               ),
             ),
         ],

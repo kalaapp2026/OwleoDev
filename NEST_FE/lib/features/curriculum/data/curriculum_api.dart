@@ -87,13 +87,6 @@ class CurriculumApi {
         : dio.delete('/me/courses/$courseId/interest'));
   }
 
-  Future<Course> getCourse(String id) {
-    return _client.call(
-      (dio) => dio.get('/courses/$id'),
-      (data) => Course.fromJson(data as Map<String, dynamic>),
-    );
-  }
-
   Future<Course> createCourse({
     required CourseCategory category,
     required String name,

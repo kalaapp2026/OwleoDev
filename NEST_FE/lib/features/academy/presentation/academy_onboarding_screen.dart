@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:nest_fe/core/design/app_text_field.dart';
 import 'package:nest_fe/core/error/api_exception.dart';
+import 'package:nest_fe/core/validation/countries.dart';
+import 'package:nest_fe/core/validation/phone_rules.dart';
+import 'package:nest_fe/core/validation/validators.dart';
 import 'package:nest_fe/core/providers/core_providers.dart';
 import 'package:nest_fe/core/widgets/app_notice.dart';
 import 'package:nest_fe/features/academy/data/academy_onboarding_api.dart';
@@ -37,6 +41,15 @@ class _AcademyOnboardingScreenState extends ConsumerState<AcademyOnboardingScree
 
   String _category = _categories.first;
   bool _isSaving = false;
+
+  // Each phone keeps its calling code and country beside the digits.
+  String _contactDial = '+91';
+  Country? _contactCountry;
+  String _adminDial = '+91';
+  Country? _adminCountry;
+
+  /// Set when Create is tapped with something wrong, so every error shows at once.
+  bool _showErrors = false;
   OnboardAcademyResult? _result;
 
   @override
@@ -50,17 +63,29 @@ class _AcademyOnboardingScreenState extends ConsumerState<AcademyOnboardingScree
     super.dispose();
   }
 
-  bool get _canSubmit =>
-      _academyName.text.trim().isNotEmpty &&
-      _address.text.trim().isNotEmpty &&
-      _city.text.trim().isNotEmpty &&
-      _state.text.trim().isNotEmpty &&
-      _contactNumber.text.trim().isNotEmpty &&
-      _adminUsername.text.trim().isNotEmpty &&
-      _adminFullName.text.trim().isNotEmpty &&
-      _adminPhone.text.trim().isNotEmpty;
+  /// The first thing wrong with the form, in the order it is laid out; null when it can be sent.
+  String? _problem() =>
+      Validators.title(label: 'academy name', max: 80)(_academyName.text) ??
+      Validators.text(label: 'address', min: 4, max: 160)(_address.text) ??
+      Validators.title(label: 'city', max: 60)(_city.text) ??
+      Validators.title(label: 'state', max: 60)(_state.text) ??
+      PhoneRules.validate(dial: _contactDial, digits: _contactNumber.text, iso: _contactCountry?.iso) ??
+      Validators.email(required: false)(_email.text) ??
+      Validators.personName(label: "admin's name")(_adminFullName.text) ??
+      Validators.username()(_adminUsername.text) ??
+      PhoneRules.validate(dial: _adminDial, digits: _adminPhone.text, iso: _adminCountry?.iso) ??
+      Validators.email(required: false)(_adminEmail.text);
+
+  String _phone(String dial, TextEditingController c, Country? country) =>
+      PhoneRules.format(dial, PhoneRules.check(dial: dial, digits: c.text, iso: country?.iso).nsn);
 
   Future<void> _submit() async {
+    final problem = _problem();
+    if (problem != null) {
+      setState(() => _showErrors = true);
+      AppNotice.error(context, problem);
+      return;
+    }
     setState(() => _isSaving = true);
     try {
       final result = await ref.read(academyOnboardingApiProvider).onboard(
@@ -69,11 +94,11 @@ class _AcademyOnboardingScreenState extends ConsumerState<AcademyOnboardingScree
             address: _address.text.trim(),
             city: _city.text.trim(),
             state: _state.text.trim(),
-            contactNumber: _contactNumber.text.trim(),
+            contactNumber: _phone(_contactDial, _contactNumber, _contactCountry),
             email: _email.text.trim().isEmpty ? null : _email.text.trim(),
             adminUsername: _adminUsername.text.trim(),
             adminFullName: _adminFullName.text.trim(),
-            adminPhone: _adminPhone.text.trim(),
+            adminPhone: _phone(_adminDial, _adminPhone, _adminCountry),
             adminEmail: _adminEmail.text.trim().isEmpty ? null : _adminEmail.text.trim(),
           );
       if (mounted) setState(() => _result = result);
@@ -92,13 +117,30 @@ class _AcademyOnboardingScreenState extends ConsumerState<AcademyOnboardingScree
     );
   }
 
+  /// A caption above a control that has no label of its own (the phone input).
+  Widget _labelled(String label, Widget child) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(left: 2, bottom: 6),
+            child: Text(label, style: Theme.of(context).textTheme.bodySmall),
+          ),
+          child,
+        ],
+      );
+
   Widget _buildForm(BuildContext context) {
     return ListView(
       padding: const EdgeInsets.all(20),
       children: [
         Text('Academy details', style: Theme.of(context).textTheme.titleMedium),
         const SizedBox(height: 12),
-        TextField(controller: _academyName, decoration: const InputDecoration(labelText: 'Academy name'), onChanged: (_) => setState(() {})),
+        ValidatedTextField(
+          controller: _academyName,
+          label: 'Academy name',
+          preset: FieldPreset.title(label: 'academy name', max: 80),
+          showErrors: _showErrors,
+        ),
         const SizedBox(height: 12),
         DropdownButtonFormField<String>(
           initialValue: _category,
@@ -107,34 +149,100 @@ class _AcademyOnboardingScreenState extends ConsumerState<AcademyOnboardingScree
           onChanged: (v) => setState(() => _category = v!),
         ),
         const SizedBox(height: 12),
-        TextField(controller: _address, decoration: const InputDecoration(labelText: 'Address'), onChanged: (_) => setState(() {})),
+        ValidatedTextField(
+          controller: _address,
+          label: 'Address',
+          preset: FieldPreset.text(label: 'address', min: 4, max: 160),
+          showErrors: _showErrors,
+        ),
         const SizedBox(height: 12),
         Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Expanded(child: TextField(controller: _city, decoration: const InputDecoration(labelText: 'City'), onChanged: (_) => setState(() {}))),
+            Expanded(
+              child: ValidatedTextField(
+                controller: _city,
+                label: 'City',
+                preset: FieldPreset.title(label: 'city', max: 60),
+                showErrors: _showErrors,
+              ),
+            ),
             const SizedBox(width: 12),
-            Expanded(child: TextField(controller: _state, decoration: const InputDecoration(labelText: 'State'), onChanged: (_) => setState(() {}))),
+            Expanded(
+              child: ValidatedTextField(
+                controller: _state,
+                label: 'State',
+                preset: FieldPreset.title(label: 'state', max: 60),
+                showErrors: _showErrors,
+              ),
+            ),
           ],
         ),
         const SizedBox(height: 12),
-        TextField(controller: _contactNumber, keyboardType: TextInputType.phone, decoration: const InputDecoration(labelText: 'Contact number'), onChanged: (_) => setState(() {})),
+        _labelled(
+          'Contact number',
+          PhoneInput(
+            dial: _contactDial,
+            country: _contactCountry,
+            controller: _contactNumber,
+            showErrors: _showErrors,
+            onDialChanged: (d) => setState(() {
+              _contactDial = d;
+              _contactCountry = null;
+            }),
+            onCountryChanged: (c) => setState(() => _contactCountry = c),
+          ),
+        ),
         const SizedBox(height: 12),
-        TextField(controller: _email, keyboardType: TextInputType.emailAddress, decoration: const InputDecoration(labelText: 'Academy email (optional)')),
+        ValidatedTextField(
+          controller: _email,
+          label: 'Academy email (optional)',
+          preset: FieldPreset.email(required: false),
+          showErrors: _showErrors,
+        ),
         const SizedBox(height: 24),
         Text('First Academy Admin', style: Theme.of(context).textTheme.titleMedium),
         const SizedBox(height: 4),
         Text('A login is created for this person - they run the academy day to day.', style: Theme.of(context).textTheme.bodySmall),
         const SizedBox(height: 12),
-        TextField(controller: _adminFullName, decoration: const InputDecoration(labelText: 'Admin full name'), onChanged: (_) => setState(() {})),
+        ValidatedTextField(
+          controller: _adminFullName,
+          label: 'Admin full name',
+          preset: FieldPreset.personName(label: "admin's name"),
+          showErrors: _showErrors,
+        ),
         const SizedBox(height: 12),
-        TextField(controller: _adminUsername, decoration: const InputDecoration(labelText: 'Admin username'), onChanged: (_) => setState(() {})),
+        ValidatedTextField(
+          controller: _adminUsername,
+          label: 'Admin username',
+          preset: FieldPreset.username(),
+          showErrors: _showErrors,
+        ),
         const SizedBox(height: 12),
-        TextField(controller: _adminPhone, keyboardType: TextInputType.phone, decoration: const InputDecoration(labelText: 'Admin phone'), onChanged: (_) => setState(() {})),
+        _labelled(
+          'Admin phone',
+          PhoneInput(
+            dial: _adminDial,
+            country: _adminCountry,
+            controller: _adminPhone,
+            showErrors: _showErrors,
+            onDialChanged: (d) => setState(() {
+              _adminDial = d;
+              _adminCountry = null;
+            }),
+            onCountryChanged: (c) => setState(() => _adminCountry = c),
+          ),
+        ),
         const SizedBox(height: 12),
-        TextField(controller: _adminEmail, keyboardType: TextInputType.emailAddress, decoration: const InputDecoration(labelText: 'Admin email (optional)')),
+        ValidatedTextField(
+          controller: _adminEmail,
+          label: 'Admin email (optional)',
+          preset: FieldPreset.email(required: false),
+          showErrors: _showErrors,
+        ),
         const SizedBox(height: 24),
         ElevatedButton(
-          onPressed: (_isSaving || !_canSubmit) ? null : _submit,
+          onPressed: _isSaving ? null : _submit,
           child: _isSaving
               ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2))
               : const Text('Create academy'),

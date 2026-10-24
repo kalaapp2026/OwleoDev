@@ -12,7 +12,7 @@ import 'package:nest_fe/features/enrolment/data/enrolment_api.dart';
 import 'package:nest_fe/features/fees/data/fee_summary.dart';
 import 'package:nest_fe/features/fees/presentation/all_transactions_screen.dart';
 import 'package:nest_fe/features/fees/presentation/fee_format.dart';
-import 'package:nest_fe/features/fees/presentation/fees_screen.dart' show feesApiProvider;
+import 'package:nest_fe/features/fees/data/fees_api.dart' show feesApiProvider;
 import 'package:nest_fe/features/fees/presentation/other_fees_screen.dart';
 import 'package:nest_fe/features/fees/presentation/regular_fees_screen.dart';
 import 'package:nest_fe/features/fees/presentation/student_profile_screen.dart';

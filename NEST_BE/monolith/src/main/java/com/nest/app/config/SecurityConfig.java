@@ -30,6 +30,9 @@ public class SecurityConfig {
             // Install counting has to work BEFORE login - an install that never signs up is still
             // an install. Carries no PII (client-generated device id only) and is idempotent.
             "/devices/ping",
+            // Razorpay's server-to-server callback. No NEST login exists on that side; the HMAC
+            // signature over the raw body is the authentication.
+            "/payments/razorpay/webhook",
             "/swagger-ui/**", "/v3/api-docs/**", "/v3/api-docs.yaml",
             "/actuator/health",
             // Uploaded avatars - just images, not sensitive documents, so an <img src> doesn't

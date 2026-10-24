@@ -93,6 +93,7 @@ public class BatchService {
                 .trainerMembershipId(trainerIds.isEmpty() ? null : trainerIds.get(0))
                 .startDate(request.startDate())
                 .endDate(request.batchType() == BatchType.TEMPORARY ? request.endDate() : null)
+                .meetingLink(cleanLink(request.meetingLink()))
                 .build());
 
         replaceTrainers(saved.getId(), trainerIds);
@@ -102,6 +103,11 @@ public class BatchService {
             addMember(saved.getId(), studentId);
         }
         return buildResponse(saved);
+    }
+
+    /** A pasted link is trimmed; a blank one means "no link". */
+    private static String cleanLink(String link) {
+        return link == null || link.isBlank() ? null : link.trim();
     }
 
     /**
@@ -122,6 +128,7 @@ public class BatchService {
         batch.setTrainerMembershipId(trainerIds.isEmpty() ? null : trainerIds.get(0));
         batch.setStartDate(request.startDate());
         batch.setEndDate(batch.getBatchType() == BatchType.TEMPORARY ? request.endDate() : null);
+        batch.setMeetingLink(cleanLink(request.meetingLink()));
         batchRepository.save(batch);
 
         replaceTrainers(batchId, trainerIds);
@@ -489,7 +496,8 @@ public class BatchService {
                     rosterSizes.getOrDefault(b.getId(), 0),
                     slots.isEmpty() ? null : slots.get(0).getStartTime().toString(),
                     slots.isEmpty() ? null : slots.get(0).getEndTime().toString(),
-                    slots.stream().map(com.nest.app.scheduling.entity.Schedule::getDayOfWeek).distinct().sorted().toList()));
+                    slots.stream().map(com.nest.app.scheduling.entity.Schedule::getDayOfWeek).distinct().sorted().toList(),
+                    b.getMeetingLink()));
         }
         return result;
     }

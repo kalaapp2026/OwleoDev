@@ -181,7 +181,7 @@ public class StudentRegistrationService {
                 .map(m -> {
                     User u = usersById.get(m.getUserId());
                     return new StudentSummaryResponse(m.getId(), u.getId(), u.getUsername(), u.getFullName(),
-                            activeByMembership.getOrDefault(m.getId(), true));
+                            activeByMembership.getOrDefault(m.getId(), true), u.getProfileImageUrl());
                 })
                 .collect(Collectors.toList());
     }
@@ -355,7 +355,7 @@ public class StudentRegistrationService {
         return new StudentDetailResponse(student.getId(), membership.getId(), student.getUsername(), student.getFullName(),
                 student.getPhone(), student.getEmail(), student.getDob(), student.getAddress(), student.getCity(),
                 student.getState(), courseFees,
-                identityRegistrationService.personDetailsOf(student, membership));
+                identityRegistrationService.personDetailsOf(student, membership), student.getProfileImageUrl());
     }
 
     @Transactional

@@ -3,9 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:nest_fe/app/theme/app_tokens.dart';
 import 'package:nest_fe/app/theme/app_typography.dart';
 import 'package:nest_fe/core/auth/session_controller.dart';
+import 'package:nest_fe/core/design/app_text_field.dart';
 import 'package:nest_fe/core/design/buttons.dart';
 import 'package:nest_fe/core/design/pressable.dart';
 import 'package:nest_fe/core/error/api_exception.dart';
+import 'package:nest_fe/core/validation/validators.dart';
 import 'package:nest_fe/core/providers/core_providers.dart';
 import 'package:nest_fe/core/widgets/app_notice.dart';
 import 'package:nest_fe/features/academy/presentation/academy_settings_kit.dart';
@@ -47,13 +49,18 @@ class _ChangePasswordScreenState extends ConsumerState<ChangePasswordScreen> {
     super.dispose();
   }
 
-  bool get _canContinue => _useCode ? _code.text.trim().length >= 4 : _current.text.isNotEmpty;
+  static final _codeRule = FieldPreset.otp();
+
+  bool get _canContinue => _useCode ? _codeRule.check(_code.text) == null : _current.text.isNotEmpty;
 
   bool get _lengthOk => _new.text.length >= 8;
   bool get _numberOk => RegExp(r'[0-9]').hasMatch(_new.text);
-  bool get _specialOk => RegExp(r'[^A-Za-z0-9]').hasMatch(_new.text);
+  bool get _letterOk => RegExp(r'\p{L}', unicode: true).hasMatch(_new.text);
   bool get _matchOk => _confirm.text.isNotEmpty && _confirm.text == _new.text;
-  bool get _canSubmit => _lengthOk && _numberOk && _specialOk && _matchOk;
+
+  /// The one password rule used everywhere a password is chosen (Validators.password): at least 8
+  /// characters with a letter and a number.
+  bool get _canSubmit => Validators.password()(_new.text) == null && _matchOk;
 
   int get _strength {
     final p = _new.text;
@@ -175,7 +182,8 @@ class _ChangePasswordScreenState extends ConsumerState<ChangePasswordScreen> {
             const SettingsFieldLabel('One-time code'),
             TextField(
               controller: _code,
-              keyboardType: TextInputType.number,
+              keyboardType: _codeRule.keyboardType,
+              inputFormatters: _codeRule.formatters,
               onChanged: (_) => setState(() {}),
               style: TextStyle(color: palette.text, letterSpacing: 4, fontSize: AppType.x4l),
               decoration: settingsInput(context, 'Enter the code'),
@@ -250,7 +258,7 @@ class _ChangePasswordScreenState extends ConsumerState<ChangePasswordScreen> {
             children: [
               _requirement(_lengthOk, 'At least 8 characters'),
               _requirement(_numberOk, 'Contains a number'),
-              _requirement(_specialOk, 'Contains a special character'),
+              _requirement(_letterOk, 'Contains a letter'),
             ],
           ),
         ),

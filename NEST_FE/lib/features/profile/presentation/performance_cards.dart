@@ -10,7 +10,7 @@ import 'package:nest_fe/features/attendance/data/attendance_api.dart';
 import 'package:nest_fe/features/attendance/data/student_attendance.dart';
 import 'package:nest_fe/features/fees/data/fee_roster.dart';
 import 'package:nest_fe/features/fees/data/student_statement.dart';
-import 'package:nest_fe/features/fees/presentation/fees_screen.dart' show feesApiProvider;
+import 'package:nest_fe/features/fees/data/fees_api.dart' show feesApiProvider;
 import 'package:nest_fe/features/profile/presentation/profile_widgets.dart';
 
 /// The whole fee history, all categories - the Fees summary reads the same statement the full

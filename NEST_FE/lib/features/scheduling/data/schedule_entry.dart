@@ -129,6 +129,9 @@ class ScheduleEntry {
   /// Roster size, so the attendance list can show "4 students" before the class is opened.
   final int studentCount;
 
+  /// The batch's online-class link; null for an in-person batch.
+  final String? meetingLink;
+
   const ScheduleEntry({
     required this.classInstanceId,
     required this.date,
@@ -149,6 +152,7 @@ class ScheduleEntry {
     required this.movedFrom,
     this.attendanceMarked = false,
     this.studentCount = 0,
+    this.meetingLink,
   });
 
   bool get isTemporary => batchType == BatchType.temporary;
@@ -242,6 +246,7 @@ class ScheduleEntry {
         movedFrom: _date(json['movedFrom'] as String?),
         attendanceMarked: json['attendanceMarked'] as bool? ?? false,
         studentCount: json['studentCount'] as int? ?? 0,
+        meetingLink: json['meetingLink'] as String?,
       );
 
   static DateTime? _date(String? iso) =>

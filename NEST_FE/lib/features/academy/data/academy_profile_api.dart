@@ -76,10 +76,6 @@ class AcademyProfileApi {
     );
   }
 
-  Future<void> deleteHighlightImage(String highlightId, String imageId) {
-    return _client.callVoid((dio) => dio.delete('/academies/me/highlights/$highlightId/images/$imageId'));
-  }
-
   Future<void> deleteHighlight(String highlightId) {
     return _client.callVoid((dio) => dio.delete('/academies/me/highlights/$highlightId'));
   }
@@ -89,25 +85,6 @@ class AcademyProfileApi {
       (dio) => dio.get('/academies/me/trainer-candidates'),
       (data) => (data as List).map((e) => TrainerCandidate.fromJson(e as Map<String, dynamic>)).toList(),
     );
-  }
-
-  Future<FeaturedTrainer> addFeaturedTrainer(String trainerMembershipId, {String? designation}) {
-    return _client.call(
-      (dio) => dio.post('/academies/me/featured-trainers',
-          data: {'trainerMembershipId': trainerMembershipId, 'designation': designation}),
-      (data) => FeaturedTrainer.fromJson(data as Map<String, dynamic>),
-    );
-  }
-
-  Future<FeaturedTrainer> updateFeaturedTrainerDesignation(String featuredTrainerId, String? designation) {
-    return _client.call(
-      (dio) => dio.put('/academies/me/featured-trainers/$featuredTrainerId', data: {'designation': designation}),
-      (data) => FeaturedTrainer.fromJson(data as Map<String, dynamic>),
-    );
-  }
-
-  Future<void> deleteFeaturedTrainer(String featuredTrainerId) {
-    return _client.callVoid((dio) => dio.delete('/academies/me/featured-trainers/$featuredTrainerId'));
   }
 
   /// The public-safe trainer card a featured trainer's avatar opens - see TrainerCard's own doc

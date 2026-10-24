@@ -53,6 +53,7 @@ class _Person {
     required this.username,
     required this.fullName,
     required this.active,
+    this.profileImageUrl,
   });
 
   final String membershipId;
@@ -60,12 +61,16 @@ class _Person {
   final String username;
   final String fullName;
   final bool active;
+  final String? profileImageUrl;
 }
 
 /// The Students / Trainers roster. Course-scoped, because an academy-wide list of every person is
 /// not something anyone actually looks for - the question is always "who is on this course".
 class UserListScreen extends ConsumerStatefulWidget {
-  const UserListScreen({super.key});
+  const UserListScreen({super.key, this.initialTab});
+
+  /// Which tab to open on; null means Students (or Trainers, for someone who may only register those).
+  final UserTab? initialTab;
 
   @override
   ConsumerState<UserListScreen> createState() => _UserListScreenState();
@@ -91,7 +96,27 @@ class _UserListScreenState extends ConsumerState<UserListScreen> {
     // must not be offered a tab they would get a 403 on.
     _canAddStudents = isAdmin || (user?.hasFeature(FeatureKeys.studentRegistration) ?? false);
     _canAddTrainers = isAdmin || (user?.hasFeature(FeatureKeys.trainerRegistration) ?? false);
+    if (widget.initialTab != null && (widget.initialTab == UserTab.student ? _canAddStudents : _canAddTrainers)) {
+      _tab = widget.initialTab!;
+    }
     if (!_canAddStudents && _canAddTrainers) _tab = UserTab.trainer;
+  }
+
+  void _switchTab(UserTab tab) {
+    if (tab == _tab) return;
+    setState(() {
+      _tab = tab;
+      _query = '';
+      _searchController.clear();
+    });
+  }
+
+  /// Swiping left shows Trainers and right shows Students, so the tab bar at the top need not be
+  /// reached. Only to a tab the person is allowed to use.
+  void _onSwipe(DragEndDetails details) {
+    final velocity = details.primaryVelocity ?? 0;
+    if (velocity < -300 && _tab == UserTab.student && _canAddTrainers) _switchTab(UserTab.trainer);
+    if (velocity > 300 && _tab == UserTab.trainer && _canAddStudents) _switchTab(UserTab.student);
   }
 
   @override
@@ -162,16 +187,25 @@ class _UserListScreenState extends ConsumerState<UserListScreen> {
   Future<void> _requestRemove(_Person person) async {
     final courseId = _courseId;
     if (courseId == null) return;
+    final isTrainer = _tab == UserTab.trainer;
     final confirmed = await showAppConfirmDialog(
       context: context,
       title: 'Remove from this course?',
-      message: '${person.fullName} will drop off this course\'s lists. Their NEST account and '
-          'their place on any other course stay as they are.',
+      message: isTrainer
+          ? '${person.fullName} will be removed from this course, along with the features they held on it '
+              'and their place on its batches. Their NEST account and any other course stay as they are.'
+          : '${person.fullName} will drop off this course\'s lists. Their NEST account and '
+              'their place on any other course stay as they are.',
       confirmLabel: 'Remove',
     );
     if (!confirmed) return;
     try {
-      await ref.read(enrolmentApiProvider).setCourseMemberActive(courseId, person.membershipId, false);
+      final api = ref.read(enrolmentApiProvider);
+      if (isTrainer) {
+        await api.removeTrainerFromCourse(courseId, person.membershipId);
+      } else {
+        await api.setCourseMemberActive(courseId, person.membershipId, false);
+      }
       _refresh();
       if (mounted) showAppToast(context, '${person.fullName} removed from this course.');
     } catch (e) {
@@ -214,7 +248,10 @@ class _UserListScreenState extends ConsumerState<UserListScreen> {
     return Scaffold(
       backgroundColor: palette.bg,
       body: SafeArea(
-        child: Stack(
+        child: GestureDetector(
+          behavior: HitTestBehavior.translucent,
+          onHorizontalDragEnd: _onSwipe,
+          child: Stack(
           children: [
             Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -289,6 +326,7 @@ class _UserListScreenState extends ConsumerState<UserListScreen> {
                 ),
               ),
           ],
+          ),
         ),
       ),
     );
@@ -338,11 +376,7 @@ class _UserListScreenState extends ConsumerState<UserListScreen> {
           final selected = tab == _tab;
           return Expanded(
             child: Pressable(
-              onTap: () => setState(() {
-                _tab = tab;
-                _query = '';
-                _searchController.clear();
-              }),
+              onTap: () => _switchTab(tab),
               child: Container(
                 padding: const EdgeInsets.symmetric(vertical: AppSpacing.lg),
                 decoration: BoxDecoration(
@@ -567,6 +601,7 @@ class _UserListScreenState extends ConsumerState<UserListScreen> {
                     username: s.username,
                     fullName: s.fullName,
                     active: s.active,
+                    profileImageUrl: s.profileImageUrl,
                   ))
               .toList(),
         ),
@@ -586,6 +621,7 @@ class _UserListScreenState extends ConsumerState<UserListScreen> {
                   username: t.username,
                   fullName: t.fullName,
                   active: t.active,
+                  profileImageUrl: t.profileImageUrl,
                 ))
             .toList(),
       ),
@@ -771,7 +807,7 @@ class _PersonRowState extends State<_PersonRow> {
               child: Row(
                 children: [
                   PersonAvatar(
-                      name: person.fullName, seed: person.userId, size: 40),
+                      name: person.fullName, seed: person.userId, size: 40, imageUrl: person.profileImageUrl),
                   const SizedBox(width: AppSpacing.lg),
                 ],
               ),

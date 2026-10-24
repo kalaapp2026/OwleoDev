@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:nest_fe/app/theme/app_tokens.dart';
 import 'package:nest_fe/app/theme/app_typography.dart';
 import 'package:nest_fe/core/auth/session_controller.dart';
+import 'package:nest_fe/core/design/app_text_field.dart';
 import 'package:nest_fe/core/design/app_top_bar.dart';
 import 'package:nest_fe/core/design/avatar.dart';
 import 'package:nest_fe/core/design/buttons.dart';
@@ -903,14 +904,21 @@ class _BranchesSection extends ConsumerWidget {
           children: [
             Text('New branch', style: Theme.of(sheetContext).textTheme.titleLarge),
             const SizedBox(height: 14),
-            TextField(controller: nameController, decoration: const InputDecoration(labelText: 'Branch name')),
+            ValidatedTextField(controller: nameController, label: 'Branch name', preset: FieldPreset.title(label: 'branch name', max: 80)),
             const SizedBox(height: 12),
-            TextField(controller: addressController, decoration: const InputDecoration(labelText: 'Address (optional)'), maxLines: 2),
+            ValidatedTextField(
+              controller: addressController,
+              label: 'Address (optional)',
+              preset: FieldPreset.text(label: 'address', min: 4, max: 160, required: false),
+              maxLines: 2,
+            ),
             const SizedBox(height: 16),
             ElevatedButton(
               onPressed: () async {
-                if (nameController.text.trim().isEmpty) {
-                  AppNotice.error(sheetContext, 'Give this branch a name.');
+                final problem = FieldPreset.title(label: 'branch name', max: 80).check(nameController.text) ??
+                    FieldPreset.text(label: 'address', min: 4, max: 160, required: false).check(addressController.text);
+                if (problem != null) {
+                  AppNotice.error(sheetContext, problem);
                   return;
                 }
                 try {
@@ -1044,8 +1052,10 @@ class _HighlightFormSheetState extends ConsumerState<_HighlightFormSheet> {
   }
 
   Future<void> _submit() async {
-    if (_titleController.text.trim().isEmpty) {
-      AppNotice.error(context, 'Give this highlight a title.');
+    final problem = FieldPreset.title(label: 'title', min: 3, max: 80).check(_titleController.text) ??
+        FieldPreset.text(label: 'description', max: 500, required: false).check(_descriptionController.text);
+    if (problem != null) {
+      AppNotice.error(context, problem);
       return;
     }
     setState(() => _isSaving = true);
@@ -1087,11 +1097,12 @@ class _HighlightFormSheetState extends ConsumerState<_HighlightFormSheet> {
           children: [
             Text(_isEditing ? 'Edit highlight' : 'New course highlight', style: Theme.of(context).textTheme.titleLarge),
             const SizedBox(height: 14),
-            TextField(controller: _titleController, decoration: const InputDecoration(labelText: 'Title')),
+            ValidatedTextField(controller: _titleController, label: 'Title', preset: FieldPreset.title(label: 'title', min: 3, max: 80)),
             const SizedBox(height: 12),
-            TextField(
+            ValidatedTextField(
               controller: _descriptionController,
-              decoration: const InputDecoration(labelText: 'Description (optional)'),
+              label: 'Description (optional)',
+              preset: FieldPreset.text(label: 'description', max: 500, required: false),
               maxLines: 3,
             ),
             const SizedBox(height: 16),

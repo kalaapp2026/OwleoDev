@@ -1,4 +1,5 @@
-import 'package:dio/dio.dart';
+import 'package:nest_fe/core/providers/core_providers.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:nest_fe/core/network/dio_client.dart';
 import 'package:nest_fe/features/fees/data/fee_roster.dart';
 import 'package:nest_fe/features/fees/data/fee_summary.dart';
@@ -8,6 +9,22 @@ import 'package:nest_fe/features/fees/data/student_fee_profile.dart';
 import 'package:nest_fe/features/fees/data/student_other_fees.dart';
 import 'package:nest_fe/features/fees/data/student_statement.dart';
 import 'package:nest_fe/features/fees/data/transaction_ledger.dart';
+
+/// A Razorpay order the server opened for one fee. [keyId] is the public half of the key.
+class OnlineOrder {
+  const OnlineOrder({required this.orderId, required this.keyId, required this.amountPaise});
+  final String orderId;
+  final String keyId;
+  final int amountPaise;
+
+  factory OnlineOrder.fromJson(Map<String, dynamic> j) => OnlineOrder(
+        orderId: j['orderId'] as String,
+        keyId: j['keyId'] as String,
+        amountPaise: (j['amountPaise'] as num).toInt(),
+      );
+}
+
+final feesApiProvider = Provider((ref) => FeesApi(ref.watch(dioClientProvider)));
 
 class FeesApi {
   FeesApi(this._client);
@@ -115,19 +132,6 @@ class FeesApi {
     );
   }
 
-  /// The statement as CSV, filtered exactly as the screen is - a download that silently widens to
-  /// everything is worse than none, since it gets sent to a parent with other periods in it.
-  Future<List<int>> downloadStatement({required String membershipId, FeeCategory? category}) {
-    return _client.call(
-      (dio) => dio.get(
-        '/students/$membershipId/statement/report',
-        queryParameters: {'category': ?category?.wire},
-        options: Options(responseType: ResponseType.bytes),
-      ),
-      (data) => data as List<int>,
-    );
-  }
-
   /// The caller's OWN statement / Other fees - the student-facing screens. Separate routes rather
   /// than the per-membership ones, which are FEES_ENTRY-gated and meant for staff.
   Future<StudentStatement> myStatement({FeeCategory? category}) {
@@ -137,23 +141,53 @@ class FeesApi {
     );
   }
 
-  /// The caller's statement as CSV - the student-facing download.
-  Future<List<int>> downloadMyStatement({FeeCategory? category}) {
+  /// Whether the server has online payment switched on, and through which provider:
+  /// `RAZORPAY` (real checkout), `MOCK` (dev placeholder that moves no money) or `NONE`.
+  Future<({bool enabled, String provider})> paymentConfig() {
     return _client.call(
-      (dio) => dio.get(
-        '/me/fees/statement/report',
-        queryParameters: {'category': ?category?.wire},
-        options: Options(responseType: ResponseType.bytes),
-      ),
-      (data) => data as List<int>,
+      (dio) => dio.get('/me/fees/payment-config'),
+      (data) {
+        final m = data as Map<String, dynamic>;
+        return (enabled: m['enabled'] as bool? ?? false, provider: m['provider'] as String? ?? 'NONE');
+      },
     );
   }
 
-  /// Whether the server has online payment switched on.
-  Future<bool> paymentsEnabled() {
+  /// Step 1 of a real payment: the server prices the fee and opens a Razorpay order for it.
+  Future<OnlineOrder> createOnlineOrder({
+    required FeeCategory category,
+    String? courseId,
+    String? period,
+    String? feeTypeId,
+    String? studentFeeId,
+  }) {
     return _client.call(
-      (dio) => dio.get('/me/fees/payment-config'),
-      (data) => (data as Map<String, dynamic>)['enabled'] as bool? ?? false,
+      (dio) => dio.post('/me/fees/pay/order', data: {
+        'category': category.wire,
+        'courseId': courseId,
+        'period': period,
+        'feeTypeId': feeTypeId,
+        'studentFeeId': studentFeeId,
+        'method': 'UPI',
+      }),
+      (data) => OnlineOrder.fromJson(data as Map<String, dynamic>),
+    );
+  }
+
+  /// Step 3: hand the checkout's signed result to the server, which checks it before settling.
+  /// Returns the payment reference. Safe to repeat - the server settles an order once.
+  Future<String> confirmOnlinePayment({
+    required String orderId,
+    required String paymentId,
+    required String signature,
+  }) {
+    return _client.call(
+      (dio) => dio.post('/me/fees/pay/verify', data: {
+        'orderId': orderId,
+        'paymentId': paymentId,
+        'signature': signature,
+      }),
+      (data) => (data as Map<String, dynamic>)['gatewayRef'] as String? ?? paymentId,
     );
   }
 
@@ -357,39 +391,4 @@ class FeesApi {
     );
   }
 
-  Future<List<FeeTransaction>> historyForStudent(String membershipId) {
-    return _client.call(
-      (dio) => dio.get('/students/$membershipId/fees'),
-      (data) => (data as List).map((e) => FeeTransaction.fromJson(e as Map<String, dynamic>)).toList(),
-    );
-  }
-
-  /// Manual "generate now" trigger - same calculation the daily billing-day cron runs, for
-  /// testing or catching up a course whose billing day already passed this month. Idempotent:
-  /// re-running for a period that already has a slip just skips that student server-side.
-  Future<List<FeeSlip>> generateFeeSlips(String courseId) {
-    return _client.call(
-      (dio) => dio.post('/courses/$courseId/fee-slips/generate'),
-      (data) => (data as List).map((e) => FeeSlip.fromJson(e as Map<String, dynamic>)).toList(),
-    );
-  }
-
-  Future<List<FeeSlip>> feeSlipHistory(String membershipId) {
-    return _client.call(
-      (dio) => dio.get('/students/$membershipId/fee-slips'),
-      (data) => (data as List).map((e) => FeeSlip.fromJson(e as Map<String, dynamic>)).toList(),
-    );
-  }
-
-  /// The download button - a CSV of every student mapped to this course for this period.
-  Future<List<int>> downloadReport({required String courseId, required String period}) {
-    return _client.call(
-      (dio) => dio.get(
-        '/fees/report',
-        queryParameters: {'courseId': courseId, 'period': period},
-        options: Options(responseType: ResponseType.bytes),
-      ),
-      (data) => data as List<int>,
-    );
-  }
 }

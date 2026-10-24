@@ -102,6 +102,12 @@ public class NotificationService {
         }
     }
 
+    /** Removes every notification created before {@code cutoff}; the daily retention job calls this. */
+    @Transactional
+    public int purgeOlderThan(Instant cutoff) {
+        return repository.deleteCreatedBefore(cutoff);
+    }
+
     /** Super Admin console (PRD 2.x): fan a single composed announcement out to one row per target
      * user. Returns how many recipients it reached, so the console can confirm "sent to N people". */
     @Transactional

@@ -14,6 +14,7 @@ class CalendarClass {
   final String academyId;
   final String? academyName;
   final String membershipId;
+  final String? meetingLink;
 
   const CalendarClass({
     required this.classInstanceId,
@@ -28,6 +29,7 @@ class CalendarClass {
     required this.academyId,
     required this.academyName,
     required this.membershipId,
+    this.meetingLink,
   });
 
   factory CalendarClass.fromJson(Map<String, dynamic> json) => CalendarClass(
@@ -43,5 +45,6 @@ class CalendarClass {
         academyId: json['academyId'] as String,
         academyName: json['academyName'] as String?,
         membershipId: json['membershipId'] as String,
+        meetingLink: json['meetingLink'] as String?,
       );
 }

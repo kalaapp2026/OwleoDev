@@ -1,6 +1,5 @@
-# Build only the monolith module (and its "common" dependency) - the reactor also lists a bunch
-# of standalone microservices left over from an earlier design that were never built out; -pl -am
-# skips building/testing those entirely so this stays fast and doesn't fail on unrelated modules.
+# Build only the monolith module and the "common" library it depends on (-pl -am). The reactor is
+# just those two now, so this is the whole backend.
 FROM maven:3.9-eclipse-temurin-17 AS build
 WORKDIR /app
 COPY . .

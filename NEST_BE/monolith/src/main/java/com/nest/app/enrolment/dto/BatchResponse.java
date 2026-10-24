@@ -32,7 +32,9 @@ public record BatchResponse(
         String startTime,
         String endTime,
         /** The weekdays the batch meets, Monday first. Empty until a schedule is set. */
-        List<DayOfWeek> days
+        List<DayOfWeek> days,
+        /** Where an online class is held; null for an in-person batch. */
+        String meetingLink
 ) {
     public record TrainerSummary(UUID membershipId, String name) {
     }

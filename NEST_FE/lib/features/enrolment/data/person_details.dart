@@ -118,38 +118,6 @@ const genderOptions = ['Male', 'Female', 'Other'];
 /// emergency, and a typo in it is worse than a blank.
 const bloodGroupOptions = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
 
-/// Dialling codes offered beside a phone field, most common first for this app's users.
-class CountryCode {
-  const CountryCode(this.code, this.country);
-
-  final String code;
-  final String country;
-
-  static const options = [
-    CountryCode('+91', 'India'),
-    CountryCode('+1', 'US / Canada'),
-    CountryCode('+44', 'United Kingdom'),
-    CountryCode('+971', 'UAE'),
-    CountryCode('+65', 'Singapore'),
-    CountryCode('+61', 'Australia'),
-  ];
-
-  /// Splits a stored "+91 9876543210" back into its parts so editing re-selects the right country
-  /// instead of showing the code twice.
-  static ({String code, String digits}) split(String? stored) {
-    final raw = (stored ?? '').trim();
-    for (final option in options) {
-      if (raw.startsWith(option.code)) {
-        return (
-          code: option.code,
-          digits: raw.substring(option.code.length).replaceAll(RegExp(r'[^0-9]'), ''),
-        );
-      }
-    }
-    return (code: '+91', digits: raw.replaceAll(RegExp(r'[^0-9]'), ''));
-  }
-}
-
 /// "Aarav Shah" -> ("Aarav", "Shah"). Used to pre-fill the separate name fields for records
 /// saved before those columns existed - everything after the first word is the surname, which is
 /// the least-wrong split for a name of any length.

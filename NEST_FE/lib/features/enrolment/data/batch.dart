@@ -95,6 +95,9 @@ class Batch {
   final String? endTime;
   final List<Weekday> days;
 
+  /// The Meet / Zoom / Teams link of an online class; null for an in-person batch.
+  final String? meetingLink;
+
   const Batch({
     required this.id,
     required this.courseId,
@@ -111,6 +114,7 @@ class Batch {
     this.startTime,
     this.endTime,
     this.days = const [],
+    this.meetingLink,
   });
 
   /// "4:00 PM - 5:00 PM", or null while no time is set.
@@ -151,6 +155,7 @@ class Batch {
         startTime: json['startTime'] as String?,
         endTime: json['endTime'] as String?,
         days: ((json['days'] as List?) ?? const []).map((d) => Weekday.fromWire(d as String)).toList(),
+        meetingLink: json['meetingLink'] as String?,
       );
 
   static DateTime? _parseDate(String? iso) =>

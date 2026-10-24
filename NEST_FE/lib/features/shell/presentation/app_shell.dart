@@ -5,8 +5,10 @@ import 'package:flutter/material.dart';
 import 'package:nest_fe/core/network/api_config.dart';
 import 'package:nest_fe/features/profile/data/self_profile_api.dart' show selfProfileProvider;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:nest_fe/app/data_sync/data_sync.dart';
 import 'package:nest_fe/app/theme/app_tokens.dart';
 import 'package:nest_fe/app/theme/app_typography.dart';
+import 'package:nest_fe/core/design/pressable.dart';
 import 'package:nest_fe/app/theme/theme_controller.dart';
 import 'package:nest_fe/core/auth/role_switch.dart';
 import 'package:nest_fe/core/auth/session_controller.dart';
@@ -54,6 +56,9 @@ class AppShellState extends ConsumerState<AppShell> {
   AppMode _mode = AppMode.social;
   int _socialIndex = 0;
   int _erpIndex = 0;
+
+  /// Which tab was showing on the previous build, to notice when it changes.
+  String? _lastTab;
 
   /// True for exactly as long as the More sheet is up - drives the real nav bar's own "More" tab
   /// so it reads as active while its sheet is open, the same way any other tab reads as active
@@ -219,6 +224,23 @@ class AppShellState extends ConsumerState<AppShell> {
     _applyConfiguredMode(erpAvailable: erpAvailable, socialAvailable: socialAvailable,
         startsOnErp: settings.startsOnErp);
 
+    // Opening a tab brings its data up to date. Every tab stays mounted in the IndexedStack, so
+    // without this a tab keeps whatever it loaded the first time. One check here covers every way
+    // of changing tab (nav bar, quick-action tile, avatar menu, role switch).
+    final erp = _mode == AppMode.erp;
+    final tab = '$erp:${erp ? _erpIndex : _socialIndex}';
+    if (tab != _lastTab) {
+      final firstBuild = _lastTab == null;
+      _lastTab = tab;
+      if (!firstBuild) {
+        final index = erp ? _erpIndex : _socialIndex;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          ref.read(dataSyncProvider).refreshTab(erp: erp, index: index, isStudent: isStudent, isSuperAdmin: isSuperAdmin);
+        });
+      }
+    }
+
     final t = AppLocalizations.of(context);
     final erpTitles = isSuperAdmin ? _superAdminErpTitles(t) : _erpTitles(t);
     final title = _mode == AppMode.social ? _socialTitles(t)[_socialIndex] : erpTitles[_erpIndex];
@@ -265,19 +287,7 @@ class AppShellState extends ConsumerState<AppShell> {
             ? Padding(
                 padding: const EdgeInsets.only(left: AppSpacing.x4l, right: AppSpacing.lg),
                 child: Center(
-                  child: GestureDetector(
-                    onTap: () => setState(() => _erpIndex = 0),
-                    child: Container(
-                      width: 36,
-                      height: 36,
-                      decoration: BoxDecoration(
-                        color: context.palette.surfaceRaised,
-                        borderRadius: AppRadii.all(AppRadii.lg),
-                        border: Border.all(color: context.palette.border),
-                      ),
-                      child: Icon(Icons.arrow_back, size: 18, color: context.palette.text),
-                    ),
-                  ),
+                  child: AppIconButton(icon: Icons.arrow_back, tooltip: 'Back', onTap: () => setState(() => _erpIndex = 0)),
                 ),
               )
             : null,

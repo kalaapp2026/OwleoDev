@@ -2,7 +2,6 @@ package com.nest.app.academy.service;
 
 import com.nest.app.academy.dto.AcademyProfileResponse;
 import com.nest.app.academy.dto.AddBranchRequest;
-import com.nest.app.academy.dto.AddFeaturedTrainerRequest;
 import com.nest.app.academy.dto.AddHighlightRequest;
 import com.nest.app.academy.dto.BranchResponse;
 import com.nest.app.academy.dto.FeaturedTrainerResponse;
@@ -10,7 +9,6 @@ import com.nest.app.academy.dto.HighlightResponse;
 import com.nest.app.academy.dto.HighlightTrainerResponse;
 import com.nest.app.academy.dto.TrainerCandidateResponse;
 import com.nest.app.academy.dto.UpdateAcademyProfileRequest;
-import com.nest.app.academy.dto.UpdateFeaturedTrainerRequest;
 import com.nest.app.academy.dto.UpdateHighlightRequest;
 import com.nest.app.academy.entity.Academy;
 import com.nest.app.academy.entity.AcademyBranch;
@@ -238,18 +236,6 @@ public class AcademyProfileService {
         return toHighlightResponse(highlight);
     }
 
-    @Transactional
-    @Auditable(action = "ACADEMY_HIGHLIGHT_IMAGE_DELETED", entityType = "academy")
-    public void deleteHighlightImage(UUID academyId, UUID highlightId, UUID imageId) {
-        findHighlightOrThrow(academyId, highlightId);
-        AcademyHighlightImage image = highlightImageRepository.findById(imageId)
-                .orElseThrow(() -> new ResourceNotFoundException("Image not found: " + imageId));
-        if (!image.getHighlightId().equals(highlightId)) {
-            throw new ResourceNotFoundException("Image not found: " + imageId);
-        }
-        highlightImageRepository.delete(image);
-    }
-
     /** No FK cascade in this schema (consistent everywhere else) - a highlight's photos are
      * removed from the DB explicitly before the highlight itself goes; its trainer links go
      * automatically since Hibernate owns that @ElementCollection table directly. */
@@ -302,24 +288,6 @@ public class AcademyProfileService {
                 .collect(Collectors.toList());
     }
 
-    @Transactional
-    @Auditable(action = "ACADEMY_FEATURED_TRAINER_ADDED", entityType = "academy")
-    public FeaturedTrainerResponse addFeaturedTrainer(UUID academyId, AddFeaturedTrainerRequest request) {
-        AcademyMembership membership = membershipRepository.findById(request.trainerMembershipId())
-                .orElseThrow(() -> new ResourceNotFoundException("Membership not found: " + request.trainerMembershipId()));
-        if (!membership.getAcademyId().equals(academyId) || (membership.getRoleType() != Role.TRAINER && membership.getRoleType() != Role.ACADEMY_ADMIN)) {
-            throw new BadRequestException("That membership is not an active Trainer/Admin at this academy");
-        }
-        AcademyFeaturedTrainer featured = AcademyFeaturedTrainer.builder()
-                .academyId(academyId)
-                .trainerMembershipId(request.trainerMembershipId())
-                .designation(blankToNull(request.designation()))
-                .orderIndex(featuredTrainerRepository.findByAcademyIdOrderByOrderIndex(academyId).size())
-                .build();
-        featured = featuredTrainerRepository.save(featured);
-        return resolveFeaturedTrainers(List.of(featured)).get(0);
-    }
-
     /** Swaps the whole featured list for [entries], in order - how Publish saves the draft's list.
      * Every entry is validated before anything is deleted, so a bad id leaves the old list intact. */
     private void replaceFeaturedTrainers(UUID academyId, List<UpdateAcademyProfileRequest.FeaturedTrainerEntry> entries) {
@@ -347,30 +315,6 @@ public class AcademyProfileService {
                     .orderIndex(i)
                     .build());
         }
-    }
-
-    @Transactional
-    @Auditable(action = "ACADEMY_FEATURED_TRAINER_UPDATED", entityType = "academy")
-    public FeaturedTrainerResponse updateFeaturedTrainer(UUID academyId, UUID featuredTrainerId, UpdateFeaturedTrainerRequest request) {
-        AcademyFeaturedTrainer featured = featuredTrainerRepository.findById(featuredTrainerId)
-                .orElseThrow(() -> new ResourceNotFoundException("Featured trainer not found: " + featuredTrainerId));
-        if (!featured.getAcademyId().equals(academyId)) {
-            throw new ResourceNotFoundException("Featured trainer not found: " + featuredTrainerId);
-        }
-        featured.setDesignation(blankToNull(request.designation()));
-        featured = featuredTrainerRepository.save(featured);
-        return resolveFeaturedTrainers(List.of(featured)).get(0);
-    }
-
-    @Transactional
-    @Auditable(action = "ACADEMY_FEATURED_TRAINER_REMOVED", entityType = "academy")
-    public void deleteFeaturedTrainer(UUID academyId, UUID featuredTrainerId) {
-        AcademyFeaturedTrainer featured = featuredTrainerRepository.findById(featuredTrainerId)
-                .orElseThrow(() -> new ResourceNotFoundException("Featured trainer not found: " + featuredTrainerId));
-        if (!featured.getAcademyId().equals(academyId)) {
-            throw new ResourceNotFoundException("Featured trainer not found: " + featuredTrainerId);
-        }
-        featuredTrainerRepository.delete(featured);
     }
 
     @Transactional

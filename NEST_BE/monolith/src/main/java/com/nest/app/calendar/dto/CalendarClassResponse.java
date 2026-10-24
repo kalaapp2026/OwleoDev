@@ -21,6 +21,8 @@ public record CalendarClassResponse(
         String courseName,
         UUID academyId,
         String academyName,
-        UUID membershipId
+        UUID membershipId,
+        /** The batch's online-class link; null when it meets in person. */
+        String meetingLink
 ) {
 }

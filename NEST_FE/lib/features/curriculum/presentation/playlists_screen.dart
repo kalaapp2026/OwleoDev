@@ -85,7 +85,6 @@ Widget _topBar(
   required String title,
   required String subtitle,
   Widget? right,
-  IconData backIcon = Icons.arrow_back,
 }) {
   final palette = context.palette;
   return Container(
@@ -93,7 +92,7 @@ Widget _topBar(
     decoration: BoxDecoration(border: Border(bottom: BorderSide(color: palette.borderSoft))),
     child: Row(
       children: [
-        AppIconButton(icon: backIcon, onTap: () => Navigator.of(context).maybePop()),
+        AppIconButton(icon: Icons.arrow_back, onTap: () => Navigator.of(context).maybePop()),
         const SizedBox(width: AppSpacing.lg),
         Expanded(
           child: Column(

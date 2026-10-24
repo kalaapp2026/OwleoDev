@@ -19,10 +19,6 @@ import com.nest.app.identity.repository.AcademyMembershipRepository;
 import com.nest.app.identity.repository.CourseMapRepository;
 import com.nest.app.identity.service.CourseFeatureGuard;
 import com.nest.app.scheduling.repository.ClassInstanceRepository;
-import com.nest.common.exception.ForbiddenException;
-import com.nest.common.security.FeatureKey;
-import com.nest.common.security.MembershipClaim;
-import com.nest.common.security.NestPrincipal;
 import com.nest.common.security.Role;
 import com.nest.common.security.TenantContext;
 import org.junit.jupiter.api.AfterEach;
@@ -40,9 +36,7 @@ import java.util.Set;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -188,57 +182,4 @@ class FeeSlipServiceTest {
         TenantContext.clear();
     }
 
-    @Test
-    void generateNowIsRejectedWhenCallerLacksFeesEntryOnThisCourse() {
-        feeSlipService = service();
-        UUID academyId = UUID.randomUUID();
-        UUID trainerMembershipId = UUID.randomUUID();
-        TenantContext.set(new NestPrincipal(UUID.randomUUID(), "trainer", Role.TRAINER,
-                List.of(new MembershipClaim(trainerMembershipId, academyId, "Natyalaya",
-                        Role.TRAINER, Set.of(), Set.of())),
-                trainerMembershipId));
-
-        Course course = Course.builder().id(courseId).academyId(academyId)
-                .feeCycle(FeeCycle.MONTHLY).feeModel(FeeModel.FIXED).build();
-        when(courseRepository.findById(courseId)).thenReturn(Optional.of(course));
-        doThrow(new ForbiddenException("nope")).when(courseFeatureGuard)
-                .assertCourseFeature(courseId, FeatureKey.FEES_ENTRY);
-
-        assertThatThrownBy(() -> feeSlipService.generateNow(courseId))
-                .isInstanceOf(ForbiddenException.class);
-    }
-
-    @Test
-    void historyForStudentIsAlwaysVisibleToTheStudentThemselves() {
-        feeSlipService = service();
-        UUID studentMembershipId = UUID.randomUUID();
-        TenantContext.set(new NestPrincipal(UUID.randomUUID(), "student", Role.STUDENT,
-                List.of(new MembershipClaim(studentMembershipId, UUID.randomUUID(), "Natyalaya",
-                        Role.STUDENT, Set.of(), Set.of())),
-                studentMembershipId));
-
-        FeeSlip slip = FeeSlip.builder().membershipId(studentMembershipId).courseId(courseId)
-                .period("2026-07").amountDue(BigDecimal.TEN).build();
-        when(feeSlipRepository.findByMembershipIdOrderByGeneratedAtDesc(studentMembershipId))
-                .thenReturn(List.of(slip));
-
-        assertThat(feeSlipService.historyForStudent(studentMembershipId)).hasSize(1);
-    }
-
-    @Test
-    void historyForStudentHidesSlipsFromATrainerWithoutFeesEntryOnThatCourse() {
-        feeSlipService = service();
-        UUID trainerMembershipId = UUID.randomUUID();
-        TenantContext.set(new NestPrincipal(UUID.randomUUID(), "trainer", Role.TRAINER,
-                List.of(new MembershipClaim(trainerMembershipId, UUID.randomUUID(), "Natyalaya",
-                        Role.TRAINER, Set.of(), Set.of())),
-                trainerMembershipId));
-
-        FeeSlip slip = FeeSlip.builder().membershipId(membershipId).courseId(courseId)
-                .period("2026-07").amountDue(BigDecimal.TEN).build();
-        when(feeSlipRepository.findByMembershipIdOrderByGeneratedAtDesc(membershipId)).thenReturn(List.of(slip));
-        when(courseFeatureGuard.hasCourseFeature(courseId, FeatureKey.FEES_ENTRY)).thenReturn(false);
-
-        assertThat(feeSlipService.historyForStudent(membershipId)).isEmpty();
-    }
 }

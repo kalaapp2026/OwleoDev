@@ -213,7 +213,7 @@ class BatchServiceTest {
     private com.nest.app.enrolment.dto.CreateBatchRequest createRequest(
             BatchType type, java.time.LocalDate start, java.time.LocalDate end) {
         return new com.nest.app.enrolment.dto.CreateBatchRequest(
-                courseId, "Batch A", null, type, null, List.of(), start, end, List.of());
+                courseId, "Batch A", null, type, null, List.of(), start, end, List.of(), null);
     }
 
     @Test
@@ -264,7 +264,7 @@ class BatchServiceTest {
         // in an immutable empty map), so creating or listing a trainerless batch was a 500.
         var response = batchService.create(new com.nest.app.enrolment.dto.CreateBatchRequest(
                 courseId, "Batch A", null, BatchType.REGULAR, null, List.of(),
-                java.time.LocalDate.of(2026, 9, 1), null, List.of()));
+                java.time.LocalDate.of(2026, 9, 1), null, List.of(), null));
 
         assertThat(response.name()).isEqualTo("Batch A");
         assertThat(response.trainerMembershipId()).isNull();
@@ -287,7 +287,7 @@ class BatchServiceTest {
                 courseId, "Batch A", null, BatchType.REGULAR, null,
                 // Duplicated deliberately: de-duplication must not let the repeat displace the
                 // lead as primary.
-                List.of(lead, accompanist, lead), java.time.LocalDate.of(2026, 9, 1), null, List.of()));
+                List.of(lead, accompanist, lead), java.time.LocalDate.of(2026, 9, 1), null, List.of(), null));
 
         org.mockito.ArgumentCaptor<Batch> saved = org.mockito.ArgumentCaptor.forClass(Batch.class);
         verify(batchRepository).save(saved.capture());
@@ -300,5 +300,26 @@ class BatchServiceTest {
         assertThat(links.getAllValues())
                 .extracting(com.nest.app.enrolment.entity.BatchTrainer::getTrainerMembershipId)
                 .containsExactly(lead, accompanist);
+    }
+
+    @Test
+    void aPastedMeetingLinkIsTrimmedAndABlankOneMeansNone() {
+        when(batchRepository.save(any(Batch.class))).thenAnswer(inv -> {
+            Batch b = inv.getArgument(0);
+            b.setId(UUID.randomUUID());
+            return b;
+        });
+        when(batchTrainerRepository.findByBatchIdIn(any())).thenReturn(List.of());
+        when(batchMemberRepository.findByBatchIdIn(any())).thenReturn(List.of());
+
+        var withLink = batchService.create(new com.nest.app.enrolment.dto.CreateBatchRequest(
+                courseId, "Online A", null, BatchType.REGULAR, null, List.of(),
+                java.time.LocalDate.of(2026, 9, 1), null, List.of(), "  https://meet.google.com/abc-defg-hij  "));
+        var blank = batchService.create(new com.nest.app.enrolment.dto.CreateBatchRequest(
+                courseId, "In person", null, BatchType.REGULAR, null, List.of(),
+                java.time.LocalDate.of(2026, 9, 1), null, List.of(), "   "));
+
+        assertThat(withLink.meetingLink()).isEqualTo("https://meet.google.com/abc-defg-hij");
+        assertThat(blank.meetingLink()).isNull();
     }
 }

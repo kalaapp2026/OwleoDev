@@ -1,7 +1,13 @@
 package com.nest.app.identity.dto;
 
+import com.nest.app.validation.Username;
+import com.nest.app.validation.StrongPassword;
+import com.nest.app.validation.PersonName;
+import com.nest.app.validation.Phone;
+import com.nest.app.validation.StrictEmail;
+import jakarta.validation.Valid;
+
 import com.nest.app.enrolment.dto.PersonDetails;
-import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Past;
 import jakarta.validation.constraints.Size;
@@ -16,12 +22,12 @@ import java.time.LocalDate;
  * filling in the same "extra details" on their own signup goes through one merge path either way
  * (see IdentityRegistrationService#applyPersonDetails). */
 public record SignupRequest(
-        @NotBlank String username,
-        @NotBlank @Size(min = 6, message = "Password must be at least 6 characters") String password,
-        @NotBlank String fullName,
-        @NotBlank String phone,
-        @Email @NotBlank String email,
+        @NotBlank @Username String username,
+        @NotBlank @StrongPassword String password,
+        @NotBlank @PersonName String fullName,
+        @NotBlank @Phone String phone,
+        @StrictEmail @NotBlank String email,
         @Past LocalDate dob,
-        PersonDetails details
+        @Valid PersonDetails details
 ) {
 }

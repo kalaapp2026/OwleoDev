@@ -19,7 +19,9 @@ import 'package:nest_fe/features/curriculum/data/curriculum_api.dart';
 import 'package:nest_fe/features/fees/data/fee_roster.dart';
 import 'package:nest_fe/features/fees/data/student_other_fees.dart';
 import 'package:nest_fe/features/fees/data/student_statement.dart';
-import 'package:nest_fe/features/fees/presentation/fees_screen.dart' show feesApiProvider;
+import 'package:nest_fe/features/fees/data/fees_api.dart' show feesApiProvider;
+import 'package:nest_fe/features/fees/data/razorpay_checkout.dart';
+import 'package:nest_fe/features/fees/presentation/my_fee_due.dart';
 import 'package:nest_fe/features/fees/presentation/student_pay_sheet.dart';
 
 final _myRegularProvider = FutureProvider.autoDispose<StudentStatement>((ref) {
@@ -39,11 +41,11 @@ final _myCoursesProvider = FutureProvider.autoDispose<Map<String, Course>>((ref)
   return {for (final c in courses) c.id: c};
 });
 
-final _payEnabledProvider = FutureProvider.autoDispose<bool>((ref) async {
+final _payConfigProvider = FutureProvider.autoDispose<({bool enabled, String provider})>((ref) async {
   try {
-    return await ref.watch(feesApiProvider).paymentsEnabled();
+    return await ref.watch(feesApiProvider).paymentConfig();
   } catch (_) {
-    return false;
+    return (enabled: false, provider: 'NONE');
   }
 });
 
@@ -79,11 +81,61 @@ class _State extends ConsumerState<StudentFeesScreen> {
   void _refresh() {
     ref.invalidate(_myRegularProvider);
     ref.invalidate(_myOtherProvider);
+    // The dashboard's Fee due tiles stay alive behind this tab, so they would keep showing the
+    // amount from before the payment until told to look again.
+    ref.invalidate(myFeeDueProvider);
+  }
+
+  /// Pays one fee and returns its reference. With Razorpay: the server opens an order, the UPI
+  /// checkout runs, then the server verifies the signed result before anything is marked paid.
+  /// Without it (the dev placeholder) the server settles directly.
+  Future<String> _settle({
+    required String title,
+    required FeeCategory category,
+    String? courseId,
+    String? period,
+    String? feeTypeId,
+    String? studentFeeId,
+  }) async {
+    final api = ref.read(feesApiProvider);
+    final provider = ref.read(_payConfigProvider).valueOrNull?.provider;
+    if (provider != 'RAZORPAY') {
+      return api.payMyFee(
+          category: category,
+          courseId: courseId,
+          period: period,
+          feeTypeId: feeTypeId,
+          studentFeeId: studentFeeId,
+          method: 'UPI');
+    }
+    final order = await api.createOnlineOrder(
+        category: category, courseId: courseId, period: period, feeTypeId: feeTypeId, studentFeeId: studentFeeId);
+    final result = await openRazorpayCheckout(
+      keyId: order.keyId,
+      orderId: order.orderId,
+      amountPaise: order.amountPaise,
+      name: 'Owleo Nest',
+      description: title,
+    );
+    // The money has moved by now. If the confirmation call drops, retry rather than tell the
+    // student it failed - and the server's webhook settles it regardless.
+    Object? lastError;
+    for (var attempt = 0; attempt < 3; attempt++) {
+      try {
+        return await api.confirmOnlinePayment(
+            orderId: result.orderId, paymentId: result.paymentId, signature: result.signature);
+      } catch (e) {
+        lastError = e;
+        await Future<void>.delayed(const Duration(seconds: 2));
+      }
+    }
+    throw Exception("Your payment went through, but we couldn't confirm it yet. "
+        "It will show as paid shortly - please don't pay again. ($lastError)");
   }
 
   /// Whether the academy has online payments switched on. The Pay button is always there so the
   /// student can see what paying looks like; this decides whether tapping it can go through.
-  bool get _payAvailable => ref.read(_payEnabledProvider).valueOrNull ?? false;
+  bool get _payAvailable => ref.read(_payConfigProvider).valueOrNull?.enabled ?? false;
 
   Future<void> _payRegular(StatementRow r) async {
     final paid = await showPaySheet(
@@ -92,8 +144,8 @@ class _State extends ConsumerState<StudentFeesScreen> {
       subtitle: _periodLabel(r.label),
       amount: r.balance,
       available: _payAvailable,
-      onPay: (m) => ref.read(feesApiProvider).payMyFee(
-          category: FeeCategory.regular, courseId: r.courseId, period: r.label, method: m),
+      onPay: () => _settle(
+          title: r.context, category: FeeCategory.regular, courseId: r.courseId, period: r.label),
     );
     if (paid) _refresh();
   }
@@ -105,8 +157,8 @@ class _State extends ConsumerState<StudentFeesScreen> {
       subtitle: f.custom ? 'One-time' : 'Academy fee',
       amount: f.outstanding,
       available: _payAvailable,
-      onPay: (m) => ref.read(feesApiProvider).payMyFee(
-          category: FeeCategory.other, feeTypeId: f.feeTypeId, studentFeeId: f.studentFeeId, method: m),
+      onPay: () => _settle(
+          title: f.name, category: FeeCategory.other, feeTypeId: f.feeTypeId, studentFeeId: f.studentFeeId),
     );
     if (paid) _refresh();
   }

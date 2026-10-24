@@ -116,8 +116,12 @@ class _UploadMaterialScreenState extends ConsumerState<UploadMaterialScreen> {
     });
   }
 
+  static final _titleRule = FieldPreset.title(label: 'title', min: 2, max: 100);
+  static final _descriptionRule = FieldPreset.text(label: 'description', max: _descriptionLimit, required: false);
+
   bool get _valid =>
-      _titleController.text.trim().isNotEmpty &&
+      _titleRule.check(_titleController.text) == null &&
+      _descriptionRule.check(_descriptionController.text) == null &&
       (_isEditing || _bytes != null) &&
       // A restricted material with nobody picked would be shared with no one at all, which is
       // never what was meant - and is invisible afterwards, since it shows up on no one's screen.
@@ -125,7 +129,8 @@ class _UploadMaterialScreenState extends ConsumerState<UploadMaterialScreen> {
 
   String _missing() {
     if (!_isEditing && _bytes == null) return 'Choose a file to upload.';
-    if (_titleController.text.trim().isEmpty) return 'Give this material a title.';
+    final titleProblem = _titleRule.check(_titleController.text) ?? _descriptionRule.check(_descriptionController.text);
+    if (titleProblem != null) return titleProblem;
     return 'Pick who this file is for.';
   }
 
@@ -197,14 +202,20 @@ class _UploadMaterialScreenState extends ConsumerState<UploadMaterialScreen> {
           _Field(label: 'File', child: _filePicker(palette)),
           _Field(
             label: 'Title',
-            child: TextField(
+            child: CheckedField(
               controller: _titleController,
-              onChanged: (_) => setState(() => _titleTouched = true),
-              style: TextStyle(
-                  fontSize: AppType.xxl,
-                  fontWeight: AppType.medium,
-                  color: palette.text),
-              decoration: _decoration(palette, 'e.g. Chord Chart - Week 1'),
+              preset: _titleRule,
+              builder: (context, hasError) => TextField(
+                controller: _titleController,
+                onChanged: (_) => setState(() => _titleTouched = true),
+                textCapitalization: _titleRule.textCapitalization,
+                inputFormatters: _titleRule.formatters,
+                style: TextStyle(
+                    fontSize: AppType.xxl,
+                    fontWeight: AppType.medium,
+                    color: palette.text),
+                decoration: _decoration(palette, 'e.g. Chord Chart - Week 1'),
+              ),
             ),
           ),
           _Field(

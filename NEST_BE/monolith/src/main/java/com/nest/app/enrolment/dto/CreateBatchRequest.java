@@ -3,6 +3,8 @@ package com.nest.app.enrolment.dto;
 import com.nest.app.enrolment.entity.BatchType;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -25,6 +27,8 @@ public record CreateBatchRequest(
         /** Students to enrol immediately. Each still goes through the one-Regular-batch-per-course
          * rule, so a conflicting student fails the whole create rather than being silently
          * dropped from the roster the admin just built. */
-        List<UUID> studentMembershipIds
+        List<UUID> studentMembershipIds,
+        /** The Meet / Zoom / Teams link of an online class (http or https). Blank clears it. */
+        @Size(max = 500) @Pattern(regexp = "^\\s*$|^\\s*https?://\\S+\\s*$", message = "must be a link starting with http:// or https://") String meetingLink
 ) {
 }

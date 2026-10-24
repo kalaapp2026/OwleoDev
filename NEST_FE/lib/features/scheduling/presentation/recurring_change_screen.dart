@@ -137,6 +137,7 @@ class _RecurringChangeScreenState extends ConsumerState<RecurringChangeScreen> {
             trainerMembershipIds: _trainerIds.toList(),
             startDate: batch.startDate,
             endDate: batch.endDate,
+            meetingLink: batch.meetingLink,
             // The roster isn't part of this change; sending it back unchanged keeps the
             // whole-set semantics of updateBatch from emptying it.
             studentMembershipIds:

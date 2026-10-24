@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:nest_fe/core/design/app_text_field.dart';
 import 'package:nest_fe/core/error/api_exception.dart';
 import 'package:nest_fe/core/widgets/app_notice.dart';
 import 'package:nest_fe/features/social/presentation/feed_screen.dart';
@@ -36,9 +37,16 @@ class _CreatePostScreenState extends ConsumerState<CreatePostScreen> {
     setState(() => _picked.addAll(withBytes));
   }
 
+  static final _captionRule = FieldPreset.text(label: 'caption', max: 2000, required: false);
+
   Future<void> _post() async {
     if (_contentController.text.trim().isEmpty && _picked.isEmpty) {
       AppNotice.error(context, AppLocalizations.of(context).socNeedCaptionOrPhoto);
+      return;
+    }
+    final captionProblem = _captionRule.check(_contentController.text);
+    if (captionProblem != null) {
+      AppNotice.error(context, captionProblem);
       return;
     }
     setState(() => _isPosting = true);
@@ -83,11 +91,11 @@ class _CreatePostScreenState extends ConsumerState<CreatePostScreen> {
       body: ListView(
         padding: const EdgeInsets.all(20),
         children: [
-          TextField(
+          ValidatedTextField(
             controller: _contentController,
+            label: AppLocalizations.of(context).fieldCaption,
+            preset: _captionRule,
             maxLines: 5,
-            decoration: InputDecoration(labelText: AppLocalizations.of(context).fieldCaption, alignLabelWithHint: true),
-            textCapitalization: TextCapitalization.sentences,
           ),
           const SizedBox(height: 16),
           if (_picked.isNotEmpty)

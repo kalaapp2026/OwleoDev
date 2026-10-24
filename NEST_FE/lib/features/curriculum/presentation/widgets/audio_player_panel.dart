@@ -23,8 +23,15 @@ const double _cx = 170;
 const double _cy = 165;
 const double _radius = 110; // backdrop circle
 const double _leverR = _radius + 38; // concentric with the backdrop
-const double _leverSpan = 46; // half-angle each lever sweeps either side of due west/east
+const double _leverSpan =
+    46; // half-angle each lever sweeps either side of due west/east
 const double _leverBoxW = 100;
+
+/// Dead space either side of the levers that the canvas does not need to spend.
+const double _cropX = 14;
+
+/// Widest the player grows. A phone is narrower than this, so it fills the screen there.
+const double _contentMax = 460;
 
 enum _Side { left, right }
 
@@ -115,14 +122,18 @@ class _AudioPlayerPanelState extends ConsumerState<AudioPlayerPanel> {
   void initState() {
     super.initState();
     _playing = widget.autoPlay;
-    _subscriptions.add(_player.onDurationChanged.listen((d) {
-      if (mounted) setState(() => _duration = d);
-    }));
+    _subscriptions.add(
+      _player.onDurationChanged.listen((d) {
+        if (mounted) setState(() => _duration = d);
+      }),
+    );
     _subscriptions.add(_player.onPositionChanged.listen(_onPosition));
     _subscriptions.add(_player.onPlayerComplete.listen((_) => _onComplete()));
-    _subscriptions.add(_player.onPlayerStateChanged.listen((s) {
-      if (mounted) setState(() => _playing = s == PlayerState.playing);
-    }));
+    _subscriptions.add(
+      _player.onPlayerStateChanged.listen((s) {
+        if (mounted) setState(() => _playing = s == PlayerState.playing);
+      }),
+    );
     _load();
   }
 
@@ -144,7 +155,9 @@ class _AudioPlayerPanelState extends ConsumerState<AudioPlayerPanel> {
     if (url == null) return;
     try {
       await _player.setSourceUrl(url);
-      final saved = await ref.read(studyMaterialApiProvider).playbackSettings(widget.material.id);
+      final saved = await ref
+          .read(studyMaterialApiProvider)
+          .playbackSettings(widget.material.id);
       if (!mounted) return;
       setState(() {
         _settings = saved;
@@ -169,19 +182,22 @@ class _AudioPlayerPanelState extends ConsumerState<AudioPlayerPanel> {
     }
     _drafts = s.isTrimmed
         ? s.segments
-            .map((g) => _DraftSegment(
-                start: formatPlaybackTime(g.start),
-                end: formatPlaybackTime(g.end),
-                speed: g.speed))
-            .toList()
+              .map(
+                (g) => _DraftSegment(
+                  start: formatPlaybackTime(g.start),
+                  end: formatPlaybackTime(g.end),
+                  speed: g.speed,
+                ),
+              )
+              .toList()
         : [_DraftSegment(speed: s.speed)];
   }
 
   /// The rate actually playing: a trim's own tempo when one is active, otherwise the track's.
   double get _effectiveSpeed =>
       _settings.isTrimmed && _segmentIndex < _settings.segments.length
-          ? _settings.segments[_segmentIndex].speed
-          : _settings.speed;
+      ? _settings.segments[_segmentIndex].speed
+      : _settings.speed;
 
   void _onPosition(Duration position) {
     if (!mounted) return;
@@ -245,18 +261,28 @@ class _AudioPlayerPanelState extends ConsumerState<AudioPlayerPanel> {
     final target = _position + Duration(seconds: seconds);
     final clamped = target < Duration.zero
         ? Duration.zero
-        : (_duration > Duration.zero && target > _duration ? _duration : target);
+        : (_duration > Duration.zero && target > _duration
+              ? _duration
+              : target);
     await _player.seek(clamped);
   }
 
   Future<void> _seekToFraction(double fraction) async {
     if (_duration == Duration.zero) return;
-    await _player.seek(Duration(
-        milliseconds: (_duration.inMilliseconds * fraction.clamp(0.0, 1.0)).round()));
+    await _player.seek(
+      Duration(
+        milliseconds: (_duration.inMilliseconds * fraction.clamp(0.0, 1.0))
+            .round(),
+      ),
+    );
   }
 
   /// Applies a change immediately and saves it a beat later.
-  void _update(PlaybackSettings next, {bool applyRate = false, bool applyVolume = false}) {
+  void _update(
+    PlaybackSettings next, {
+    bool applyRate = false,
+    bool applyVolume = false,
+  }) {
     setState(() => _settings = next);
     if (applyRate) _player.setPlaybackRate(_effectiveSpeed);
     if (applyVolume && !_muted) _player.setVolume(next.volume / 100);
@@ -264,7 +290,9 @@ class _AudioPlayerPanelState extends ConsumerState<AudioPlayerPanel> {
     _saveTimer?.cancel();
     _saveTimer = Timer(const Duration(milliseconds: 600), () async {
       try {
-        await ref.read(studyMaterialApiProvider).savePlaybackSettings(widget.material.id, next);
+        await ref
+            .read(studyMaterialApiProvider)
+            .savePlaybackSettings(widget.material.id, next);
       } catch (_) {
         // Deliberately silent. These are conveniences, and a failed save must not interrupt
         // someone mid-practice with a toast they cannot act on.
@@ -282,7 +310,8 @@ class _AudioPlayerPanelState extends ConsumerState<AudioPlayerPanel> {
               ? PlaybackSegment(
                   start: _settings.segments[i].start,
                   end: _settings.segments[i].end,
-                  speed: value)
+                  speed: value,
+                )
               : _settings.segments[i],
       ];
       _update(_settings.copyWith(segments: updated), applyRate: true);
@@ -299,7 +328,8 @@ class _AudioPlayerPanelState extends ConsumerState<AudioPlayerPanel> {
     _player.setVolume(_muted ? 0 : _settings.volume / 100);
   }
 
-  void _toggleLoop() => _update(_settings.copyWith(loopEnabled: !_settings.loopEnabled));
+  void _toggleLoop() =>
+      _update(_settings.copyWith(loopEnabled: !_settings.loopEnabled));
 
   // ---- Custom Play -------------------------------------------------------------------------
 
@@ -321,11 +351,15 @@ class _AudioPlayerPanelState extends ConsumerState<AudioPlayerPanel> {
 
   void _addDraft() {
     final last = _drafts.isEmpty ? null : _drafts.last;
-    setState(() => _drafts.add(_DraftSegment(
+    setState(
+      () => _drafts.add(
+        _DraftSegment(
           start: last?.endController.text ?? '',
           end: formatPlaybackTime(_duration.inSeconds),
           speed: last?.speed ?? _settings.speed,
-        )));
+        ),
+      ),
+    );
   }
 
   void _removeDraft(int i) {
@@ -339,15 +373,22 @@ class _AudioPlayerPanelState extends ConsumerState<AudioPlayerPanel> {
       final s = parsePlaybackTime(d.startController.text);
       final e = parsePlaybackTime(d.endController.text);
       if (s == null || e == null || s < 0 || e <= s) {
-        setState(() => _rangeError = 'Enter a valid start and end time for every part.');
+        setState(
+          () =>
+              _rangeError = 'Enter a valid start and end time for every part.',
+        );
         return null;
       }
       if (_duration > Duration.zero && e > _duration.inSeconds) {
-        setState(() =>
-            _rangeError = "End time can't be past ${formatPlaybackTime(_duration.inSeconds)}.");
+        setState(
+          () => _rangeError =
+              "End time can't be past ${formatPlaybackTime(_duration.inSeconds)}.",
+        );
         return null;
       }
-      parsed.add(PlaybackSegment(start: s, end: e, speed: d.speed.clamp(0.25, 2.0)));
+      parsed.add(
+        PlaybackSegment(start: s, end: e, speed: d.speed.clamp(0.25, 2.0)),
+      );
     }
     setState(() => _rangeError = '');
     return parsed;
@@ -406,14 +447,15 @@ class _AudioPlayerPanelState extends ConsumerState<AudioPlayerPanel> {
           Text(
             '${_nav!.playlistName} · ${_nav!.index + 1}/${_nav!.total}',
             style: TextStyle(
-                fontSize: AppType.tiny,
-                fontWeight: AppType.semi,
-                color: palette.textFaint),
+              fontSize: AppType.tiny,
+              fontWeight: AppType.semi,
+              color: palette.textFaint,
+            ),
           ),
         ],
         const SizedBox(height: 14),
         ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 300),
+          constraints: const BoxConstraints(maxWidth: _contentMax),
           child: _customPlay(palette),
         ),
       ],
@@ -426,78 +468,101 @@ class _AudioPlayerPanelState extends ConsumerState<AudioPlayerPanel> {
     final rightBottom = _polar(_leverR, _leverAngles(_Side.right).bottom);
 
     return ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: _vbW),
+      constraints: const BoxConstraints(maxWidth: _contentMax),
       child: AspectRatio(
-        aspectRatio: _vbW / _vbH,
+        aspectRatio: (_vbW - 2 * _cropX) / _vbH,
         child: FittedBox(
           fit: BoxFit.contain,
           child: SizedBox(
-            width: _vbW,
+            width: _vbW - 2 * _cropX,
             height: _vbH,
-            child: Stack(
-              clipBehavior: Clip.none,
-              children: [
-                Positioned.fill(
-                  child: CustomPaint(
-                    painter: _ClusterPainter(
-                      accent: accent,
-                      accentSoft: palette.primarySoft,
-                      surfaceRaised: palette.surfaceRaised,
-                      surfaceHigh: palette.surfaceHigh,
-                      border: palette.border,
-                      textFaint: palette.textFaint,
-                      tick: palette.text,
-                      speed: _effectiveSpeed,
-                      volume: _settings.volume.toDouble(),
-                      muted: _muted,
-                    ),
-                  ),
-                ),
-                _leverHitArea(_Side.left, 0.25, 2.0, _changeSpeed, stamps: const [0.25, 0.5, 1, 1.5, 2]),
-                _leverHitArea(_Side.right, 0, 100, _changeVolume),
-                Positioned(
-                  left: _cx - 61,
-                  top: _cy - 61,
-                  child: _VinylDisk(
-                    playing: _playing,
-                    progress: progress,
-                    accent: accent,
-                    soft: palette.primarySoft,
-                    segments: durationSec > 0 && segments.isNotEmpty
-                        ? [
-                            for (final s in segments)
-                              (s.start / durationSec, s.end / durationSec),
-                          ]
-                        : const [],
-                  ),
-                ),
-                Positioned(
-                  left: rightBottom.dx - 15,
-                  top: rightBottom.dy + 30,
-                  child: Tooltip(
-                    message: _muted ? 'Unmute' : 'Mute',
-                    child: Pressable(
-                      onTap: _toggleMute,
-                      child: Container(
-                        width: 30,
-                        height: 30,
-                        alignment: Alignment.center,
-                        decoration: BoxDecoration(
-                          color: _muted ? palette.notPaidSoft : palette.surfaceRaised,
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(
-                              color: _muted ? palette.notPaid : palette.border),
-                        ),
-                        child: Icon(
-                          _muted ? Icons.volume_off_rounded : Icons.volume_up_rounded,
-                          size: 14,
-                          color: _muted ? palette.notPaid : palette.textMuted,
+            child: OverflowBox(
+              maxWidth: _vbW,
+              minWidth: _vbW,
+              child: SizedBox(
+                width: _vbW,
+                height: _vbH,
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    Positioned.fill(
+                      child: CustomPaint(
+                        painter: _ClusterPainter(
+                          accent: accent,
+                          accentSoft: palette.primarySoft,
+                          surfaceRaised: palette.surfaceRaised,
+                          surfaceHigh: palette.surfaceHigh,
+                          border: palette.border,
+                          textFaint: palette.textFaint,
+                          tick: palette.text,
+                          speed: _effectiveSpeed,
+                          volume: _settings.volume.toDouble(),
+                          muted: _muted,
                         ),
                       ),
                     ),
-                  ),
+                    _leverHitArea(
+                      _Side.left,
+                      0.25,
+                      2.0,
+                      _changeSpeed,
+                      stamps: const [0.25, 0.5, 1, 1.5, 2],
+                    ),
+                    _leverHitArea(_Side.right, 0, 100, _changeVolume),
+                    Positioned(
+                      left: _cx - 61,
+                      top: _cy - 61,
+                      child: _VinylDisk(
+                        playing: _playing,
+                        progress: progress,
+                        accent: accent,
+                        soft: palette.primarySoft,
+                        segments: durationSec > 0 && segments.isNotEmpty
+                            ? [
+                                for (final s in segments)
+                                  (s.start / durationSec, s.end / durationSec),
+                              ]
+                            : const [],
+                      ),
+                    ),
+                    Positioned(
+                      left: rightBottom.dx - 15,
+                      top: rightBottom.dy + 30,
+                      child: Tooltip(
+                        message: _muted ? 'Unmute' : 'Mute',
+                        child: Pressable(
+                          onTap: _toggleMute,
+                          child: Container(
+                            width: 30,
+                            height: 30,
+                            alignment: Alignment.center,
+                            decoration: BoxDecoration(
+                              color: _muted
+                                  ? palette.notPaidSoft
+                                  : palette.surfaceRaised,
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(
+                                color: _muted
+                                    ? palette.notPaid
+                                    : palette.border,
+                              ),
+                            ),
+                            child: Icon(
+                              _muted
+                                  ? Icons.volume_off_rounded
+                                  : Icons.volume_up_rounded,
+                              size: 14,
+                              color: _muted
+                                  ? palette.notPaid
+                                  : palette.textMuted,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-              ],
+              ),
             ),
           ),
         ),
@@ -555,13 +620,19 @@ class _AudioPlayerPanelState extends ConsumerState<AudioPlayerPanel> {
     final accent = palette.primary;
     final segments = _settings.segments;
     TextStyle time() => TextStyle(
-        fontSize: AppType.xs, fontWeight: AppType.semi, color: palette.textFaint);
+      fontSize: AppType.smd,
+      fontWeight: AppType.semi,
+      color: palette.textFaint,
+    );
 
     return ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: 300),
+      constraints: const BoxConstraints(maxWidth: _contentMax),
       child: Row(
         children: [
-          SizedBox(width: 34, child: Text(formatPlaybackTime(_position.inSeconds), style: time())),
+          SizedBox(
+            width: 40,
+            child: Text(formatPlaybackTime(_position.inSeconds), style: time()),
+          ),
           Expanded(
             child: LayoutBuilder(
               builder: (context, box) {
@@ -569,7 +640,8 @@ class _AudioPlayerPanelState extends ConsumerState<AudioPlayerPanel> {
                 return GestureDetector(
                   behavior: HitTestBehavior.opaque,
                   onTapDown: (d) => _seekToFraction(d.localPosition.dx / width),
-                  onHorizontalDragUpdate: (d) => _seekToFraction(d.localPosition.dx / width),
+                  onHorizontalDragUpdate: (d) =>
+                      _seekToFraction(d.localPosition.dx / width),
                   child: SizedBox(
                     height: 14,
                     child: Stack(
@@ -587,13 +659,17 @@ class _AudioPlayerPanelState extends ConsumerState<AudioPlayerPanel> {
                           for (var i = 0; i < segments.length; i++)
                             Positioned(
                               left: segments[i].start / durationSec * width,
-                              width: (segments[i].end - segments[i].start) / durationSec * width,
+                              width:
+                                  (segments[i].end - segments[i].start) /
+                                  durationSec *
+                                  width,
                               top: 2,
                               height: 10,
                               child: Container(
                                 decoration: BoxDecoration(
                                   color: palette.gold.withValues(
-                                      alpha: i == _segmentIndex ? 0.33 : 0.2),
+                                    alpha: i == _segmentIndex ? 0.33 : 0.2,
+                                  ),
                                   borderRadius: BorderRadius.circular(4),
                                   border: Border.all(color: palette.gold),
                                 ),
@@ -608,15 +684,18 @@ class _AudioPlayerPanelState extends ConsumerState<AudioPlayerPanel> {
                           ),
                         ),
                         Positioned(
-                          left: progress * width - 6,
+                          left: progress * width - 8,
                           child: Container(
-                            width: 12,
-                            height: 12,
+                            width: 16,
+                            height: 16,
                             decoration: BoxDecoration(
                               color: accent,
                               shape: BoxShape.circle,
                               boxShadow: const [
-                                BoxShadow(color: Color(0x59000000), spreadRadius: 3),
+                                BoxShadow(
+                                  color: Color(0x59000000),
+                                  spreadRadius: 3,
+                                ),
                               ],
                             ),
                           ),
@@ -629,9 +708,12 @@ class _AudioPlayerPanelState extends ConsumerState<AudioPlayerPanel> {
             ),
           ),
           SizedBox(
-            width: 34,
-            child: Text(formatPlaybackTime(_duration.inSeconds),
-                textAlign: TextAlign.right, style: time()),
+            width: 40,
+            child: Text(
+              formatPlaybackTime(_duration.inSeconds),
+              textAlign: TextAlign.right,
+              style: time(),
+            ),
           ),
         ],
       ),
@@ -642,21 +724,21 @@ class _AudioPlayerPanelState extends ConsumerState<AudioPlayerPanel> {
     final accent = palette.primary;
 
     Widget plain(IconData icon, String tip, VoidCallback? onTap) => Tooltip(
-          message: tip,
-          child: Opacity(
-            opacity: onTap == null ? 0.35 : 1,
-            child: Pressable(
-              onTap: onTap,
-              child: Padding(
-                padding: const EdgeInsets.all(5),
-                child: Icon(icon, size: 22, color: palette.textMuted),
-              ),
-            ),
+      message: tip,
+      child: Opacity(
+        opacity: onTap == null ? 0.35 : 1,
+        child: Pressable(
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.all(5),
+            child: Icon(icon, size: 26, color: palette.textMuted),
           ),
-        );
+        ),
+      ),
+    );
 
     return ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: 300),
+      constraints: const BoxConstraints(maxWidth: _contentMax),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
@@ -665,15 +747,19 @@ class _AudioPlayerPanelState extends ConsumerState<AudioPlayerPanel> {
             child: Pressable(
               onTap: widget.onOpenLibrary,
               child: Container(
-                width: 38,
-                height: 38,
+                width: 44,
+                height: 44,
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
                   color: palette.surfaceRaised,
                   borderRadius: AppRadii.all(AppRadii.lg),
                   border: Border.all(color: palette.border),
                 ),
-                child: Icon(Icons.library_music_outlined, size: 16, color: palette.textMuted),
+                child: Icon(
+                  Icons.library_music_outlined,
+                  size: 19,
+                  color: palette.textMuted,
+                ),
               ),
             ),
           ),
@@ -681,18 +767,25 @@ class _AudioPlayerPanelState extends ConsumerState<AudioPlayerPanel> {
             mainAxisSize: MainAxisSize.min,
             spacing: 6,
             children: [
-              plain(Icons.skip_previous_rounded, 'Previous song', _nav?.onPrevious),
+              plain(
+                Icons.skip_previous_rounded,
+                'Previous song',
+                _nav?.onPrevious,
+              ),
               plain(Icons.fast_rewind_rounded, 'Back 10s', () => _skip(-10)),
               Pressable(
                 onTap: _togglePlay,
                 child: Container(
-                  width: 58,
-                  height: 58,
+                  width: 68,
+                  height: 68,
                   alignment: Alignment.center,
-                  decoration: BoxDecoration(color: accent, shape: BoxShape.circle),
+                  decoration: BoxDecoration(
+                    color: accent,
+                    shape: BoxShape.circle,
+                  ),
                   child: Icon(
                     _playing ? Icons.pause_rounded : Icons.play_arrow_rounded,
-                    size: 30,
+                    size: 36,
                     color: palette.onPrimary,
                   ),
                 ),
@@ -701,7 +794,7 @@ class _AudioPlayerPanelState extends ConsumerState<AudioPlayerPanel> {
               plain(Icons.skip_next_rounded, 'Next song', _nav?.onNext),
             ],
           ),
-          const SizedBox(width: 38, height: 38),
+          const SizedBox(width: 44, height: 44),
         ],
       ),
     );
@@ -716,8 +809,8 @@ class _AudioPlayerPanelState extends ConsumerState<AudioPlayerPanel> {
     final label = !trimmed
         ? 'Custom Play'
         : segments.length == 1
-            ? '$verb ${formatPlaybackTime(segments.first.start)}–${formatPlaybackTime(segments.first.end)}'
-            : '$verb ${segments.length} parts';
+        ? '$verb ${formatPlaybackTime(segments.first.start)}–${formatPlaybackTime(segments.first.end)}'
+        : '$verb ${segments.length} parts';
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -729,19 +822,27 @@ class _AudioPlayerPanelState extends ConsumerState<AudioPlayerPanel> {
             decoration: BoxDecoration(
               color: trimmed ? palette.goldSoft : palette.surfaceRaised,
               borderRadius: AppRadii.all(AppRadii.lg),
-              border: Border.all(color: trimmed ? palette.gold : palette.border),
+              border: Border.all(
+                color: trimmed ? palette.gold : palette.border,
+              ),
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(loop ? Icons.repeat : Icons.queue_music_outlined,
-                    size: 13, color: trimmed ? palette.gold : palette.textMuted),
+                Icon(
+                  loop ? Icons.repeat : Icons.queue_music_outlined,
+                  size: 13,
+                  color: trimmed ? palette.gold : palette.textMuted,
+                ),
                 const SizedBox(width: 7),
-                Text(label,
-                    style: TextStyle(
-                        fontSize: AppType.base,
-                        fontWeight: AppType.bold,
-                        color: trimmed ? palette.gold : palette.textMuted)),
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: AppType.base,
+                    fontWeight: AppType.bold,
+                    color: trimmed ? palette.gold : palette.textMuted,
+                  ),
+                ),
               ],
             ),
           ),
@@ -755,44 +856,51 @@ class _AudioPlayerPanelState extends ConsumerState<AudioPlayerPanel> {
     final trimmed = _settings.isTrimmed;
     final loop = _settings.loopEnabled;
 
-    Widget caps(String text) => Text(text.toUpperCase(),
-        style: TextStyle(
-            fontSize: 10,
-            fontWeight: AppType.bold,
-            letterSpacing: 0.4,
-            color: palette.textFaint));
+    Widget caps(String text) => Text(
+      text.toUpperCase(),
+      style: TextStyle(
+        fontSize: 10,
+        fontWeight: AppType.bold,
+        letterSpacing: 0.4,
+        color: palette.textFaint,
+      ),
+    );
 
     Widget timeField(TextEditingController c, String hint) => TextField(
-          controller: c,
-          onChanged: (_) {
-            if (_rangeError.isNotEmpty) setState(() => _rangeError = '');
-          },
-          style: TextStyle(
-              fontSize: AppType.md, fontWeight: AppType.bold, color: palette.gold),
-          decoration: InputDecoration(
-            isDense: true,
-            hintText: hint,
-            hintStyle: TextStyle(
-                fontSize: AppType.md,
-                fontWeight: AppType.bold,
-                color: palette.textFaint),
-            filled: true,
-            fillColor: palette.surfaceHigh,
-            contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(10),
-              borderSide: BorderSide(color: palette.gold.withValues(alpha: 0.33)),
-            ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(10),
-              borderSide: BorderSide(color: palette.gold.withValues(alpha: 0.33)),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(10),
-              borderSide: BorderSide(color: palette.gold),
-            ),
-          ),
-        );
+      controller: c,
+      onChanged: (_) {
+        if (_rangeError.isNotEmpty) setState(() => _rangeError = '');
+      },
+      style: TextStyle(
+        fontSize: AppType.md,
+        fontWeight: AppType.bold,
+        color: palette.gold,
+      ),
+      decoration: InputDecoration(
+        isDense: true,
+        hintText: hint,
+        hintStyle: TextStyle(
+          fontSize: AppType.md,
+          fontWeight: AppType.bold,
+          color: palette.textFaint,
+        ),
+        filled: true,
+        fillColor: palette.surfaceHigh,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: BorderSide(color: palette.gold.withValues(alpha: 0.33)),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: BorderSide(color: palette.gold.withValues(alpha: 0.33)),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: BorderSide(color: palette.gold),
+        ),
+      ),
+    );
 
     Widget chip({
       required IconData icon,
@@ -801,28 +909,32 @@ class _AudioPlayerPanelState extends ConsumerState<AudioPlayerPanel> {
       required Color border,
       Color? fill,
       required VoidCallback onTap,
-    }) =>
-        Pressable(
-          onTap: onTap,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
-            decoration: BoxDecoration(
-              color: fill ?? Colors.transparent,
-              borderRadius: AppRadii.all(AppRadii.pill),
-              border: Border.all(color: border),
+    }) => Pressable(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
+        decoration: BoxDecoration(
+          color: fill ?? Colors.transparent,
+          borderRadius: AppRadii.all(AppRadii.pill),
+          border: Border.all(color: border),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 12, color: color),
+            const SizedBox(width: 6),
+            Text(
+              text,
+              style: TextStyle(
+                fontSize: AppType.smd,
+                fontWeight: AppType.bold,
+                color: color,
+              ),
             ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(icon, size: 12, color: color),
-                const SizedBox(width: 6),
-                Text(text,
-                    style: TextStyle(
-                        fontSize: AppType.smd, fontWeight: AppType.bold, color: color)),
-              ],
-            ),
-          ),
-        );
+          ],
+        ),
+      ),
+    );
 
     return Container(
       margin: const EdgeInsets.only(top: 10),
@@ -867,8 +979,10 @@ class _AudioPlayerPanelState extends ConsumerState<AudioPlayerPanel> {
                           children: [
                             caps('End'),
                             const SizedBox(height: 5),
-                            timeField(_drafts[i].endController,
-                                formatPlaybackTime(_duration.inSeconds)),
+                            timeField(
+                              _drafts[i].endController,
+                              formatPlaybackTime(_duration.inSeconds),
+                            ),
                           ],
                         ),
                       ),
@@ -878,8 +992,15 @@ class _AudioPlayerPanelState extends ConsumerState<AudioPlayerPanel> {
                           child: Pressable(
                             onTap: () => _removeDraft(i),
                             child: Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 2),
-                              child: Icon(Icons.close, size: 14, color: palette.textFaint),
+                              padding: const EdgeInsets.symmetric(
+                                vertical: 8,
+                                horizontal: 2,
+                              ),
+                              child: Icon(
+                                Icons.close,
+                                size: 14,
+                                color: palette.textFaint,
+                              ),
                             ),
                           ),
                         ),
@@ -909,19 +1030,24 @@ class _AudioPlayerPanelState extends ConsumerState<AudioPlayerPanel> {
                 children: [
                   Icon(Icons.add, size: 13, color: palette.primary),
                   const SizedBox(width: 5),
-                  Text('Add another part',
-                      style: TextStyle(
-                          fontSize: AppType.smd,
-                          fontWeight: AppType.bold,
-                          color: palette.primary)),
+                  Text(
+                    'Add another part',
+                    style: TextStyle(
+                      fontSize: AppType.smd,
+                      fontWeight: AppType.bold,
+                      color: palette.primary,
+                    ),
+                  ),
                 ],
               ),
             ),
           ),
           if (_rangeError.isNotEmpty) ...[
             const SizedBox(height: 8),
-            Text(_rangeError,
-                style: TextStyle(fontSize: AppType.xs, color: palette.notPaid)),
+            Text(
+              _rangeError,
+              style: TextStyle(fontSize: AppType.xs, color: palette.notPaid),
+            ),
           ],
           const SizedBox(height: 10),
           Row(
@@ -963,13 +1089,20 @@ class _AudioPlayerPanelState extends ConsumerState<AudioPlayerPanel> {
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(Icons.play_arrow_rounded, size: 16, color: palette.onPrimary),
+                        Icon(
+                          Icons.play_arrow_rounded,
+                          size: 16,
+                          color: palette.onPrimary,
+                        ),
                         const SizedBox(width: 8),
-                        Text(_drafts.length > 1 ? 'Play parts' : 'Play range',
-                            style: TextStyle(
-                                fontSize: AppType.md,
-                                fontWeight: AppType.bold,
-                                color: palette.onPrimary)),
+                        Text(
+                          _drafts.length > 1 ? 'Play parts' : 'Play range',
+                          style: TextStyle(
+                            fontSize: AppType.md,
+                            fontWeight: AppType.bold,
+                            color: palette.onPrimary,
+                          ),
+                        ),
                       ],
                     ),
                   ),
@@ -979,16 +1112,22 @@ class _AudioPlayerPanelState extends ConsumerState<AudioPlayerPanel> {
                 Pressable(
                   onTap: _clearSegments,
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 11,
+                    ),
                     decoration: BoxDecoration(
                       borderRadius: AppRadii.all(AppRadii.lg),
                       border: Border.all(color: palette.border),
                     ),
-                    child: Text('Clear',
-                        style: TextStyle(
-                            fontSize: AppType.md,
-                            fontWeight: AppType.bold,
-                            color: palette.textMuted)),
+                    child: Text(
+                      'Clear',
+                      style: TextStyle(
+                        fontSize: AppType.md,
+                        fontWeight: AppType.bold,
+                        color: palette.textMuted,
+                      ),
+                    ),
                   ),
                 ),
             ],
@@ -1001,8 +1140,8 @@ class _AudioPlayerPanelState extends ConsumerState<AudioPlayerPanel> {
 
 class _DraftSegment {
   _DraftSegment({String start = '', String end = '', required this.speed})
-      : startController = TextEditingController(text: start),
-        endController = TextEditingController(text: end);
+    : startController = TextEditingController(text: start),
+      endController = TextEditingController(text: end);
 
   final TextEditingController startController;
   final TextEditingController endController;
@@ -1079,7 +1218,10 @@ class _MiniSlider extends StatelessWidget {
                             color: color,
                             shape: BoxShape.circle,
                             boxShadow: const [
-                              BoxShadow(color: Color(0x59000000), spreadRadius: 3),
+                              BoxShadow(
+                                color: Color(0x59000000),
+                                spreadRadius: 3,
+                              ),
                             ],
                           ),
                         ),
@@ -1094,10 +1236,15 @@ class _MiniSlider extends StatelessWidget {
         const SizedBox(width: 10),
         SizedBox(
           width: 40,
-          child: Text(label(value),
-              textAlign: TextAlign.right,
-              style: TextStyle(
-                  fontSize: AppType.smd, fontWeight: AppType.heavy, color: color)),
+          child: Text(
+            label(value),
+            textAlign: TextAlign.right,
+            style: TextStyle(
+              fontSize: AppType.smd,
+              fontWeight: AppType.heavy,
+              color: color,
+            ),
+          ),
         ),
       ],
     );
@@ -1153,7 +1300,11 @@ class _VinylDisk extends StatelessWidget {
               shape: BoxShape.circle,
               border: Border.all(color: palette.border),
               boxShadow: const [
-                BoxShadow(color: Color(0x80000000), blurRadius: 20, offset: Offset(0, 8)),
+                BoxShadow(
+                  color: Color(0x80000000),
+                  blurRadius: 20,
+                  offset: Offset(0, 8),
+                ),
               ],
             ),
             child: Container(
@@ -1220,7 +1371,10 @@ class _VinylDisk extends StatelessWidget {
                         color: accent,
                         shape: BoxShape.circle,
                         boxShadow: [
-                          BoxShadow(color: accent.withValues(alpha: 0.67), blurRadius: 5),
+                          BoxShadow(
+                            color: accent.withValues(alpha: 0.67),
+                            blurRadius: 5,
+                          ),
                         ],
                       ),
                     ),
@@ -1262,15 +1416,28 @@ class _RingPainter extends CustomPainter {
     canvas.drawArc(rect, 0, math.pi * 2, false, stroke(track));
     // The same gold bands as the seek bar, wrapped round the ring.
     for (final (start, end) in segments) {
-      canvas.drawArc(rect, -math.pi / 2 + math.pi * 2 * start.clamp(0.0, 1.0),
-          math.pi * 2 * (end - start).clamp(0.0, 1.0), false, stroke(gold));
+      canvas.drawArc(
+        rect,
+        -math.pi / 2 + math.pi * 2 * start.clamp(0.0, 1.0),
+        math.pi * 2 * (end - start).clamp(0.0, 1.0),
+        false,
+        stroke(gold),
+      );
     }
-    canvas.drawArc(rect, -math.pi / 2, math.pi * 2 * progress, false, stroke(accent));
+    canvas.drawArc(
+      rect,
+      -math.pi / 2,
+      math.pi * 2 * progress,
+      false,
+      stroke(accent),
+    );
   }
 
   @override
   bool shouldRepaint(_RingPainter old) =>
-      old.progress != progress || old.accent != accent || old.segments != segments;
+      old.progress != progress ||
+      old.accent != accent ||
+      old.segments != segments;
 }
 
 /// The backdrop circle, both levers (arc, ticks, handle) and their labels.
@@ -1323,26 +1490,30 @@ class _ClusterPainter extends CustomPainter {
         ..strokeWidth = 1,
     );
 
-    _lever(canvas,
-        side: _Side.left,
-        value: speed,
-        min: 0.25,
-        max: 2,
-        color: accent,
-        label: 'Speed',
-        valueLabel: _formatSpeed(speed),
-        stamps: _speedStamps,
-        valueColor: accent);
-    _lever(canvas,
-        side: _Side.right,
-        value: volume,
-        min: 0,
-        max: 100,
-        color: muted ? textFaint : accent,
-        label: 'Volume',
-        valueLabel: muted ? 'Muted' : '${volume.round()}%',
-        stamps: const [],
-        valueColor: muted ? textFaint : accent);
+    _lever(
+      canvas,
+      side: _Side.left,
+      value: speed,
+      min: 0.25,
+      max: 2,
+      color: accent,
+      label: 'Speed',
+      valueLabel: _formatSpeed(speed),
+      stamps: _speedStamps,
+      valueColor: accent,
+    );
+    _lever(
+      canvas,
+      side: _Side.right,
+      value: volume,
+      min: 0,
+      max: 100,
+      color: muted ? textFaint : accent,
+      label: 'Volume',
+      valueLabel: muted ? 'Muted' : '${volume.round()}%',
+      stamps: const [],
+      valueColor: muted ? textFaint : accent,
+    );
   }
 
   void _lever(
@@ -1359,10 +1530,14 @@ class _ClusterPainter extends CustomPainter {
   }) {
     final angles = _leverAngles(side);
     final pct = ((value - min) / (max - min)).clamp(0.0, 1.0);
-    final arcRect = Rect.fromCircle(center: const Offset(_cx, _cy), radius: _leverR);
+    final arcRect = Rect.fromCircle(
+      center: const Offset(_cx, _cy),
+      radius: _leverR,
+    );
     final start = (angles.bottom - 90) * math.pi / 180;
     final sweep = (angles.top - angles.bottom) * math.pi / 180;
-    double angleAt(double t) => angles.bottom + t * (angles.top - angles.bottom);
+    double angleAt(double t) =>
+        angles.bottom + t * (angles.top - angles.bottom);
 
     Paint arc(Color c) => Paint()
       ..color = c
@@ -1377,7 +1552,8 @@ class _ClusterPainter extends CustomPainter {
         start,
         sweep * pct,
         false,
-        arc(color.withValues(alpha: 0.53))..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3),
+        arc(color.withValues(alpha: 0.53))
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3),
       );
       canvas.drawArc(arcRect, start, sweep * pct, false, arc(color));
     }
@@ -1401,9 +1577,20 @@ class _ClusterPainter extends CustomPainter {
             ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2),
         );
       }
-      canvas.drawLine(_polar(_leverR - 8, a), _polar(_leverR + 8, a), tickPaint);
-      _text(canvas, _formatSpeed(s), _polar(_leverR + 20, a),
-          size: 9, weight: FontWeight.w700, color: active ? color : textFaint, center: true);
+      canvas.drawLine(
+        _polar(_leverR - 8, a),
+        _polar(_leverR + 8, a),
+        tickPaint,
+      );
+      _text(
+        canvas,
+        _formatSpeed(s),
+        _polar(_leverR + 20, a),
+        size: 11,
+        weight: FontWeight.w700,
+        color: active ? color : textFaint,
+        center: true,
+      );
     }
 
     // Handle, riding the arc.
@@ -1422,10 +1609,26 @@ class _ClusterPainter extends CustomPainter {
     final box = _leverBox(side);
     final alignRight = side == _Side.right;
     final x = alignRight ? _vbW : 0.0;
-    _text(canvas, label.toUpperCase(), Offset(x, box.top),
-        size: 9.5, weight: FontWeight.w800, color: textFaint, spacing: 0.6, right: alignRight);
-    _text(canvas, valueLabel, Offset(x, box.top + box.height),
-        size: 12, weight: FontWeight.w800, color: valueColor, right: alignRight, bottom: true);
+    _text(
+      canvas,
+      label.toUpperCase(),
+      Offset(x, box.top),
+      size: 11.5,
+      weight: FontWeight.w800,
+      color: textFaint,
+      spacing: 0.6,
+      right: alignRight,
+    );
+    _text(
+      canvas,
+      valueLabel,
+      Offset(x, box.top + box.height),
+      size: 15,
+      weight: FontWeight.w800,
+      color: valueColor,
+      right: alignRight,
+      bottom: true,
+    );
   }
 
   void _text(
@@ -1444,7 +1647,11 @@ class _ClusterPainter extends CustomPainter {
       text: TextSpan(
         text: text,
         style: TextStyle(
-            fontSize: size, fontWeight: weight, color: color, letterSpacing: spacing),
+          fontSize: size,
+          fontWeight: weight,
+          color: color,
+          letterSpacing: spacing,
+        ),
       ),
       textDirection: TextDirection.ltr,
     )..layout();

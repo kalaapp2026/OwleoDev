@@ -1,7 +1,11 @@
+import 'dart:async';
+
 import 'package:dio/dio.dart';
 import 'package:nest_fe/core/error/api_exception.dart';
 import 'package:nest_fe/core/network/api_config.dart';
 import 'package:nest_fe/core/network/auth_interceptor.dart';
+import 'package:nest_fe/core/network/get_cache_interceptor.dart';
+import 'package:nest_fe/core/storage/secure_token_storage.dart';
 
 /// Holds which of the caller's academy memberships is "active" right now (PRD 3.1.1's Academy
 /// Switcher) and stamps it on every request via X-Active-Membership, which
@@ -38,29 +42,63 @@ class DioClient {
       },
     ));
 
+    // Before the auth interceptor on purpose - see GetCacheInterceptor.
+    cache = GetCacheInterceptor(identity: SecureTokenStorage.instance.readAccessToken);
+    dio.interceptors.add(cache);
+
     authInterceptor = AuthInterceptor();
     dio.interceptors.add(authInterceptor);
   }
 
   late final Dio dio;
   late final AuthInterceptor authInterceptor;
+  late final GetCacheInterceptor cache;
+
+  final _mutations = StreamController<String>.broadcast();
+
+  /// The path of every write (POST/PUT/PATCH/DELETE) that has just succeeded. This is what lets
+  /// the screens showing related data refresh themselves - see DataSync - so no save has to
+  /// remember which other screens to invalidate.
+  Stream<String> get mutations => _mutations.stream;
+
+  /// Writes that change nothing anyone is looking at: signing in, the device ping, push-token
+  /// registration, personal display preferences, the audio player's saved settings. Refreshing
+  /// the app after each of those would only cost calls.
+  static bool isBackgroundWrite(String path) =>
+      path.startsWith('/auth/') ||
+      path.startsWith('/devices/') ||
+      path.startsWith('/notifications/push-token') ||
+      path.startsWith('/users/me/theme') ||
+      path.startsWith('/users/me/language') ||
+      path.startsWith('/users/me/notification-prefs') ||
+      path.endsWith('/playback');
+
+  void _afterSuccess(Response<dynamic> response) {
+    final options = response.requestOptions;
+    if (options.method == 'GET' || options.method == 'HEAD') return;
+    cache.clear();
+    if (!isBackgroundWrite(options.path)) _mutations.add(options.path);
+  }
 
   /// Every repository call should route through this so DioException always becomes the same
   /// ApiException shape the UI knows how to render - no screen should ever catch a raw DioException.
   Future<T> call<T>(Future<Response<dynamic>> Function(Dio dio) request, T Function(dynamic data) parse) async {
+    final Response<dynamic> response;
     try {
-      final response = await request(dio);
-      return parse(response.data);
+      response = await request(dio);
     } on DioException catch (e) {
       throw _mapError(e);
     }
+    // Outside the try: the write happened even if reading its answer then fails.
+    _afterSuccess(response);
+    return parse(response.data);
   }
 
   /// For endpoints whose success response carries nothing worth parsing (204s, fire-and-forget
   /// POSTs) - avoids every caller writing `(_) => null` against a `Future<void>` return type.
   Future<void> callVoid(Future<Response<dynamic>> Function(Dio dio) request) async {
     try {
-      await request(dio);
+      _afterSuccess(await request(dio));
     } on DioException catch (e) {
       throw _mapError(e);
     }

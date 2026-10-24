@@ -209,6 +209,7 @@ class StudentSummary {
   final String username;
   final String fullName;
   final bool active;
+  final String? profileImageUrl;
 
   StudentSummary({
     required this.membershipId,
@@ -216,6 +217,7 @@ class StudentSummary {
     required this.username,
     required this.fullName,
     required this.active,
+    this.profileImageUrl,
   });
 
   factory StudentSummary.fromJson(Map<String, dynamic> json) => StudentSummary(
@@ -224,6 +226,7 @@ class StudentSummary {
         username: json['username'] as String,
         fullName: json['fullName'] as String,
         active: json['active'] as bool? ?? true,
+        profileImageUrl: json['profileImageUrl'] as String?,
       );
 }
 
@@ -299,6 +302,7 @@ class TrainerSummary {
   final String username;
   final String fullName;
   final bool active;
+  final String? profileImageUrl;
 
   TrainerSummary({
     required this.membershipId,
@@ -306,6 +310,7 @@ class TrainerSummary {
     required this.username,
     required this.fullName,
     required this.active,
+    this.profileImageUrl,
   });
 
   factory TrainerSummary.fromJson(Map<String, dynamic> json) => TrainerSummary(
@@ -314,6 +319,7 @@ class TrainerSummary {
         username: json['username'] as String,
         fullName: json['fullName'] as String,
         active: json['active'] as bool? ?? true,
+        profileImageUrl: json['profileImageUrl'] as String?,
       );
 }
 
@@ -339,6 +345,7 @@ class TrainerDetail {
   /// Per course, the batches this trainer is scoped to. A course absent from the map means
   /// every batch on it.
   final Map<String, Set<String>> courseBatches;
+  final String? profileImageUrl;
 
   TrainerDetail({
     required this.userId,
@@ -355,6 +362,7 @@ class TrainerDetail {
     required this.courseFeatures,
     required this.details,
     required this.courseBatches,
+    this.profileImageUrl,
   });
 
   factory TrainerDetail.fromJson(Map<String, dynamic> json) => TrainerDetail(
@@ -378,6 +386,7 @@ class TrainerDetail {
         courseBatches: ((json['courseBatches'] as Map?) ?? {}).map(
           (k, v) => MapEntry(k as String, Set<String>.from(v as List)),
         ),
+        profileImageUrl: json['profileImageUrl'] as String?,
       );
 }
 
@@ -398,6 +407,7 @@ class StudentDetail {
   /// The extended profile fields (V26/V27), so opening the edit form does not silently drop
   /// everything the registration form collected.
   final PersonDetails? details;
+  final String? profileImageUrl;
 
   StudentDetail({
     required this.userId,
@@ -412,6 +422,7 @@ class StudentDetail {
     required this.state,
     required this.courseFees,
     required this.details,
+    this.profileImageUrl,
   });
 
   factory StudentDetail.fromJson(Map<String, dynamic> json) => StudentDetail(
@@ -431,6 +442,7 @@ class StudentDetail {
         details: json['details'] == null
             ? null
             : PersonDetails.fromJson(json['details'] as Map<String, dynamic>),
+        profileImageUrl: json['profileImageUrl'] as String?,
       );
 }
 
@@ -679,6 +691,7 @@ class EnrolmentApi {
     DateTime? startDate,
     DateTime? endDate,
     List<String> studentMembershipIds = const [],
+    String? meetingLink,
   }) {
     return _client.call(
       (dio) => dio.post('/batches', data: {
@@ -690,6 +703,7 @@ class EnrolmentApi {
         'startDate': _isoDate(startDate),
         'endDate': _isoDate(endDate),
         'studentMembershipIds': studentMembershipIds,
+        'meetingLink': meetingLink,
       }),
       (data) => Batch.fromJson(data as Map<String, dynamic>),
     );
@@ -704,6 +718,10 @@ class EnrolmentApi {
     DateTime? startDate,
     DateTime? endDate,
     required List<String> studentMembershipIds,
+
+    /// Whole-set like the roster: null clears the link, so a caller that is not editing it passes the
+    /// batch's current one back.
+    String? meetingLink,
   }) {
     return _client.call(
       (dio) => dio.put('/batches/$batchId', data: {
@@ -713,6 +731,7 @@ class EnrolmentApi {
         'startDate': _isoDate(startDate),
         'endDate': _isoDate(endDate),
         'studentMembershipIds': studentMembershipIds,
+        'meetingLink': meetingLink,
       }),
       (data) => Batch.fromJson(data as Map<String, dynamic>),
     );
@@ -750,6 +769,12 @@ class EnrolmentApi {
     );
   }
 
+  /// Takes a trainer off one course for good. Unlike [setCourseMemberActive] the trainer does not
+  /// stay on the roster greyed out; their account and other courses are untouched.
+  Future<void> removeTrainerFromCourse(String courseId, String membershipId) {
+    return _client.callVoid((dio) => dio.delete('/courses/$courseId/trainers/$membershipId'));
+  }
+
   /// Issues a fresh temp password for a student and returns it once (unified login - students log
   /// in with a password now). The admin hands it over; the student changes it on first login.
   Future<String> resetStudentPassword(String membershipId) {
@@ -767,10 +792,6 @@ class EnrolmentApi {
 
   Future<void> addMember(String batchId, String membershipId) {
     return _client.callVoid((dio) => dio.post('/batches/$batchId/members', queryParameters: {'membershipId': membershipId}));
-  }
-
-  Future<void> removeMember(String batchId, String membershipId) {
-    return _client.callVoid((dio) => dio.delete('/batches/$batchId/members', queryParameters: {'membershipId': membershipId}));
   }
 
   Future<List<String>> members(String batchId) {

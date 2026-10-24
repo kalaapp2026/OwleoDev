@@ -1,6 +1,10 @@
 package com.nest.app.enrolment.dto;
 
-import jakarta.validation.constraints.Email;
+import com.nest.app.validation.PersonName;
+import com.nest.app.validation.Phone;
+import com.nest.app.validation.StrictEmail;
+import jakarta.validation.Valid;
+
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
@@ -15,9 +19,9 @@ import java.util.UUID;
  * fully replaces the trainer's course assignment + per-course feature checklist, same shape and
  * cascading-delegation cap as registration. */
 public record UpdateTrainerRequest(
-        @NotBlank String fullName,
-        @NotBlank String phone,
-        @Email @NotBlank String email,
+        @NotBlank @PersonName String fullName,
+        @NotBlank @Phone String phone,
+        @StrictEmail @NotBlank String email,
         @Past @NotNull LocalDate dob,
         String address,
         String city,
@@ -29,6 +33,6 @@ public record UpdateTrainerRequest(
         Map<UUID, Set<UUID>> courseBatches,
 
         /** The extended profile fields. Null leaves every one of them as it was. */
-        PersonDetails details
+        @Valid PersonDetails details
 ) {
 }

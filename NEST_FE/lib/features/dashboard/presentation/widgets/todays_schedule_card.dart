@@ -6,6 +6,7 @@ import 'package:nest_fe/app/theme/app_typography.dart';
 import 'package:nest_fe/core/auth/feature_keys.dart';
 import 'package:nest_fe/core/auth/session_controller.dart';
 import 'package:nest_fe/core/design/category_meta.dart';
+import 'package:nest_fe/core/design/join_class_button.dart';
 import 'package:nest_fe/core/design/pressable.dart';
 import 'package:nest_fe/core/format/money.dart';
 import 'package:nest_fe/features/enrolment/data/batch.dart' show formatTimeOfDay;
@@ -379,6 +380,10 @@ class _ClassRow extends StatelessWidget {
               formatTimeOfDay(entry.startTime),
               style: TextStyle(fontSize: AppType.sm, fontWeight: AppType.bold, color: palette.textMuted),
             ),
+            if (entry.meetingLink != null && entry.status.meets) ...[
+              const SizedBox(width: AppSpacing.md),
+              JoinClassButton(link: entry.meetingLink!),
+            ],
           ],
         ),
       ),

@@ -90,7 +90,7 @@ public class TrainerRegistrationService {
                 user.getPhone(), user.getEmail(), user.getDob(), user.getAddress(), user.getCity(), user.getState(),
                 user.getYearsOfExperience(), courseFeaturesOf(membershipId),
                 identityRegistrationService.personDetailsOf(user, membership),
-                courseBatchesOf(membershipId));
+                courseBatchesOf(membershipId), user.getProfileImageUrl());
     }
 
     /** The public-safe trainer card the Academy Profile page's featured-trainer drill-down opens -
@@ -227,7 +227,7 @@ public class TrainerRegistrationService {
                 .map(m -> {
                     User u = usersById.get(m.getUserId());
                     return new TrainerSummaryResponse(m.getId(), u.getId(), u.getUsername(), u.getFullName(),
-                            activeByMembership.getOrDefault(m.getId(), true));
+                            activeByMembership.getOrDefault(m.getId(), true), u.getProfileImageUrl());
                 })
                 .collect(Collectors.toList());
     }

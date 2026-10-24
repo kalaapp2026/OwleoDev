@@ -45,6 +45,26 @@ public class HqOnboardingController {
         return Map.of("id", onboarding.createLead(body));
     }
 
+    /** A pre-lead: the academy's details only, no owner or account. */
+    @PostMapping("/preleads")
+    public Map<String, Object> createPreLead(@RequestBody Map<String, Object> body) {
+        write();
+        return Map.of("id", onboarding.createPreLead(body));
+    }
+
+    /** Makes a pre-lead a lead, with the owner, plan and bank details it did not have. */
+    @PostMapping("/leads/{id}/promote")
+    public void promote(@PathVariable UUID id, @RequestBody Map<String, Object> body) {
+        write();
+        onboarding.promote(id, body);
+    }
+
+    @PostMapping("/leads/{id}/drop")
+    public void drop(@PathVariable UUID id) {
+        write();
+        onboarding.drop(id);
+    }
+
     @PostMapping("/leads/{id}/start-demo")
     public Map<String, Object> startDemo(@PathVariable UUID id) {
         write();

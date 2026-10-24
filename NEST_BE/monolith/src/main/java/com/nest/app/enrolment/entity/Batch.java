@@ -60,6 +60,10 @@ public class Batch {
     @Column(name = "end_date")
     private LocalDate endDate;
 
+    /** Meet / Zoom / Teams link for an online class; null when the batch meets in person. */
+    @Column(name = "meeting_link", length = 500)
+    private String meetingLink;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     @Builder.Default

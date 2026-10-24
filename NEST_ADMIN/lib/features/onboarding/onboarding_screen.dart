@@ -16,6 +16,8 @@ import '../academies/academies_screen.dart';
 import '../academies/academy_meta.dart';
 import '../approvals/approvals_screen.dart';
 import '../shell/nav.dart';
+import 'add_academy_page.dart';
+import 'add_pre_lead_page.dart';
 
 final onboardingProvider = FutureProvider.autoDispose<Map<String, dynamic>>(
   (ref) => ref.watch(dioClientProvider).getMap('/admin/hq/onboarding'),
@@ -51,18 +53,32 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     }
   }
 
+  /// Gives up on a pre-lead or a lead. Asks first: it leaves the pipeline.
+  Future<void> _drop(Map<String, dynamic> p) async {
+    final ok = await confirmHq(context,
+        title: 'Drop ${p.str('name')}?',
+        body: 'It leaves the pipeline. Its name and email are free to use again, and you can add it back later.',
+        confirmLabel: 'Drop',
+        danger: true);
+    if (ok) await _call('/admin/hq/onboarding/leads/${p.str('id')}/drop', '${p.str('name')} dropped');
+  }
+
   @override
   Widget build(BuildContext context) {
     final data = ref.watch(onboardingProvider);
     return asyncBody(data, onRetry: () => ref.invalidate(onboardingProvider), data: (d) {
-      final leads = d.maps('leads'), demos = d.maps('demos'), live = d.maps('live');
+      final preleads = d.maps('preleads'), leads = d.maps('leads'), demos = d.maps('demos'), live = d.maps('live');
       final running = demos.where((x) => !x.flag('demoDone')).toList();
       final ready = demos.where((x) => x.flag('demoDone')).toList();
-      final counts = [leads.length, demos.length, live.length];
-      final wide = MediaQuery.sizeOf(context).width >= 760;
+      final counts = [preleads.length, leads.length, demos.length, live.length];
+      // Four columns need more room than three did.
+      final wide = MediaQuery.sizeOf(context).width >= 980;
 
       final cols = [
-        _Col('Lead', leads.length, [for (final p in leads) _leadCard(p)]),
+        _Col('Pre-lead', preleads.length, [for (final p in preleads) _preleadCard(p)],
+            action: _write ? HqButton('Add', icon: 'plus', small: true, onPressed: () => showAddPreLead(context, ref)) : null),
+        _Col('Lead', leads.length, [for (final p in leads) _leadCard(p)],
+            action: _write ? HqButton('Add', icon: 'plus', small: true, onPressed: () => showAddAcademy(context, ref)) : null),
         _Col('Demo', demos.length, [
           _Sub('Current demo', running.length, Tone.blue),
           for (final p in running) _runningCard(p),
@@ -76,7 +92,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
 
       return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         HqGrid(GridKind.g4, [
-          Kpi(icon: 'rocket', tone: Tone.violet, label: 'In pipeline', value: '${leads.length + demos.length}', foot: '${leads.length} leads · ${demos.length} demos'),
+          Kpi(icon: 'rocket', tone: Tone.violet, label: 'In pipeline', value: '${preleads.length + leads.length + demos.length}', foot: '${preleads.length} pre-leads · ${leads.length} leads · ${demos.length} demos'),
           Kpi(icon: 'clock', tone: Tone.blue, label: 'Demos running', value: '${running.length}', foot: '15 days to 3 months'),
           Kpi(icon: 'check', tone: Tone.green, label: 'Ready to go live', value: '${ready.length}', foot: 'demo completed'),
           Kpi(icon: 'rupee', tone: Tone.gold, label: 'Potential MRR', value: short(d.number('potentialMrr')), foot: 'if all go live on chosen plans'),
@@ -85,10 +101,10 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
           Padding(
             padding: const EdgeInsets.only(bottom: 12),
             child: Row(children: [
-              for (final (i, t) in const ['Lead', 'Demo', 'Live'].indexed)
+              for (final (i, t) in const ['Pre-lead', 'Lead', 'Demo', 'Live'].indexed)
                 Expanded(
                   child: Padding(
-                    padding: EdgeInsets.only(right: i < 2 ? 6 : 0),
+                    padding: EdgeInsets.only(right: i < 3 ? 6 : 0),
                     child: MouseRegion(
                       cursor: SystemMouseCursors.click,
                       child: GestureDetector(
@@ -130,7 +146,10 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
             padding: const EdgeInsets.fromLTRB(4, 2, 4, 10),
             child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
               Text(c.title, style: HqText.h3.copyWith(fontSize: 12.5)),
-              Text('${c.count}', style: HqText.small.copyWith(fontWeight: FontWeight.w700)),
+              Row(mainAxisSize: MainAxisSize.min, children: [
+                Text('${c.count}', style: HqText.small.copyWith(fontWeight: FontWeight.w700)),
+                if (c.action != null) ...[const SizedBox(width: 8), c.action!],
+              ]),
             ]),
           ),
           if (c.children.isEmpty) const _None() else for (final w in c.children) Padding(padding: const EdgeInsets.only(bottom: 10), child: w),
@@ -160,10 +179,41 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [for (var i = 0; i < children.length; i++) ...[if (i > 0) const SizedBox(height: 9), children[i]]]),
       );
 
+  /// A pre-lead: only the academy's own details are known - no owner, plan or account. Making it a
+  /// lead opens the lead form with these filled in.
+  Widget _preleadCard(Map<String, dynamic> p) => _card([
+        Row(children: [
+          Avatar(initials(p.str('name')), tone: AcademyMeta.typeTone(p.str('type')), square: true),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(p.str('name'), maxLines: 1, overflow: TextOverflow.ellipsis, style: HqText.row),
+              Text('${p.str('city')}, ${p.str('state')}', maxLines: 1, overflow: TextOverflow.ellipsis, style: HqText.small),
+            ]),
+          ),
+        ]),
+        Wrap(spacing: 6, runSpacing: 6, children: [
+          Tag(p.str('type'), tone: Tone.mute),
+          if (p.strOrNull('aphone') != null) Tag(p.str('aphone'), tone: Tone.mute),
+          if (p.strOrNull('aemail') != null) Tag(p.str('aemail'), tone: Tone.mute),
+        ]),
+        if (_write)
+          Row(children: [
+            Expanded(child: HqButton('Make lead', small: true, kind: BtnKind.primary, expand: true, onPressed: () => showAddAcademy(context, ref, from: p))),
+            const SizedBox(width: 6),
+            HqButton('Drop', small: true, onPressed: () => _drop(p)),
+          ]),
+      ]);
+
   Widget _leadCard(Map<String, dynamic> p) => _card([
         _head(p),
         _tags(p, extra: Tag('${demoTxt(p.integer('demoDays'))} demo', tone: Tone.violet)),
-        if (_write) HqButton('Start ${demoTxt(p.integer('demoDays'))} demo', small: true, onPressed: () => _call('/admin/hq/onboarding/leads/${p.str('id')}/start-demo', '', showCreds: true)),
+        if (_write)
+          Row(children: [
+            Expanded(child: HqButton('Start ${demoTxt(p.integer('demoDays'))} demo', small: true, expand: true, onPressed: () => _call('/admin/hq/onboarding/leads/${p.str('id')}/start-demo', '', showCreds: true))),
+            const SizedBox(width: 6),
+            HqButton('Drop', small: true, onPressed: () => _drop(p)),
+          ]),
       ]);
 
   Widget _runningCard(Map<String, dynamic> p) {
@@ -172,8 +222,10 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
       _head(p),
       _tags(p),
       Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-          Text('${demoTxt(tot)} demo · day ${p.integer('dayIn')} of $tot', style: HqText.small.copyWith(fontSize: 12)),
+        Row(children: [
+          // The label gives way first: four columns are narrower than three were.
+          Expanded(child: Text('${demoTxt(tot)} demo · day ${p.integer('dayIn')} of $tot', maxLines: 1, overflow: TextOverflow.ellipsis, style: HqText.small.copyWith(fontSize: 12))),
+          const SizedBox(width: 8),
           Text('$left days left', style: HqText.row.copyWith(fontSize: 12, color: low ? Hq.gold : Hq.text)),
         ]),
         const SizedBox(height: 6),
@@ -245,10 +297,13 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
 }
 
 class _Col {
-  const _Col(this.title, this.count, this.children);
+  const _Col(this.title, this.count, this.children, {this.action});
   final String title;
   final int count;
   final List<Widget> children;
+
+  /// A button in the column's header, such as "Add".
+  final Widget? action;
 }
 
 class _Sub extends StatelessWidget {

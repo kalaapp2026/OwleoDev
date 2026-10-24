@@ -18,9 +18,6 @@ public interface BatchRepository extends JpaRepository<Batch, UUID> {
     /** Calendar's source for a Trainer's own classes - the batches they're the default trainer for. */
     List<Batch> findByTrainerMembershipId(UUID trainerMembershipId);
 
-    /** Super Admin platform metrics - per-academy batch count, via that academy's course ids. */
-    long countByCourseIdIn(Collection<UUID> courseIds);
-
     /** Batch counts for every academy at once. Batch has no academy_id, so this joins through
      * Course - written as a cross-join with an explicit id match because the two entities have no
      * mapped JPA association (courseId is a plain UUID column). */

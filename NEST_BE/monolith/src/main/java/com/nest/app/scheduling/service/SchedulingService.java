@@ -1,6 +1,5 @@
 package com.nest.app.scheduling.service;
 
-import com.nest.app.scheduling.dto.AddClassInstanceRequest;
 import com.nest.app.scheduling.dto.ClassInstanceResponse;
 import com.nest.app.scheduling.dto.ScheduleResponse;
 import com.nest.app.scheduling.dto.SetScheduleRequest;
@@ -15,7 +14,6 @@ import com.nest.app.scheduling.entity.Schedule;
 import com.nest.app.scheduling.repository.ClassInstanceRepository;
 import com.nest.app.scheduling.repository.ScheduleRepository;
 import com.nest.common.audit.Auditable;
-import com.nest.common.exception.ConflictException;
 import com.nest.common.exception.ResourceNotFoundException;
 import com.nest.common.security.FeatureKey;
 import org.springframework.stereotype.Service;
@@ -96,36 +94,6 @@ public class SchedulingService {
     public List<ScheduleResponse> currentScheduleForBatch(UUID batchId) {
         return scheduleRepository.findByBatchIdAndEffectiveToIsNull(batchId).stream()
                 .map(this::toResponse).collect(Collectors.toList());
-    }
-
-    /** The Attendance module's "add a class" - a one-off session that was never on the weekly
-     * schedule (scheduleId stays null, same as a Reschedule's replacement instance), immediately
-     * available to mark attendance against. Rejects an exact batch+date+startTime duplicate so a
-     * double-tap doesn't silently create two class instances for the same session. */
-    @Transactional
-    @Auditable(action = "CLASS_INSTANCE_ADDED", entityType = "class_instance")
-    public ClassInstanceResponse addAdHocInstance(UUID batchId, AddClassInstanceRequest request) {
-        // Per-course enforcement: the controller's @RequiresFeature(ATTENDANCE) only checks the
-        // union across all courses.
-        courseFeatureGuard.assertCourseFeature(courseIdOfBatch(batchId), FeatureKey.ATTENDANCE);
-        if (classInstanceRepository.existsByBatchIdAndDateAndStartTime(batchId, request.date(), request.startTime())) {
-            throw new ConflictException("A class already exists for this batch at that date and time.");
-        }
-        ClassInstance instance = classInstanceRepository.save(ClassInstance.builder()
-                .batchId(batchId)
-                .date(request.date())
-                .startTime(request.startTime())
-                .endTime(request.endTime())
-                .status(ClassInstanceStatus.SCHEDULED)
-                .build());
-        return toResponse(instance);
-    }
-
-    @Transactional(readOnly = true)
-    public List<ClassInstanceResponse> upcomingForBatch(UUID batchId) {
-        LocalDate today = LocalDate.now();
-        return classInstanceRepository.findByBatchIdAndDateBetween(batchId, today, today.plusWeeks(MATERIALISE_WEEKS_AHEAD))
-                .stream().map(this::toResponse).collect(Collectors.toList());
     }
 
     private void supersedeExistingSchedule(UUID batchId, LocalDate newEffectiveFrom) {

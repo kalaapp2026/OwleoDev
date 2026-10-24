@@ -12,12 +12,8 @@ import java.util.UUID;
 public interface StudyMaterialStudentRepository
         extends JpaRepository<StudyMaterialStudent, StudyMaterialStudent.Key> {
 
-    List<StudyMaterialStudent> findByMaterialId(UUID materialId);
-
     /** Batched, so listing a batch's files does not fire one query per file. */
     List<StudyMaterialStudent> findByMaterialIdIn(List<UUID> materialIds);
-
-    boolean existsByMaterialIdAndMembershipId(UUID materialId, UUID membershipId);
 
     /** flush + clear because the selection is replaced wholesale: the deletes must land before
      * the re-inserts, or the two collide on the composite primary key. */

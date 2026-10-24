@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:nest_fe/app/theme/app_tokens.dart';
 import 'package:nest_fe/app/theme/app_typography.dart';
+import 'package:nest_fe/core/design/app_text_field.dart';
 import 'package:nest_fe/core/design/buttons.dart';
 import 'package:nest_fe/core/design/pressable.dart';
 import 'package:nest_fe/core/auth/session_controller.dart';
@@ -113,8 +114,10 @@ class _ChangeEmailState extends ConsumerState<ChangeEmailScreen> {
   Widget build(BuildContext context) {
     final palette = context.palette;
     final current = ref.watch(sessionControllerProvider).user?.email;
-    final valid = RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$').hasMatch(_email.text.trim());
-    final canVerify = _code.text.trim().length >= 4 && !_busy;
+    final emailRule = FieldPreset.email();
+    final codeRule = FieldPreset.otp();
+    final valid = emailRule.check(_email.text) == null;
+    final canVerify = codeRule.check(_code.text) == null && !_busy;
 
     Future<void> sendCode() => _run(() async {
           await ref.read(authApiProvider).requestEmailChangeCode(_email.text.trim());
@@ -156,13 +159,18 @@ class _ChangeEmailState extends ConsumerState<ChangeEmailScreen> {
           ),
         const SizedBox(height: AppSpacing.x4l),
         const SettingsFieldLabel('New login email'),
-        TextField(
+        CheckedField(
           controller: _email,
-          enabled: !_sent,
-          keyboardType: TextInputType.emailAddress,
-          style: TextStyle(color: palette.text),
-          decoration: settingsInput(context, 'new-email@example.com'),
-          onChanged: (_) => setState(() {}),
+          preset: emailRule,
+          builder: (context, hasError) => TextField(
+            controller: _email,
+            enabled: !_sent,
+            keyboardType: emailRule.keyboardType,
+            inputFormatters: emailRule.formatters,
+            style: TextStyle(color: palette.text),
+            decoration: settingsInput(context, 'new-email@example.com'),
+            onChanged: (_) => setState(() {}),
+          ),
         ),
         if (_sent) ...[
           const SizedBox(height: AppSpacing.x4l),
@@ -175,7 +183,8 @@ class _ChangeEmailState extends ConsumerState<ChangeEmailScreen> {
           const SettingsFieldLabel('Code'),
           TextField(
             controller: _code,
-            keyboardType: TextInputType.number,
+            keyboardType: codeRule.keyboardType,
+            inputFormatters: codeRule.formatters,
             style: TextStyle(color: palette.text, letterSpacing: 4, fontSize: AppType.x4l),
             decoration: settingsInput(context, 'Enter the code'),
             onChanged: (_) => setState(() {}),

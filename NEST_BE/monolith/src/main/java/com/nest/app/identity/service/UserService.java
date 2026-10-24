@@ -142,22 +142,6 @@ public class UserService {
         userRepository.save(user);
     }
 
-    /**
-     * Super-Admin-only escape hatch for exactly the situation that prompted it: a temporary
-     * password (shown once at creation, per PRD 3.2/3.5) got lost before anyone wrote it down.
-     * Only meaningful for password-holding accounts (Admin/Trainer) - Students/Guests are
-     * OTP-only and have no password to reset. Also revokes every existing session for that user,
-     * same as a self-service password change (com.nest.app.identity.service.AuthService#changePassword) -
-     * a reset should not leave old sessions usable.
-     */
-    @Transactional
-    @Auditable(action = "PASSWORD_RESET_BY_ADMIN", entityType = "user")
-    public String resetPasswordByUsername(String username) {
-        User user = userRepository.findByUsername(username)
-                .orElseThrow(() -> new ResourceNotFoundException("No user found with username: " + username));
-        return resetPassword(user);
-    }
-
     private String resetPassword(User user) {
         if (user.getPasswordHash() == null) {
             throw new BadRequestException("This account uses OTP login and has no password to reset");

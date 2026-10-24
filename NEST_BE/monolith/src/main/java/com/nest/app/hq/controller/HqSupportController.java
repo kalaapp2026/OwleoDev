@@ -36,12 +36,6 @@ public class HqSupportController {
         return support.list(kind, st, q);
     }
 
-    @GetMapping("/counts")
-    public Map<String, Object> counts() {
-        access.requireModule("support");
-        return support.counts();
-    }
-
     @GetMapping("/{id}")
     public Map<String, Object> detail(@PathVariable UUID id) {
         access.requireModule("support");

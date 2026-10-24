@@ -160,13 +160,6 @@ class StudyMaterialApi {
     );
   }
 
-  Future<MaterialPlaylist> renamePlaylist(String playlistId, String name) {
-    return _client.call(
-      (dio) => dio.put('/material-playlists/$playlistId', data: {'name': name}),
-      (data) => MaterialPlaylist.fromJson(data as Map<String, dynamic>),
-    );
-  }
-
   Future<void> deletePlaylist(String playlistId) {
     return _client.callVoid((dio) => dio.delete('/material-playlists/$playlistId'));
   }

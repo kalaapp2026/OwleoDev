@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:nest_fe/app/theme/app_tokens.dart';
 import 'package:nest_fe/app/theme/app_typography.dart';
-import 'package:nest_fe/core/design/attached_select.dart';
 import 'package:nest_fe/core/design/pressable.dart';
 import 'package:nest_fe/core/format/money.dart';
-import 'package:nest_fe/features/enrolment/data/person_details.dart';
+
+// The text inputs (AppTextField, PhoneInput, appInputDecoration, FieldPreset) live in core/design so
+// every feature shares one set; re-exported here for the forms that already import this file.
+export 'package:nest_fe/core/design/app_text_field.dart';
 
 /// A labelled slot in a form: small caps label, the control, and an optional hint or error below.
 ///
@@ -66,174 +67,6 @@ class LabeledField extends StatelessWidget {
           ],
         ],
       ),
-    );
-  }
-}
-
-/// The shared text input styling. Every form field in this module goes through here so a change
-/// to the field shape does not have to be chased across twenty call sites.
-InputDecoration appInputDecoration(
-  AppPalette palette,
-  String hint, {
-  Widget? prefix,
-  bool hasError = false,
-}) {
-  OutlineInputBorder border(Color color) => OutlineInputBorder(
-        borderRadius: AppRadii.all(AppRadii.xl),
-        borderSide: BorderSide(color: color),
-      );
-  return InputDecoration(
-    isDense: true,
-    hintText: hint,
-    hintStyle: TextStyle(
-        fontSize: AppType.lg, fontWeight: AppType.regular, color: palette.textFaint),
-    prefixIcon: prefix,
-    prefixIconConstraints: const BoxConstraints(minWidth: 40, minHeight: 0),
-    filled: true,
-    fillColor: palette.surfaceRaised,
-    contentPadding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.xl, vertical: AppSpacing.lg),
-    border: border(palette.border),
-    enabledBorder: border(hasError ? palette.notPaid : palette.border),
-    focusedBorder: border(palette.primary),
-  );
-}
-
-class AppTextField extends StatelessWidget {
-  const AppTextField({
-    super.key,
-    required this.controller,
-    required this.hint,
-    this.onChanged,
-    this.keyboardType,
-    this.textCapitalization = TextCapitalization.none,
-    this.inputFormatters,
-    this.icon,
-    this.hasError = false,
-    this.maxLines = 1,
-    this.autofocus = false,
-    this.focusNode,
-    this.onSubmitted,
-  });
-
-  final TextEditingController controller;
-  final String hint;
-  final FocusNode? focusNode;
-  final ValueChanged<String>? onSubmitted;
-  final ValueChanged<String>? onChanged;
-  final TextInputType? keyboardType;
-  final TextCapitalization textCapitalization;
-  final List<TextInputFormatter>? inputFormatters;
-  final IconData? icon;
-  final bool hasError;
-  final int maxLines;
-  final bool autofocus;
-
-  @override
-  Widget build(BuildContext context) {
-    final palette = context.palette;
-    return TextField(
-      controller: controller,
-      focusNode: focusNode,
-      onChanged: onChanged,
-      onSubmitted: onSubmitted,
-      keyboardType: keyboardType,
-      textCapitalization: textCapitalization,
-      inputFormatters: inputFormatters,
-      maxLines: maxLines,
-      autofocus: autofocus,
-      style: TextStyle(
-          fontSize: AppType.xxl, fontWeight: AppType.medium, color: palette.text),
-      decoration: appInputDecoration(
-        palette,
-        hint,
-        hasError: hasError,
-        prefix: icon == null
-            ? null
-            : Padding(
-                padding: const EdgeInsets.only(left: AppSpacing.lg, right: AppSpacing.sm),
-                child: Icon(icon, size: 15, color: palette.textFaint),
-              ),
-      ),
-    );
-  }
-}
-
-/// A phone number split into a dialling-code select and a digits field.
-///
-/// Kept as one widget because the two halves are one value: the code alone is meaningless, and
-/// storing them apart means every reader has to remember to reassemble them.
-class PhoneField extends StatelessWidget {
-  const PhoneField({
-    super.key,
-    required this.code,
-    required this.controller,
-    required this.onCodeChanged,
-    this.onChanged,
-    this.hint = 'Phone number',
-    this.hasError = false,
-  });
-
-  final String code;
-  final TextEditingController controller;
-  final ValueChanged<String> onCodeChanged;
-  final ValueChanged<String>? onChanged;
-  final String hint;
-  final bool hasError;
-
-  @override
-  Widget build(BuildContext context) {
-    final palette = context.palette;
-    final selected = CountryCode.options.firstWhere(
-      (c) => c.code == code,
-      orElse: () => CountryCode.options.first,
-    );
-    return Row(
-      children: [
-        SizedBox(
-          width: 104,
-          child: AttachedSelect<CountryCode>(
-            label: 'Code',
-            options: CountryCode.options,
-            labelOf: (c) => c.code,
-            value: selected,
-            onSelected: (c) => onCodeChanged(c.code),
-            optionBuilder: (context, option, _) => Row(
-              children: [
-                SizedBox(
-                  width: 42,
-                  child: Text(option.code,
-                      style: TextStyle(
-                          fontSize: AppType.xl,
-                          fontWeight: AppType.bold,
-                          color: option.code == code ? palette.primary : palette.text)),
-                ),
-                Expanded(
-                  child: Text(option.country,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                          fontSize: AppType.md, color: palette.textMuted)),
-                ),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(width: AppSpacing.sm),
-        Expanded(
-          child: AppTextField(
-            controller: controller,
-            hint: hint,
-            onChanged: onChanged,
-            hasError: hasError,
-            keyboardType: TextInputType.phone,
-            inputFormatters: [
-              FilteringTextInputFormatter.digitsOnly,
-              LengthLimitingTextInputFormatter(15),
-            ],
-          ),
-        ),
-      ],
     );
   }
 }

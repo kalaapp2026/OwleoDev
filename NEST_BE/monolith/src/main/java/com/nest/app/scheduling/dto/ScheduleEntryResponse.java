@@ -52,7 +52,9 @@ public record ScheduleEntryResponse(
          * classes nobody has marked yet. */
         boolean attendanceMarked,
         /** Roster size, so the attendance list can show "4 students" before opening the class. */
-        int studentCount
+        int studentCount,
+        /** The batch's online-class link, so a Join button can sit on the row. Null for in-person batches. */
+        String meetingLink
 ) {
     public record PersonRef(UUID membershipId, String name) {
     }

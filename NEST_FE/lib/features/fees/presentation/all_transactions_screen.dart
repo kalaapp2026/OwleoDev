@@ -8,7 +8,7 @@ import 'package:nest_fe/features/fees/data/student_statement.dart';
 import 'package:nest_fe/features/fees/data/transaction_ledger.dart';
 import 'package:nest_fe/features/fees/presentation/fee_format.dart';
 import 'package:nest_fe/features/fees/presentation/fee_reports.dart';
-import 'package:nest_fe/features/fees/presentation/fees_screen.dart' show feesApiProvider;
+import 'package:nest_fe/features/fees/data/fees_api.dart' show feesApiProvider;
 import 'package:nest_fe/features/fees/presentation/student_profile_screen.dart';
 
 typedef _LedgerKey = ({DateTime from, DateTime to, FeeCategory? category, String query});

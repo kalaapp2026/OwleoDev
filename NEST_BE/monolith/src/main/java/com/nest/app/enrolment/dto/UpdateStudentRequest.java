@@ -1,6 +1,10 @@
 package com.nest.app.enrolment.dto;
 
-import jakarta.validation.constraints.Email;
+import com.nest.app.validation.PersonName;
+import com.nest.app.validation.Phone;
+import com.nest.app.validation.StrictEmail;
+import jakarta.validation.Valid;
+
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
@@ -13,16 +17,16 @@ import java.util.List;
  * enrolment + per-course fee set (dropped courses are unenrolled; the per-course active flag on
  * surviving courses is preserved). */
 public record UpdateStudentRequest(
-        @NotBlank String fullName,
-        @NotBlank String phone,
+        @NotBlank @PersonName String fullName,
+        @NotBlank @Phone String phone,
         @Past @NotNull LocalDate dob,
-        @Email String email,
+        @StrictEmail String email,
         String address,
         String city,
         String state,
         @NotEmpty List<CourseFeeSelection> courses,
 
         /** The extended profile fields. Null leaves every one of them as it was. */
-        PersonDetails details
+        @Valid PersonDetails details
 ) {
 }

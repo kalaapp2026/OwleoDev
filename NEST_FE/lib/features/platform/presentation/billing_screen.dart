@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:nest_fe/core/design/app_text_field.dart';
 import 'package:nest_fe/core/error/api_exception.dart';
 import 'package:nest_fe/core/providers/core_providers.dart';
 import 'package:nest_fe/core/widgets/app_notice.dart';
@@ -405,10 +406,11 @@ class _RecordPaymentDialogState extends State<_RecordPaymentDialog> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            TextField(
+            ValidatedTextField(
               controller: _amount,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              decoration: const InputDecoration(labelText: 'Amount received', prefixText: '₹ '),
+              label: 'Amount received',
+              preset: FieldPreset.amount(label: 'amount'),
+              prefixText: '₹ ',
             ),
             const SizedBox(height: 14),
             // A picker, not free text - the method is a fixed set, and typing it invites
@@ -422,14 +424,16 @@ class _RecordPaymentDialogState extends State<_RecordPaymentDialog> {
               onChanged: (v) => setState(() => _method = v ?? 'UPI'),
             ),
             const SizedBox(height: 14),
-            TextField(
+            ValidatedTextField(
               controller: _reference,
-              decoration: const InputDecoration(labelText: 'Reference / txn id (optional)'),
+              label: 'Reference / txn id (optional)',
+              preset: FieldPreset.text(label: 'reference', max: 60, required: false),
             ),
             const SizedBox(height: 14),
-            TextField(
+            ValidatedTextField(
               controller: _note,
-              decoration: const InputDecoration(labelText: 'Note (optional)'),
+              label: 'Note (optional)',
+              preset: FieldPreset.text(label: 'note', max: 200, required: false),
             ),
           ],
         ),
@@ -438,11 +442,14 @@ class _RecordPaymentDialogState extends State<_RecordPaymentDialog> {
         TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancel')),
         FilledButton(
           onPressed: () {
-            final amount = double.tryParse(_amount.text.trim());
-            if (amount == null || amount <= 0) {
-              AppNotice.error(context, 'Enter a valid amount.');
+            final problem = FieldPreset.amount(label: 'amount').check(_amount.text) ??
+                FieldPreset.text(label: 'reference', max: 60, required: false).check(_reference.text) ??
+                FieldPreset.text(label: 'note', max: 200, required: false).check(_note.text);
+            if (problem != null) {
+              AppNotice.error(context, problem);
               return;
             }
+            final amount = double.parse(_amount.text.replaceAll(',', '').trim());
             Navigator.of(context).pop(_PaymentEntry(
               amount,
               _method,

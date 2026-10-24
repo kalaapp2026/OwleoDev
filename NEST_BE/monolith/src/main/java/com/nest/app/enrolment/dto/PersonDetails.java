@@ -1,5 +1,10 @@
 package com.nest.app.enrolment.dto;
 
+import com.nest.app.validation.PersonName;
+import com.nest.app.validation.Phone;
+import com.nest.app.validation.PostalCode;
+import jakarta.validation.constraints.Size;
+
 import java.time.LocalDate;
 
 /**
@@ -14,29 +19,29 @@ import java.time.LocalDate;
  * and a phone number and nothing else yet, and rejecting it would push staff back to paper.
  */
 public record PersonDetails(
-        String firstName,
-        String lastName,
+        @PersonName String firstName,
+        @PersonName String lastName,
         String gender,
         String bloodGroup,
-        String altPhone,
+        @Phone(mobileOnly = false) String altPhone,
         String photoUrl,
 
         // Structured address. addressLine1 maps onto the existing single-line `address` column.
-        String addressLine1,
-        String addressLine2,
-        String landmark,
-        String city,
-        String district,
-        String state,
-        String country,
-        String pinCode,
+        @Size(max = 160) String addressLine1,
+        @Size(max = 160) String addressLine2,
+        @Size(max = 80) String landmark,
+        @Size(max = 100) String city,
+        @Size(max = 100) String district,
+        @Size(max = 100) String state,
+        @Size(max = 100) String country,
+        @PostalCode String pinCode,
 
         /** Student-only. */
-        String guardianName,
-        String emergencyContact,
+        @PersonName String guardianName,
+        @Phone(mobileOnly = false) String emergencyContact,
 
         /** Trainer-only. */
-        String qualification,
+        @Size(max = 200) String qualification,
 
         /** Trainer-only. Monthly pay at this academy; null means not recorded, which is not zero. */
         java.math.BigDecimal salary,

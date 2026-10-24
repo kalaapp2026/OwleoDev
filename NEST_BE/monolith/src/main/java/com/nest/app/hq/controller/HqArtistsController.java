@@ -46,12 +46,6 @@ public class HqArtistsController {
         return artists.list(f, q);
     }
 
-    @GetMapping("/counts")
-    public Map<String, Object> counts() {
-        access.requireModule("artists");
-        return artists.counts();
-    }
-
     @GetMapping("/{id}")
     public Map<String, Object> detail(@PathVariable UUID id) {
         access.requireModule("artists");

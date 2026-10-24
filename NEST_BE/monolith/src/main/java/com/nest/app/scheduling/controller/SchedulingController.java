@@ -1,6 +1,5 @@
 package com.nest.app.scheduling.controller;
 
-import com.nest.app.scheduling.dto.AddClassInstanceRequest;
 import com.nest.app.scheduling.dto.CancelClassRequest;
 import com.nest.app.scheduling.dto.ClassInstanceResponse;
 import com.nest.app.scheduling.dto.RescheduleRequest;
@@ -53,18 +52,6 @@ public class SchedulingController {
     @GetMapping("/batches/{batchId}/schedule")
     public List<ScheduleResponse> currentSchedule(@PathVariable UUID batchId) {
         return schedulingService.currentScheduleForBatch(batchId);
-    }
-
-    @GetMapping("/batches/{batchId}/class-instances")
-    public List<ClassInstanceResponse> upcoming(@PathVariable UUID batchId) {
-        return schedulingService.upcomingForBatch(batchId);
-    }
-
-    /** Attendance module's "add a class" - a one-off session not on the weekly schedule. */
-    @PostMapping("/batches/{batchId}/class-instances")
-    @RequiresFeature(FeatureKey.ATTENDANCE)
-    public ClassInstanceResponse addClassInstance(@PathVariable UUID batchId, @Valid @RequestBody AddClassInstanceRequest request) {
-        return schedulingService.addAdHocInstance(batchId, request);
     }
 
     @PostMapping("/class-instances/{id}/reschedule")

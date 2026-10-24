@@ -457,35 +457,6 @@ public class FeesService {
     }
 
     /**
-     * The statement as CSV.
-     *
-     * <p>Takes the same category filter the screen does, so the download is exactly what the
-     * reader is looking at. A report that silently widens to the full dataset is worse than no
-     * report - it gets sent to a parent with other people's periods in it.</p>
-     */
-    @Transactional(readOnly = true)
-    public String generateStatementCsv(UUID membershipId, FeeCategory category) {
-        StudentStatementResponse statement = statement(membershipId, category);
-        StringBuilder csv = new StringBuilder();
-        csv.append("Period,Category,Context,Fee,Paid,Balance,Status,Payment Date,Mode\n");
-        for (StudentStatementResponse.StatementRow row : statement.rows()) {
-            csv.append(csvField(row.label())).append(',')
-                    .append(row.category()).append(',')
-                    .append(csvField(row.context())).append(',')
-                    .append(row.fee()).append(',')
-                    .append(row.paid()).append(',')
-                    .append(row.fee().subtract(row.paid())).append(',')
-                    .append(row.status()).append(',')
-                    .append(row.paidOn() == null ? "-" : row.paidOn()).append(',')
-                    .append(row.mode() == null ? "-" : row.mode()).append('\n');
-        }
-        csv.append("\nTotal billed,").append(statement.totalBilled()).append('\n');
-        csv.append("Total paid,").append(statement.totalPaid()).append('\n');
-        csv.append("Outstanding,").append(statement.outstanding()).append('\n');
-        return csv.toString();
-    }
-
-    /**
      * Change what one student is charged for one course.
      *
      * <p>Only the agreed fee moves. Nothing recalculates and no status is written, because status
@@ -646,76 +617,6 @@ public class FeesService {
         BigDecimal balance = agreedFee.subtract(totalPaid);
         boolean closed = slip.map(s -> s.getStatus() == FeeSlipStatus.CLOSED).orElse(false);
         return new FeeBalanceResponse(membershipId, courseId, period, agreedFee, totalPaid, balance, closed);
-    }
-
-    @Transactional(readOnly = true)
-    public List<FeeTransactionResponse> historyForStudent(UUID membershipId) {
-        List<FeeTransaction> transactions = feeTransactionRepository
-                .findByMembershipIdOrderByCreatedAtDesc(membershipId);
-        boolean isSelf = membershipId.equals(TenantContext.currentMembershipId());
-        return transactions.stream()
-                .filter(t -> isSelf || t.getCourseId() == null
-                        || courseFeatureGuard.hasCourseFeature(t.getCourseId(), FeatureKey.FEES_ENTRY))
-                .map(this::toResponse).collect(Collectors.toList());
-    }
-
-    /** Course/batch/month/mode-filtered aggregate for the Fees Dashboard (PRD 3.9.3) - Phase 1
-     * ships the course+period slice; full multi-dimension filtering is later polish. */
-    @Transactional(readOnly = true)
-    public BigDecimal collectedForCourseAndPeriod(UUID courseId, String period) {
-        courseFeatureGuard.assertCourseFeature(courseId, FeatureKey.FEES_DASHBOARD);
-        return feeTransactionRepository.findByCourseIdAndPeriod(courseId, period).stream()
-                .map(FeeTransaction::getAmountPaid)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
-    }
-
-    /** The download report: every active Student mapped to this course, what they owe and paid
-     * this period, and the course's own fee cycle label - one CSV row per student. */
-    @Transactional(readOnly = true)
-    public String generateCourseReport(UUID courseId, String period) {
-        // Per-course enforcement: the controller's @RequiresFeature(FEES_DASHBOARD) only checks
-        // the union across all courses.
-        courseFeatureGuard.assertCourseFeature(courseId, FeatureKey.FEES_DASHBOARD);
-        Course course = courseRepository.findById(courseId)
-                .orElseThrow(() -> new ResourceNotFoundException("Course not found: " + courseId));
-
-        List<CourseMap> mappings = courseMapRepository.findByCourseId(courseId);
-        Set<UUID> membershipIds = mappings.stream().map(CourseMap::getMembershipId).collect(Collectors.toSet());
-        Map<UUID, BigDecimal> agreedFeeByMembership = mappings.stream()
-                .collect(Collectors.toMap(CourseMap::getMembershipId, cm -> cm.getAgreedFee() != null ? cm.getAgreedFee() : BigDecimal.ZERO));
-
-        List<AcademyMembership> students = membershipRepository.findAllById(membershipIds).stream()
-                .filter(m -> m.getRoleType() == Role.STUDENT && m.getStatus() == MembershipStatus.ACTIVE)
-                .sorted((a, b) -> a.getId().compareTo(b.getId()))
-                .toList();
-        Map<UUID, User> usersById = userRepository.findAllById(
-                students.stream().map(AcademyMembership::getUserId).collect(Collectors.toSet())
-        ).stream().collect(Collectors.toMap(User::getId, u -> u));
-
-        StringBuilder csv = new StringBuilder();
-        csv.append("Student,Course,Fee Cycle,Period,Amount Due,Amount Paid,Balance,Status\n");
-        for (AcademyMembership membership : students) {
-            User user = usersById.get(membership.getUserId());
-            var slip = feeSlipRepository.findByMembershipIdAndCourseIdAndPeriod(membership.getId(), courseId, period);
-            BigDecimal due = slip.map(FeeSlip::getAmountDue)
-                    .orElse(agreedFeeByMembership.getOrDefault(membership.getId(), BigDecimal.ZERO));
-            BigDecimal paid = feeTransactionRepository.sumPaid(membership.getId(), courseId, period);
-            BigDecimal balance = due.subtract(paid);
-            boolean closed = slip.map(s -> s.getStatus() == FeeSlipStatus.CLOSED).orElse(false);
-            String status = closed ? "Closed"
-                    : balance.compareTo(BigDecimal.ZERO) <= 0 ? "Paid"
-                    : paid.compareTo(BigDecimal.ZERO) > 0 ? "Partial" : "Due";
-
-            csv.append(csvField(user == null ? "Unknown" : user.getFullName())).append(',')
-                    .append(csvField(course.getName())).append(',')
-                    .append(course.getFeeCycle()).append(',')
-                    .append(period).append(',')
-                    .append(due).append(',')
-                    .append(paid).append(',')
-                    .append(balance).append(',')
-                    .append(status).append('\n');
-        }
-        return csv.toString();
     }
 
     private String csvField(String value) {

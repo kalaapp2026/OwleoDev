@@ -170,11 +170,6 @@ public class HqArtists {
         return m;
     }
 
-    public Map<String, Object> counts() {
-        Map<String, Object> l = list("all", null);
-        return Map.of("todo", ((Number) l.get("pending")).intValue() + ((Number) l.get("openReports")).intValue());
-    }
-
     private Map<String, Object> row(UUID id) {
         var rows = jdbc.queryForList(BASE + " WHERE a.id = ?", id);
         if (rows.isEmpty()) throw new ResourceNotFoundException("Request not found");

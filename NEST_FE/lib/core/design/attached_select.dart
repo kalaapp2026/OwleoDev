@@ -45,7 +45,7 @@ class AttachedSelect<T> extends StatefulWidget {
     this.dotColor,
     this.locked = false,
     this.enabled = true,
-    this.searchable = false,
+    this.searchable,
     this.searchHint = 'Search',
     this.panelSpan = PanelSpan.trigger,
     this.panelWidth,
@@ -90,7 +90,11 @@ class AttachedSelect<T> extends StatefulWidget {
   /// Greyed and inert - the downstream half of a cascade before the upstream choice is made.
   final bool enabled;
 
-  final bool searchable;
+  /// Whether the open list offers a search. Left unset it follows the length of the list: anything with
+  /// more than [autoSearchAbove] options gets one, so nobody scrolls to the end of a long list by hand.
+  /// True or false forces it.
+  final bool? searchable;
+  static const autoSearchAbove = 5;
   final String searchHint;
   final PanelSpan panelSpan;
 
@@ -319,7 +323,7 @@ class _AttachedSelectState<T> extends State<AttachedSelect<T>> {
                         _PanelHeader(
                           count: options.length,
                           total: widget.options.length,
-                          searchable: widget.searchable,
+                          searchable: widget.searchable ?? widget.options.length > AttachedSelect.autoSearchAbove,
                           searchVisible: _searchVisible,
                           onToggleSearch: () {
                             setState(() {

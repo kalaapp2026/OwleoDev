@@ -260,11 +260,6 @@ public class HqBilling {
         audit.log("collections", (UUID) bill.get("academy_id"), "Recorded " + inr(amount) + " (" + mode + ") on " + bill.get("number"));
     }
 
-    @Transactional
-    public void addAdjustment(UUID invoiceId, String description, boolean credit, BigDecimal amount) {
-        addCharge(invoiceId, "ADJUSTMENT", description, credit, amount);
-    }
-
     /**
      * Adds a line to an unpaid bill. [kind] is ADJUSTMENT (a charge or a credit), MARKETING (the fee for
      * promotion) or COMMISSION (event commission); only an adjustment can be a credit.

@@ -12,5 +12,4 @@ public interface PushDeviceTokenRepository extends JpaRepository<PushDeviceToken
 
     Optional<PushDeviceToken> findByToken(String token);
 
-    void deleteByToken(String token);
 }

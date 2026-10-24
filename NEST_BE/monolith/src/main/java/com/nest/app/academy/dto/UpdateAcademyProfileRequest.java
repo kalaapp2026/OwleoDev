@@ -1,5 +1,9 @@
 package com.nest.app.academy.dto;
 
+import com.nest.app.validation.Phone;
+import com.nest.app.validation.StrictEmail;
+import com.nest.app.validation.PostalCode;
+
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
@@ -26,14 +30,14 @@ public record UpdateAcademyProfileRequest(
         @Size(max = 200) String area,
         @Size(max = 100) String city,
         @Size(max = 100) String state,
-        @Size(max = 10) String pinCode,
-        String contactNumber,
-        String email,
+        @Size(max = 10) @PostalCode String pinCode,
+        @Phone String contactNumber,
+        @StrictEmail String email,
         String instagramUrl,
         String xUrl,
         String facebookUrl,
         String youtubeUrl,
-        String whatsapp,
+        @Phone String whatsapp,
         String websiteUrl,
         String mapsUrl,
         @Size(max = 20) String coverStyle,

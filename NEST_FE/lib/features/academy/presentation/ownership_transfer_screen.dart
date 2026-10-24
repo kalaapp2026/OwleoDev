@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:nest_fe/app/theme/app_tokens.dart';
 import 'package:nest_fe/app/theme/app_typography.dart';
+import 'package:nest_fe/core/design/app_text_field.dart';
 import 'package:nest_fe/core/design/buttons.dart';
 import 'package:nest_fe/core/design/confirm_dialog.dart';
 import 'package:nest_fe/core/design/pressable.dart';
@@ -12,7 +13,8 @@ import 'package:nest_fe/features/academy/presentation/academy_settings_kit.dart'
 
 const _reasons = ['Stepping down', 'Selling the academy', 'Other'];
 
-final _emailPattern = RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$');
+final _emailRule = FieldPreset.email();
+final _notesRule = FieldPreset.text(label: 'notes', max: 1000, required: false);
 
 /// Asks the Owleo team to hand the academy to a new owner. Ownership affects billing and access for
 /// everyone, so it is a request the team verifies and carries out, not something changed in-app.
@@ -36,7 +38,7 @@ class _OwnershipTransferScreenState extends ConsumerState<OwnershipTransferScree
     super.dispose();
   }
 
-  bool get _valid => _emailPattern.hasMatch(_email.text.trim());
+  bool get _valid => _emailRule.check(_email.text) == null && _notesRule.check(_notes.text) == null;
 
   Future<void> _submit() async {
     final confirmed = await showAppConfirmDialog(
@@ -97,12 +99,17 @@ class _OwnershipTransferScreenState extends ConsumerState<OwnershipTransferScree
         ),
         const SizedBox(height: AppSpacing.x4l),
         const SettingsFieldLabel("New owner's email"),
-        TextField(
+        CheckedField(
           controller: _email,
-          keyboardType: TextInputType.emailAddress,
-          onChanged: (_) => setState(() {}),
-          style: TextStyle(color: palette.text),
-          decoration: settingsInput(context, 'their-email@example.com'),
+          preset: _emailRule,
+          builder: (context, hasError) => TextField(
+            controller: _email,
+            keyboardType: _emailRule.keyboardType,
+            inputFormatters: _emailRule.formatters,
+            onChanged: (_) => setState(() {}),
+            style: TextStyle(color: palette.text),
+            decoration: settingsInput(context, 'their-email@example.com'),
+          ),
         ),
         const SizedBox(height: AppSpacing.x4l),
         const SettingsFieldLabel('Reason'),
@@ -131,12 +138,18 @@ class _OwnershipTransferScreenState extends ConsumerState<OwnershipTransferScree
         ),
         const SizedBox(height: AppSpacing.x4l),
         const SettingsFieldLabel('Notes (optional)'),
-        TextField(
+        CheckedField(
           controller: _notes,
-          maxLines: 4,
-          maxLength: 1000,
-          style: TextStyle(color: palette.text),
-          decoration: settingsInput(context, 'Anything the team should know').copyWith(counterText: ''),
+          preset: _notesRule,
+          builder: (context, hasError) => TextField(
+            controller: _notes,
+            maxLines: 4,
+            maxLength: 1000,
+            onChanged: (_) => setState(() {}),
+            textCapitalization: _notesRule.textCapitalization,
+            style: TextStyle(color: palette.text),
+            decoration: settingsInput(context, 'Anything the team should know').copyWith(counterText: ''),
+          ),
         ),
       ],
     );

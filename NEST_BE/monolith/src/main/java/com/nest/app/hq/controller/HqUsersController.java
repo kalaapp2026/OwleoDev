@@ -40,12 +40,6 @@ public class HqUsersController {
         return users.list(q, academy, course, batch, trainer, status, flt, Math.min(Math.max(limit, 1), 100), Math.max(offset, 0));
     }
 
-    @GetMapping("/summary")
-    public Map<String, Object> summary() {
-        access.requireModule("users");
-        return users.summary();
-    }
-
     @GetMapping("/filters")
     public Map<String, Object> filters(@RequestParam(required = false) UUID academy) {
         access.requireModule("users");

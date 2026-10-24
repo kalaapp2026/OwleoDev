@@ -51,7 +51,4 @@ class SocialApi {
     return _client.callVoid((dio) => dio.delete('/posts/$postId'));
   }
 
-  Future<void> markInterest({String? eventId, String? postId}) {
-    return _client.callVoid((dio) => dio.post('/interests', data: {'eventId': eventId, 'postId': postId}));
-  }
 }

@@ -214,20 +214,6 @@ class FeeStatementTest {
     }
 
     @Test
-    void csvCarriesTheSameRowsAndTotalsAsTheScreen() {
-        wire(List.of(slip("2026-08", "1000", FeeSlipStatus.OPEN)),
-                List.of(payment("2026-08", "400", LocalDate.of(2026, 8, 12))));
-
-        String csv = feesService.generateStatementCsv(membershipId, null);
-
-        assertThat(csv).startsWith("Period,Category,Context,Fee,Paid,Balance,Status,Payment Date,Mode");
-        // Text fields are quoted - a course named "Guitar, Advanced" must not split into two columns.
-        assertThat(csv).contains("\"2026-08\",REGULAR,\"Guitar Beginner\",1000,400,600,PARTIAL,2026-08-12,CASH");
-        assertThat(csv).contains("Total billed,1000");
-        assertThat(csv).contains("Outstanding,600");
-    }
-
-    @Test
     void anotherAcademysStudentHasNoStatement() {
         when(membershipRepository.findById(membershipId)).thenReturn(Optional.of(
                 AcademyMembership.builder().id(membershipId).userId(userId)

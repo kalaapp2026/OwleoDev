@@ -21,10 +21,9 @@ import java.util.UUID;
 /**
  * A file shared with one batch - this week's chord chart, a backing track, a photo of the board.
  *
- * <p>Deliberately not hung off {@link SyllabusUnit}: a syllabus unit is curriculum structure
- * (what the course teaches, in order), whereas this is a file drop for a specific group of
- * students. Routing the latter through the former would mean inventing a curriculum unit every
- * time a trainer shares a PDF.
+ * <p>This replaced the old per-course syllabus units (V29): material hangs off a batch, not off an
+ * ordered curriculum structure. The old {@code syllabus_*} tables are kept in the database but
+ * nothing reads them.
  */
 @Entity
 @Table(name = "study_materials", indexes = {

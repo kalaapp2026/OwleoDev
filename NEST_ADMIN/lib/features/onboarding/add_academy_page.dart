@@ -15,12 +15,15 @@ import '../academies/academy_form.dart';
 import '../plans/plans_screen.dart';
 import 'onboarding_screen.dart';
 
-/// Opens the full-screen Add academy form. On success the new lead appears in the pipeline.
-Future<void> showAddAcademy(BuildContext context, WidgetRef ref) async {
-  final done = await showHqFullPage<bool>(context, builder: (_) => const AddAcademyPage());
+/// Opens the full-screen lead form. On success the lead appears in the pipeline.
+///
+/// Pass [from] (a pre-lead as the pipeline lists it) to make that pre-lead a lead: the academy's details
+/// are filled in, and the form asks for what a pre-lead does not have - the owner, plan and bank accounts.
+Future<void> showAddAcademy(BuildContext context, WidgetRef ref, {Map<String, dynamic>? from}) async {
+  final done = await showHqFullPage<bool>(context, builder: (_) => AddAcademyPage(from: from));
   if (done == true) {
     ref.invalidate(onboardingProvider);
-    if (context.mounted) showToast(context, 'Added to Onboarding as a lead');
+    if (context.mounted) showToast(context, from == null ? 'Added to Onboarding as a lead' : '${from.str('name')} is now a lead');
   }
 }
 
@@ -47,14 +50,17 @@ class _Acct {
 }
 
 class AddAcademyPage extends ConsumerStatefulWidget {
-  const AddAcademyPage({super.key});
+  const AddAcademyPage({super.key, this.from});
+
+  /// A pre-lead being made into a lead, or null for a brand new lead.
+  final Map<String, dynamic>? from;
 
   @override
   ConsumerState<AddAcademyPage> createState() => _AddAcademyPageState();
 }
 
 class _AddAcademyPageState extends ConsumerState<AddAcademyPage> {
-  final AcademyFormData _data = AcademyFormData();
+  late final AcademyFormData _data = AcademyFormData(from: widget.from);
   final List<_Acct> _accts = [_Acct(), _Acct()];
   int _shown = 1;
   int _primary = 0;
@@ -62,8 +68,11 @@ class _AddAcademyPageState extends ConsumerState<AddAcademyPage> {
   final _est = TextEditingController();
   String _demo = '60';
   final _customDays = TextEditingController(text: '60');
-  final Set<String> _open = {'details'};
+  // A pre-lead already has its academy details, so open on what it is missing.
+  late final Set<String> _open = widget.from == null ? {'details'} : {'owner'};
   bool _busy = false;
+
+  bool get _promoting => widget.from != null;
 
   @override
   void initState() {
@@ -111,7 +120,8 @@ class _AddAcademyPageState extends ConsumerState<AddAcademyPage> {
     }
     setState(() => _busy = true);
     try {
-      await ref.read(dioClientProvider).postMap('/admin/hq/onboarding/leads', body: {
+      final path = _promoting ? '/admin/hq/onboarding/leads/${widget.from!.str('id')}/promote' : '/admin/hq/onboarding/leads';
+      await ref.read(dioClientProvider).postMap(path, body: {
         ..._data.toJson(),
         'plan': _plan,
         'est': int.parse(_est.text.trim()),
@@ -145,7 +155,11 @@ class _AddAcademyPageState extends ConsumerState<AddAcademyPage> {
           builder: (context, _) => SingleChildScrollView(
             padding: const EdgeInsets.fromLTRB(16, 20, 16, 40),
             child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-              FormTopBar(title: 'Add academy', subtitle: 'Create an academy profile', onBack: () => Navigator.of(context).pop()),
+              FormTopBar(
+                title: _promoting ? 'Make lead' : 'Add lead',
+                subtitle: _promoting ? "Add the owner, plan and bank accounts to ${widget.from!.str('name')}" : 'Create an academy profile',
+                onBack: () => Navigator.of(context).pop(),
+              ),
               AcademyFormSections(data: _data, open: _open, onToggle: toggle),
               CollapsibleSection(
                 icon: 'bank',
@@ -196,7 +210,7 @@ class _AddAcademyPageState extends ConsumerState<AddAcademyPage> {
                   ]),
                 ]),
               ),
-              HqButton('Create academy', icon: 'check', kind: BtnKind.primary, expand: true, busy: _busy, onPressed: issues.isEmpty ? _submit : null),
+              HqButton(_promoting ? 'Make lead' : 'Create academy', icon: 'check', kind: BtnKind.primary, expand: true, busy: _busy, onPressed: issues.isEmpty ? _submit : null),
               Padding(
                 padding: const EdgeInsets.only(top: 8),
                 child: MouseRegion(

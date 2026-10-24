@@ -1,6 +1,11 @@
 package com.nest.app.enrolment.dto;
 
-import jakarta.validation.constraints.Email;
+import com.nest.app.validation.Username;
+import com.nest.app.validation.PersonName;
+import com.nest.app.validation.Phone;
+import com.nest.app.validation.StrictEmail;
+import jakarta.validation.Valid;
+
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
@@ -12,18 +17,18 @@ import java.util.UUID;
 
 /** PRD 3.4 Flow A - manual/walk-in registration. */
 public record RegisterStudentRequest(
-        @NotBlank String username,
-        @NotBlank String fullName,
-        @NotBlank String phone,
+        @NotBlank @Username String username,
+        @NotBlank @PersonName String fullName,
+        @NotBlank @Phone String phone,
         @Past @NotNull LocalDate dob,
-        @Email String email,
+        @StrictEmail String email,
         String address,
         String city,
         String state,
         @NotEmpty List<CourseFeeSelection> courses,
         /** The rest of the enrolment form. Optional as a whole - an older client omits it and
          * registration still works exactly as before. */
-        PersonDetails details,
+        @Valid PersonDetails details,
         /** Present when the creator already verified, with the person's own code, that this email's
          * existing account agrees to join - see ExistingAccountService. Null otherwise. */
         UUID linkGrantId

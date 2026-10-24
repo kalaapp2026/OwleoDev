@@ -1,6 +1,11 @@
 package com.nest.app.enrolment.dto;
 
-import jakarta.validation.constraints.Email;
+import com.nest.app.validation.Username;
+import com.nest.app.validation.PersonName;
+import com.nest.app.validation.Phone;
+import com.nest.app.validation.StrictEmail;
+import jakarta.validation.Valid;
+
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
@@ -19,10 +24,10 @@ import java.util.UUID;
  * every feature across every course must be one the creator themselves holds (PRD 3.5).
  */
 public record RegisterTrainerRequest(
-        @NotBlank String username,
-        @NotBlank String fullName,
-        @NotBlank String phone,
-        @Email @NotBlank String email,
+        @NotBlank @Username String username,
+        @NotBlank @PersonName String fullName,
+        @NotBlank @Phone String phone,
+        @StrictEmail @NotBlank String email,
         @Past @NotNull LocalDate dob,
         String address,
         String city,
@@ -32,7 +37,7 @@ public record RegisterTrainerRequest(
         /** Per course, which batches the grants above apply to. An absent or empty set means
          * every batch on that course - the access a trainer had before batches could be named. */
         Map<UUID, Set<UUID>> courseBatches,
-        PersonDetails details,
+        @Valid PersonDetails details,
         /** Present when the creator already verified, with the person's own code, that this email's
          * existing account agrees to join - see ExistingAccountService. Null otherwise. */
         UUID linkGrantId

@@ -8,7 +8,7 @@ import 'package:nest_fe/features/fees/data/student_other_fees.dart';
 import 'package:nest_fe/features/fees/data/student_statement.dart';
 import 'package:nest_fe/features/fees/presentation/add_student_fee_screen.dart';
 import 'package:nest_fe/features/fees/presentation/fee_format.dart';
-import 'package:nest_fe/features/fees/presentation/fees_screen.dart' show feesApiProvider;
+import 'package:nest_fe/features/fees/data/fees_api.dart' show feesApiProvider;
 import 'package:nest_fe/features/fees/presentation/statement_screen.dart';
 import 'package:nest_fe/features/fees/presentation/widgets/fee_history.dart';
 import 'package:nest_fe/features/fees/presentation/widgets/fee_profile_body.dart';

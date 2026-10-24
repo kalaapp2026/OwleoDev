@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:nest_fe/core/design/join_class_button.dart';
 import 'package:nest_fe/core/error/api_exception.dart';
 import 'package:nest_fe/features/scheduling/data/calendar_api.dart';
 import 'package:nest_fe/features/scheduling/data/calendar_class.dart';
@@ -331,6 +332,7 @@ class _ClassTile extends StatelessWidget {
           classInfo.status,
           if (showAcademyName && classInfo.academyName != null) classInfo.academyName!,
         ].join(' · ')),
+        trailing: classInfo.meetingLink == null ? null : JoinClassButton(link: classInfo.meetingLink!),
       ),
     );
   }

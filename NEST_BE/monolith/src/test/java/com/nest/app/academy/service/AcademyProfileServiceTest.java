@@ -1,10 +1,7 @@
 package com.nest.app.academy.service;
 
-import com.nest.app.academy.dto.FeaturedTrainerResponse;
 import com.nest.app.academy.dto.UpdateAcademyProfileRequest;
-import com.nest.app.academy.dto.UpdateFeaturedTrainerRequest;
 import com.nest.app.academy.entity.Academy;
-import com.nest.app.academy.entity.AcademyFeaturedTrainer;
 import com.nest.app.curriculum.repository.CourseRepository;
 import com.nest.app.identity.repository.CourseMapRepository;
 import com.nest.common.exception.BadRequestException;
@@ -15,11 +12,9 @@ import com.nest.app.academy.repository.AcademyHighlightImageRepository;
 import com.nest.app.academy.repository.AcademyHighlightRepository;
 import com.nest.app.academy.repository.AcademyRepository;
 import com.nest.app.identity.entity.AcademyMembership;
-import com.nest.app.identity.entity.User;
 import com.nest.app.identity.repository.AcademyMembershipRepository;
 import com.nest.app.identity.repository.UserRepository;
 import com.nest.app.storage.FileStorageService;
-import com.nest.common.exception.ResourceNotFoundException;
 import com.nest.common.security.Role;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -37,9 +32,8 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-/** Covers the one piece of real logic AcademyProfileService.updateFeaturedTrainer adds: the
- * designation round-trips, and a featured-trainer row from a DIFFERENT academy can't be edited
- * through this academy's id (the same ownership-check shape deleteFeaturedTrainer already had). */
+/** The academy profile's write rules: unique names per city, known links only, and a featured list
+ * that never takes another academy's trainer. */
 @ExtendWith(MockitoExtension.class)
 class AcademyProfileServiceTest {
 
@@ -75,38 +69,6 @@ class AcademyProfileServiceTest {
         service = new AcademyProfileService(academyRepository, highlightRepository, highlightImageRepository,
                 featuredTrainerRepository, branchRepository, membershipRepository, userRepository, fileStorageService,
                 courseMapRepository, courseRepository);
-    }
-
-    @Test
-    void designationRoundTripsOnUpdate() {
-        UUID featuredId = UUID.randomUUID();
-        AcademyFeaturedTrainer featured = AcademyFeaturedTrainer.builder()
-                .id(featuredId).academyId(academyId).trainerMembershipId(trainerMembershipId).build();
-        when(featuredTrainerRepository.findById(featuredId)).thenReturn(java.util.Optional.of(featured));
-        when(featuredTrainerRepository.save(featured)).thenReturn(featured);
-
-        AcademyMembership membership = AcademyMembership.builder()
-                .id(trainerMembershipId).academyId(academyId).userId(userId).roleType(Role.TRAINER).build();
-        when(membershipRepository.findAllById(setOf(trainerMembershipId))).thenReturn(List.of(membership));
-        User user = User.builder().id(userId).fullName("Meera Krishnan").build();
-        when(userRepository.findAllById(setOf(userId))).thenReturn(List.of(user));
-
-        FeaturedTrainerResponse result = service.updateFeaturedTrainer(academyId, featuredId,
-                new UpdateFeaturedTrainerRequest("Head of Dance & Founder"));
-
-        assertThat(result.designation()).isEqualTo("Head of Dance & Founder");
-        assertThat(featured.getDesignation()).isEqualTo("Head of Dance & Founder");
-    }
-
-    @Test
-    void aFeaturedTrainerFromAnotherAcademyCannotBeUpdated() {
-        UUID featuredId = UUID.randomUUID();
-        AcademyFeaturedTrainer featured = AcademyFeaturedTrainer.builder()
-                .id(featuredId).academyId(UUID.randomUUID()).trainerMembershipId(trainerMembershipId).build();
-        when(featuredTrainerRepository.findById(featuredId)).thenReturn(java.util.Optional.of(featured));
-
-        assertThatThrownBy(() -> service.updateFeaturedTrainer(academyId, featuredId, new UpdateFeaturedTrainerRequest("x")))
-                .isInstanceOf(ResourceNotFoundException.class);
     }
 
     @Test

@@ -1,7 +1,6 @@
 package com.nest.app.identity.controller;
 
 import com.nest.common.security.TenantContext;
-import com.nest.app.identity.dto.PasswordResetResponse;
 import com.nest.app.identity.dto.EmailChangeRequest;
 import com.nest.app.identity.dto.LanguageUpdateRequest;
 import com.nest.app.identity.dto.NotificationPrefsDto;
@@ -14,12 +13,10 @@ import com.nest.common.security.RequiresFeature;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -91,13 +88,4 @@ public class UserController {
         return userService.updateProfileImage(userId, file);
     }
 
-    /** Escape hatch for a lost temporary password (PRD 3.2/3.5 accounts only ever see it once).
-     * Super Admin only, on purpose - an Academy Admin resetting their own Trainers is a
-     * reasonable future extension but isn't wired up yet. */
-    @PutMapping("/users/by-username/{username}/reset-password")
-    @PreAuthorize("hasRole('SUPER_ADMIN')")
-    public PasswordResetResponse resetPassword(@PathVariable String username) {
-        String tempPassword = userService.resetPasswordByUsername(username);
-        return new PasswordResetResponse(username, tempPassword);
-    }
 }

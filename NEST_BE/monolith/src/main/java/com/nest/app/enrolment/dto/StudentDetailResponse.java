@@ -20,6 +20,9 @@ public record StudentDetailResponse(
         Map<UUID, BigDecimal> courseFees,
 
         /** The V26/V27 profile fields, so an edit round-trips without losing them. */
-        PersonDetails details
+        PersonDetails details,
+
+        /** The photo shown beside the name; null when none was ever uploaded. */
+        String profileImageUrl
 ) {
 }

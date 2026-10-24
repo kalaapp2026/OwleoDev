@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:nest_fe/app/theme/app_tokens.dart';
 import 'package:nest_fe/app/theme/app_typography.dart';
 import 'package:nest_fe/core/auth/feature_keys.dart';
+import 'package:nest_fe/core/design/app_text_field.dart';
 import 'package:nest_fe/core/design/attached_select.dart';
 import 'package:nest_fe/core/design/avatar.dart';
 import 'package:nest_fe/core/design/buttons.dart';
@@ -15,6 +16,7 @@ import 'package:nest_fe/core/design/pressable.dart';
 import 'package:nest_fe/core/design/segmented_control.dart';
 import 'package:nest_fe/core/design/time_picker_sheet.dart';
 import 'package:nest_fe/core/format/money.dart';
+import 'package:nest_fe/core/validation/validators.dart';
 import 'package:nest_fe/features/curriculum/data/course.dart';
 import 'package:nest_fe/features/curriculum/data/curriculum_api.dart';
 import 'package:nest_fe/features/enrolment/data/batch.dart';
@@ -41,6 +43,7 @@ class BatchFormScreen extends ConsumerStatefulWidget {
 
 class _BatchFormScreenState extends ConsumerState<BatchFormScreen> {
   late final _nameController = TextEditingController(text: widget.existing?.name ?? '');
+  late final _linkController = TextEditingController(text: widget.existing?.meetingLink ?? '');
 
   late final BatchType _batchType =
       widget.existing?.batchType ?? widget.initialType ?? BatchType.regular;
@@ -73,6 +76,7 @@ class _BatchFormScreenState extends ConsumerState<BatchFormScreen> {
   @override
   void dispose() {
     _nameController.dispose();
+    _linkController.dispose();
     super.dispose();
   }
 
@@ -119,7 +123,19 @@ class _BatchFormScreenState extends ConsumerState<BatchFormScreen> {
     return true;
   }
 
+  /// The link is optional, but one that is typed has to look like a web address.
+  bool get _linkValid => Validators.url(label: 'meeting link', required: false)(_linkController.text) == null;
+
+  /// What is sent: nothing for a blank box, and `https://` added when the link was pasted without it (the
+  /// server only takes http or https links).
+  String? get _linkForSave {
+    final v = _linkController.text.trim();
+    if (v.isEmpty) return null;
+    return RegExp(r'^https?://', caseSensitive: false).hasMatch(v) ? v : 'https://$v';
+  }
+
   bool get _valid =>
+      _linkValid &&
       _nameController.text.trim().length > 1 &&
       _courseId != null &&
       _days.isNotEmpty &&
@@ -130,6 +146,7 @@ class _BatchFormScreenState extends ConsumerState<BatchFormScreen> {
 
   String _missingRequirement() {
     if (_nameController.text.trim().length <= 1) return 'Enter a batch name to continue.';
+    if (!_linkValid) return 'The meeting link does not look like a web address.';
     if (_courseId == null) return 'Pick the course this batch belongs to.';
     if (_days.isEmpty) return 'Select at least one day.';
     if (_startTime == null || _endTime == null) return 'Set the class start and end time.';
@@ -167,10 +184,18 @@ class _BatchFormScreenState extends ConsumerState<BatchFormScreen> {
   }
 
   Future<void> _pickDate({required bool isStart}) async {
+    // A batch cannot start in the past, and cannot end before it starts: earlier days are greyed out
+    // in the calendar rather than rejected after the tap.
+    final today = DateUtils.dateOnly(DateTime.now());
+    final start = _startDate;
+    final floor = isStart ? today : (start != null && start.isAfter(today) ? start : today);
+    final current = isStart ? _startDate : _endDate;
+    final usable = current != null && !current.isBefore(floor);
     final picked = await showAppCalendar(
       context: context,
-      month: (isStart ? _startDate : _endDate) ?? DateTime.now(),
-      selectedDay: (isStart ? _startDate : _endDate)?.day,
+      month: usable ? current : floor,
+      selectedDay: usable ? current.day : null,
+      earliestDay: floor,
     );
     if (picked == null || !mounted) return;
     setState(() {
@@ -249,6 +274,7 @@ class _BatchFormScreenState extends ConsumerState<BatchFormScreen> {
           startDate: _startDate,
           endDate: _batchType == BatchType.temporary ? _endDate : null,
           studentMembershipIds: _studentIds.toList(),
+          meetingLink: _linkForSave,
         );
         batchId = widget.existing!.id;
         if (_active != widget.existing!.isActive) {
@@ -263,6 +289,7 @@ class _BatchFormScreenState extends ConsumerState<BatchFormScreen> {
           startDate: _startDate,
           endDate: _batchType == BatchType.temporary ? _endDate : null,
           studentMembershipIds: _studentIds.toList(),
+          meetingLink: _linkForSave,
         );
         batchId = created.id;
         if (!_active) await api.setBatchStatus(batchId, 'INACTIVE');
@@ -618,6 +645,19 @@ class _BatchFormScreenState extends ConsumerState<BatchFormScreen> {
                 ),
               ),
               if (_batchType == BatchType.temporary) _temporaryFeeNotice(palette),
+              _Field(
+                label: 'Online class link',
+                hint: 'Optional. Paste the Google Meet, Zoom or Teams link; students and instructors get a Join '
+                    'button on each class in their schedule.',
+                child: AppTextField(
+                  controller: _linkController,
+                  hint: 'https://meet.google.com/abc-defg-hij',
+                  icon: Icons.videocam_outlined,
+                  preset: FieldPreset.url(label: 'meeting link', required: false),
+                  showErrors: true,
+                  onChanged: (_) => setState(() {}),
+                ),
+              ),
               _Field(
                 label: 'Instructor',
                 hint: _trainerIds.isEmpty

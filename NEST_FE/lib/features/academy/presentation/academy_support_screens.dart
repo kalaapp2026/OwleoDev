@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:nest_fe/app/theme/app_tokens.dart';
 import 'package:nest_fe/app/theme/app_typography.dart';
+import 'package:nest_fe/core/design/app_text_field.dart';
 import 'package:nest_fe/core/design/buttons.dart';
 import 'package:nest_fe/core/design/pressable.dart';
 import 'package:nest_fe/core/error/api_exception.dart';
@@ -140,7 +141,10 @@ class _ContactSupportScreenState extends ConsumerState<ContactSupportScreen> {
     super.dispose();
   }
 
-  bool get _valid => _subject.text.trim().isNotEmpty && _message.text.trim().isNotEmpty;
+  static final _subjectRule = FieldPreset.text(label: 'subject', min: 3, max: 200);
+  static final _messageRule = FieldPreset.text(label: 'message', min: 5, max: 2000);
+
+  bool get _valid => _subjectRule.check(_subject.text) == null && _messageRule.check(_message.text) == null;
 
   Future<void> _send() async {
     setState(() => _sending = true);
@@ -171,22 +175,32 @@ class _ContactSupportScreenState extends ConsumerState<ContactSupportScreen> {
         const SettingsNote(text: 'You can follow the reply under Academy Settings → My requests.'),
         const SizedBox(height: AppSpacing.x4l),
         const SettingsFieldLabel('Subject'),
-        TextField(
+        CheckedField(
           controller: _subject,
-          maxLength: 200,
-          onChanged: (_) => setState(() {}),
-          style: TextStyle(color: palette.text),
-          decoration: settingsInput(context, 'What is this about?').copyWith(counterText: ''),
+          preset: _subjectRule,
+          builder: (context, hasError) => TextField(
+            controller: _subject,
+            maxLength: 200,
+            onChanged: (_) => setState(() {}),
+            textCapitalization: _subjectRule.textCapitalization,
+            style: TextStyle(color: palette.text),
+            decoration: settingsInput(context, 'What is this about?').copyWith(counterText: ''),
+          ),
         ),
         const SizedBox(height: AppSpacing.x4l),
         const SettingsFieldLabel('Message'),
-        TextField(
+        CheckedField(
           controller: _message,
-          maxLines: 6,
-          maxLength: 2000,
-          onChanged: (_) => setState(() {}),
-          style: TextStyle(color: palette.text),
-          decoration: settingsInput(context, 'Tell us what you need').copyWith(counterText: ''),
+          preset: _messageRule,
+          builder: (context, hasError) => TextField(
+            controller: _message,
+            maxLines: 6,
+            maxLength: 2000,
+            onChanged: (_) => setState(() {}),
+            textCapitalization: _messageRule.textCapitalization,
+            style: TextStyle(color: palette.text),
+            decoration: settingsInput(context, 'Tell us what you need').copyWith(counterText: ''),
+          ),
         ),
       ],
     );

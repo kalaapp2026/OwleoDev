@@ -11,7 +11,7 @@ import 'package:nest_fe/features/fees/presentation/add_fee_type_screen.dart';
 import 'package:nest_fe/features/fees/presentation/fee_format.dart';
 import 'package:nest_fe/features/fees/presentation/fee_reports.dart';
 import 'package:nest_fe/features/fees/presentation/student_profile_screen.dart';
-import 'package:nest_fe/features/fees/presentation/fees_screen.dart' show feesApiProvider;
+import 'package:nest_fe/features/fees/data/fees_api.dart' show feesApiProvider;
 import 'package:nest_fe/features/fees/presentation/widgets/student_list_body.dart';
 
 final feeTypesProvider = FutureProvider.autoDispose<List<FeeType>>((ref) {

@@ -49,6 +49,11 @@ Future<DateTime?> showAppCalendar({
   int? selectedDay,
   DateTime? earliestMonth,
   DateTime? latestMonth,
+
+  /// The first day that may be picked. Earlier days are shown greyed and cannot be tapped, earlier
+  /// months cannot be browsed to, and Done never returns a day before it (a batch cannot start in
+  /// the past, for one).
+  DateTime? earliestDay,
   CalendarMarksLoader? marksLoader,
   List<CalendarKeyEntry> marksKey = const [],
   CalendarDayDetailBuilder? dayDetailBuilder,
@@ -60,6 +65,7 @@ Future<DateTime?> showAppCalendar({
       selectedDay: selectedDay,
       earliestMonth: earliestMonth,
       latestMonth: latestMonth,
+      earliestDay: earliestDay,
       marksLoader: marksLoader,
       marksKey: marksKey,
       dayDetailBuilder: dayDetailBuilder,
@@ -78,6 +84,7 @@ class _CalendarDialog extends StatefulWidget {
     this.selectedDay,
     this.earliestMonth,
     this.latestMonth,
+    this.earliestDay,
     this.marksLoader,
     this.marksKey = const [],
     this.dayDetailBuilder,
@@ -87,6 +94,7 @@ class _CalendarDialog extends StatefulWidget {
   final int? selectedDay;
   final DateTime? earliestMonth;
   final DateTime? latestMonth;
+  final DateTime? earliestDay;
   final CalendarMarksLoader? marksLoader;
   final List<CalendarKeyEntry> marksKey;
   final CalendarDayDetailBuilder? dayDetailBuilder;
@@ -130,12 +138,29 @@ class _CalendarDialogState extends State<_CalendarDialog> {
     }
   }
 
-  int get _earliestYear => (widget.earliestMonth?.year ?? _month.year - 100);
+  /// The earliest month that can be browsed: the explicit limit, or the month of [earliestDay].
+  DateTime? get _earliestMonthLimit {
+    final explicit = widget.earliestMonth;
+    final day = widget.earliestDay;
+    if (day == null) return explicit;
+    final fromDay = DateTime(day.year, day.month);
+    return explicit == null || explicit.isBefore(fromDay) ? fromDay : explicit;
+  }
+
+  /// A day before [earliestDay] cannot be picked.
+  bool _dayDisabled(int day) {
+    final earliest = widget.earliestDay;
+    if (earliest == null) return false;
+    final date = DateTime(_month.year, _month.month, day);
+    return date.isBefore(DateTime(earliest.year, earliest.month, earliest.day));
+  }
+
+  int get _earliestYear => (_earliestMonthLimit?.year ?? _month.year - 100);
   int get _latestYear => (widget.latestMonth?.year ?? _month.year + 5);
   int _yearIndexOf(int year) => (year - _earliestYear).clamp(0, _latestYear - _earliestYear);
 
-  // Centres roughly on the current month's year rather than leaving the grid at its earliest year
-  // - opening the year picker for a decades-old birth date shouldn't itself need scrolling.
+  // Centres on the browsed year rather than leaving the grid at its earliest year. For today's year
+  // that is the bottom of the grid, so it opens on this year and earlier ones are a scroll UP.
   void _scrollYearGridToCurrent() {
     if (!_yearScrollController.hasClients) return;
     const rowHeight = 56.0;
@@ -151,7 +176,7 @@ class _CalendarDialogState extends State<_CalendarDialog> {
   }
 
   bool get _canGoBack {
-    final earliest = widget.earliestMonth;
+    final earliest = _earliestMonthLimit;
     return earliest == null || _month.isAfter(DateTime(earliest.year, earliest.month));
   }
 
@@ -161,7 +186,7 @@ class _CalendarDialogState extends State<_CalendarDialog> {
   }
 
   bool _monthInRange(DateTime month) {
-    final earliest = widget.earliestMonth;
+    final earliest = _earliestMonthLimit;
     final latest = widget.latestMonth;
     if (earliest != null && month.isBefore(DateTime(earliest.year, earliest.month))) return false;
     if (latest != null && month.isAfter(DateTime(latest.year, latest.month))) return false;
@@ -361,6 +386,7 @@ class _CalendarDialogState extends State<_CalendarDialog> {
                       day: d,
                       selected: d == _day,
                       mark: _marks[d],
+                      disabled: _dayDisabled(d),
                       onTap: () => setState(() => _day = d),
                     ),
                 ],
@@ -409,9 +435,15 @@ class _CalendarDialogState extends State<_CalendarDialog> {
               AppPrimaryButton(
                 label: 'Done',
                 icon: Icons.check,
-                onPressed: () => Navigator.of(context).pop(
-                  DateTime(_month.year, _month.month, _day ?? 1),
-                ),
+                onPressed: () {
+                  var picked = DateTime(_month.year, _month.month, _day ?? 1);
+                  // With no day chosen the month's 1st is returned, which may be before the earliest day.
+                  final earliest = widget.earliestDay;
+                  if (earliest != null && picked.isBefore(DateTime(earliest.year, earliest.month, earliest.day))) {
+                    picked = DateTime(earliest.year, earliest.month, earliest.day);
+                  }
+                  Navigator.of(context).pop(picked);
+                },
               ),
             ],
           ],
@@ -498,12 +530,16 @@ class _DayCell extends StatelessWidget {
     required this.selected,
     required this.onTap,
     this.mark,
+    this.disabled = false,
   });
 
   final int day;
   final bool selected;
   final CalendarDayMark? mark;
   final VoidCallback onTap;
+
+  /// Before the earliest day that may be picked: faded and inert.
+  final bool disabled;
 
   @override
   Widget build(BuildContext context) {
@@ -512,7 +548,7 @@ class _DayCell extends StatelessWidget {
     // The ring is for days that carry a change; the selected day is already filled, so it skips it.
     final ring = selected ? null : mark?.ring;
     return Pressable(
-      onTap: onTap,
+      onTap: disabled ? null : onTap,
       child: Container(
         alignment: Alignment.center,
         decoration: BoxDecoration(
@@ -528,7 +564,13 @@ class _DayCell extends StatelessWidget {
               style: TextStyle(
                 fontSize: AppType.md,
                 fontWeight: selected ? AppType.heavy : AppType.regular,
-                color: selected ? palette.onPrimary : palette.text,
+                color: selected
+                    ? palette.onPrimary
+                    : disabled
+                        ? palette.textFaint.withValues(alpha: 0.45)
+                        : palette.text,
+                decoration: disabled ? TextDecoration.lineThrough : null,
+                decorationColor: palette.textFaint.withValues(alpha: 0.45),
               ),
             ),
             if (dots.isNotEmpty)

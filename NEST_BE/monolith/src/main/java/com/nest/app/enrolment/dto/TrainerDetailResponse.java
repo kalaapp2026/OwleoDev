@@ -24,6 +24,9 @@ public record TrainerDetailResponse(
         PersonDetails details,
 
         /** Per course, the batches this trainer is scoped to. An absent course means every batch. */
-        Map<UUID, Set<UUID>> courseBatches
+        Map<UUID, Set<UUID>> courseBatches,
+
+        /** The photo shown beside the name; null when none was ever uploaded. */
+        String profileImageUrl
 ) {
 }

@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:nest_fe/core/design/app_text_field.dart';
+import 'package:nest_fe/core/validation/validators.dart';
 import 'package:nest_fe/app/theme/app_tokens.dart';
 import 'package:nest_fe/app/theme/app_typography.dart';
 import 'package:nest_fe/core/design/avatar.dart';
@@ -240,7 +242,8 @@ InputDecoration profileInputDecoration(BuildContext context, {String? hint}) {
   );
 }
 
-/// Label + text input.
+/// Label + text input. Give it a [preset] (keyboard, keystroke filters, rule - see FieldPreset) and it
+/// shows the error under the field once the person leaves it, then live; [showErrors] forces it.
 class LabeledTextField extends StatelessWidget {
   const LabeledTextField({
     super.key,
@@ -250,6 +253,9 @@ class LabeledTextField extends StatelessWidget {
     this.maxLines = 1,
     this.keyboardType,
     this.onChanged,
+    this.preset,
+    this.validator,
+    this.showErrors = false,
   });
   final String label;
   final TextEditingController controller;
@@ -257,20 +263,43 @@ class LabeledTextField extends StatelessWidget {
   final int maxLines;
   final TextInputType? keyboardType;
   final ValueChanged<String>? onChanged;
+  final FieldPreset? preset;
+  final Validator? validator;
+  final bool showErrors;
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.palette;
+    final rule = validator ?? preset?.validator;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         FormLabel(label),
-        TextField(
+        FieldGuard(
           controller: controller,
-          maxLines: maxLines,
-          keyboardType: keyboardType,
-          onChanged: onChanged,
-          style: TextStyle(color: context.palette.text, fontSize: AppType.md),
-          decoration: profileInputDecoration(context, hint: hint),
+          check: () => rule?.call(controller.text),
+          showErrors: showErrors,
+          builder: (context, error) => Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              TextField(
+                controller: controller,
+                maxLines: maxLines,
+                keyboardType: keyboardType ?? preset?.keyboardType,
+                textCapitalization: preset?.textCapitalization ?? TextCapitalization.none,
+                inputFormatters: preset?.formatters,
+                autofillHints: preset?.autofillHints,
+                onChanged: onChanged,
+                style: TextStyle(color: palette.text, fontSize: AppType.md),
+                decoration: appInputDecoration(palette, hint ?? '', hasError: error != null),
+              ),
+              if (error != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: AppSpacing.xs),
+                  child: Text(error, style: TextStyle(fontSize: AppType.sm, color: palette.notPaid, height: 1.4)),
+                ),
+            ],
+          ),
         ),
       ],
     );

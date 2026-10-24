@@ -1,0 +1,480 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Owleo Nest Flowcharts</title>
+<style>
+  :root { --bg:#faf8f5; --card:#ffffff; --ink:#1f1a2e; --muted:#6b6478; --line:#e4dfe9; --accent:#4b2e83; --soft:#efe9f8; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg:#14111c; --card:#1d1829; --ink:#ece8f4; --muted:#9a93a8; --line:#332c44; --accent:#b79cf0; --soft:#2a2240; } }
+  :root[data-theme="dark"] { --bg:#14111c; --card:#1d1829; --ink:#ece8f4; --muted:#9a93a8; --line:#332c44; --accent:#b79cf0; --soft:#2a2240; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:16px/1.55 system-ui,-apple-system,"Segoe UI",sans-serif; }
+  header { padding:28px 16px 12px; max-width:1100px; margin:0 auto; }
+  h1 { margin:0 0 4px; font-size:28px; }
+  header p { margin:0; color:var(--muted); }
+  nav { position:sticky; top:0; z-index:5; background:var(--bg); border-bottom:1px solid var(--line); }
+  nav .in { max-width:1100px; margin:0 auto; padding:8px 16px; display:flex; gap:6px; flex-wrap:wrap; }
+  nav a { font-size:13px; padding:4px 10px; border-radius:999px; background:var(--soft); color:var(--accent); text-decoration:none; }
+  main { max-width:1100px; margin:0 auto; padding:8px 16px 64px; }
+  section { margin-top:36px; scroll-margin-top:60px; }
+  h2 { font-size:22px; margin:0 0 4px; color:var(--accent); }
+  .lead { color:var(--muted); margin:0 0 12px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px; overflow-x:auto; }
+  .mermaid { text-align:center; }
+  .legend { display:flex; flex-wrap:wrap; gap:12px; font-size:13px; color:var(--muted); margin:8px 0 0; }
+  .legend i { display:inline-block; width:12px; height:12px; border-radius:3px; margin-right:4px; vertical-align:-1px; border:1px solid var(--line); }
+  table { border-collapse:collapse; width:100%; font-size:14px; }
+  th, td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--line); vertical-align:top; }
+  th { background:var(--soft); color:var(--accent); }
+  ol.steps { margin:12px 0 0; padding-left:20px; color:var(--ink); }
+  ol.steps li { margin:2px 0; }
+  .note { font-size:13px; color:var(--muted); margin-top:10px; }
+  @media (max-width:600px){ h1{font-size:22px} }
+</style>
+</head>
+<body>
+<header>
+  <h1>Owleo Nest — Flowcharts</h1>
+  <p>Roles, login, and every module, step by step. Each box is something a person does or the app decides; diamonds are decisions.</p>
+  <div class="legend">
+    <span><i style="background:#d9c9f5"></i>User action</span>
+    <span><i style="background:#cfe8d5"></i>Success / result</span>
+    <span><i style="background:#f6d3d3"></i>Blocked / error</span>
+    <span><i style="background:#fbe9b7"></i>System step</span>
+  </div>
+</header>
+<nav><div class="in" id="nav"></div></nav>
+<main>
+
+<section id="roles">
+<h2>1. Roles and what each can reach</h2>
+<p class="lead">Six roles. The first four belong to an academy (ERP); Artist and Guest only use Social.</p>
+<div class="card"><div class="mermaid">
+flowchart TD
+  SA["SUPER ADMIN<br/>runs the platform<br/>no academy of their own"]:::adm
+  AA["ACADEMY ADMIN<br/>owns one academy<br/>everything inside it"]:::adm
+  TR["TRAINER<br/>only what the admin grants,<br/>only for granted courses"]:::mid
+  ST["STUDENT<br/>sees own data only"]:::mid
+  AR["ARTIST<br/>Social only"]:::soc
+  GU["GUEST<br/>Social only, can apply to be Artist"]:::soc
+  SA -->|"onboards academies,<br/>billing, metrics, settings"| AA
+  AA -->|"registers and grants features"| TR
+  AA -->|"registers"| ST
+  TR -->|"if granted STUDENT_REGISTRATION"| ST
+  GU -->|"Super Admin approves application"| AR
+  classDef adm fill:#d9c9f5,stroke:#4b2e83,color:#1f1a2e
+  classDef mid fill:#cfe8d5,stroke:#2f6b45,color:#1f1a2e
+  classDef soc fill:#fbe9b7,stroke:#8a6d1a,color:#1f1a2e
+</div></div>
+<div class="card" style="margin-top:12px"><table>
+<tr><th>Role</th><th>Bottom bar</th><th>More menu tiles</th><th>Data scope</th></tr>
+<tr><td><b>Super Admin</b></td><td>Platform console (academies, stats, billing, settings)</td><td>Academy Onboarding</td><td>Whole platform; no academy data</td></tr>
+<tr><td><b>Academy Admin</b></td><td>Dashboard, Attendance, Fees, More</td><td>Courses, Batches, Batch Scheduling, Events, Messages, Study Material, Users, Students, Academy Profile, Settings</td><td>Whole academy</td></tr>
+<tr><td><b>Trainer</b></td><td>Dashboard + Attendance / Fees if granted</td><td>Only tiles for features granted (Batches, Scheduling, Events, Users, …) plus Study Material, Students, Academy Profile</td><td>Only courses/batches they were granted</td></tr>
+<tr><td><b>Student</b></td><td>Dashboard, Attendance, Fees (own)</td><td>My Courses, Events, Study Material, Students, Academy Profile, Profile, Settings</td><td>Own batches, attendance, fees</td></tr>
+<tr><td><b>Artist / Guest</b></td><td>Social feed, search, create post, profile</td><td>—</td><td>Public posts and own profile</td></tr>
+</table>
+<p class="note">Trainer features an admin can grant: Student registration, Trainer registration, Batch creation, Batch scheduling, Reschedule, Attendance, Fees entry, Fees dashboard, Syllabus/Study-material edit, Event management, Artist-style posting. Course management and Academy-profile edit are admin-only.</p>
+</div>
+</section>
+
+<section id="login">
+<h2>2. Login flow</h2>
+<p class="lead">One box for username or email. The server decides whether the account uses a password or a one-time code.</p>
+<div class="card"><div class="mermaid">
+flowchart TD
+  A(["Open app"]):::act --> B{"Stored token<br/>on device?"}:::sys
+  B -->|"yes"| C["Session restored<br/>token auto-refreshed if expired"]:::sys
+  B -->|"no"| D["Login screen:<br/>type username or email"]:::act
+  C --> OK
+  D --> E["App asks server: who is this?<br/>POST /auth/identify"]:::sys
+  E --> F{"Account found?"}:::sys
+  F -->|"no"| X1["No NEST account found"]:::err
+  F -->|"yes"| G{"Account has<br/>a password?"}:::sys
+  G -->|"yes"| H["Enter password<br/>POST /auth/login"]:::act
+  G -->|"no"| I["Server sends a code to the phone<br/>shown masked"]:::sys
+  I --> J["Enter the code<br/>POST /auth/otp/verify"]:::act
+  H --> K{"Correct?"}:::sys
+  J --> K
+  K -->|"no"| X2["Invalid password or code<br/>wrong tries are counted"]:::err
+  K -->|"yes"| L["Server issues tokens:<br/>access 15 min + refresh 30 days<br/>includes role, memberships, features"]:::sys
+  L --> M{"Temporary<br/>password?"}:::sys
+  M -->|"yes"| N["Forced to change password<br/>POST /auth/password/change"]:::act
+  M -->|"no"| OK
+  N --> OK
+  OK(["Signed in"]):::ok --> R["Route by role - see next chart"]:::sys
+  X1 --> D
+  X2 --> D
+  classDef act fill:#d9c9f5,stroke:#4b2e83,color:#1f1a2e
+  classDef ok fill:#cfe8d5,stroke:#2f6b45,color:#1f1a2e
+  classDef err fill:#f6d3d3,stroke:#a33,color:#1f1a2e
+  classDef sys fill:#fbe9b7,stroke:#8a6d1a,color:#1f1a2e
+</div></div>
+<p class="note">Phone is never a login id because families can share a number. Sessions: when the access token expires the app silently calls /auth/refresh; if that fails the user returns to Login. Logout revokes the refresh token.</p>
+</section>
+
+<section id="routing">
+<h2>3. After login: where each role lands</h2>
+<div class="card"><div class="mermaid">
+flowchart TD
+  S(["Signed in"]):::ok --> Q{"Role?"}:::sys
+  Q -->|"Super Admin"| P["Platform console<br/>Dashboard, Academies, Billing, Settings"]:::act
+  Q -->|"Academy Admin / Trainer / Student"| M{"Platform setting<br/>app mode"}:::sys
+  Q -->|"Artist / Guest"| SO["Social only"]:::act
+  M -->|"ERP first"| E["ERP home: Dashboard<br/>tiles filtered by role + features"]:::act
+  M -->|"Social first"| SO
+  E <-->|"switch module"| SO
+  E --> W{"Member of<br/>several academies?"}:::sys
+  W -->|"yes"| Z["Switch academy from the header<br/>whole app reloads for that academy"]:::act
+  W -->|"no"| Y["Single academy"]:::sys
+  classDef act fill:#d9c9f5,stroke:#4b2e83,color:#1f1a2e
+  classDef ok fill:#cfe8d5,stroke:#2f6b45,color:#1f1a2e
+  classDef sys fill:#fbe9b7,stroke:#8a6d1a,color:#1f1a2e
+</div></div>
+</section>
+
+<section id="signup">
+<h2>4. Sign up, become an Artist, forgot password</h2>
+<div class="card"><div class="mermaid">
+flowchart TD
+  A["Sign up screen:<br/>name, username, password, phone, email"]:::act --> B["POST /auth/signup<br/>creates a GUEST account"]:::sys
+  B --> C(["Signed in as Guest - Social access"]):::ok
+  C --> D{"Wants to post as an Artist?"}:::sys
+  D -->|"yes"| E["Become Artist screen<br/>submit application"]:::act
+  E --> F["Application saved as PENDING"]:::sys
+  F --> G["Super Admin reviews in Artist Applications"]:::act
+  G --> H{"Decision"}:::sys
+  H -->|"approve"| I(["Role becomes ARTIST"]):::ok
+  H -->|"reject"| J["Stays Guest"]:::err
+  classDef act fill:#d9c9f5,stroke:#4b2e83,color:#1f1a2e
+  classDef ok fill:#cfe8d5,stroke:#2f6b45,color:#1f1a2e
+  classDef err fill:#f6d3d3,stroke:#a33,color:#1f1a2e
+  classDef sys fill:#fbe9b7,stroke:#8a6d1a,color:#1f1a2e
+</div></div>
+<div class="card" style="margin-top:12px"><div class="mermaid">
+flowchart TD
+  A["Login screen: Forgot password"]:::act --> B["Enter username or email"]:::act
+  B --> C{"Account has an email?"}:::sys
+  C -->|"no"| X["Contact your academy admin<br/>admin can reset it for you"]:::err
+  C -->|"yes"| D["Code emailed to the address on file<br/>POST /auth/password/forgot"]:::sys
+  D --> E["Enter code + new password<br/>POST /auth/password/reset"]:::act
+  E --> F(["Password changed, all sessions logged out"]):::ok
+  F --> G["Log in with the new password"]:::act
+  classDef act fill:#d9c9f5,stroke:#4b2e83,color:#1f1a2e
+  classDef ok fill:#cfe8d5,stroke:#2f6b45,color:#1f1a2e
+  classDef err fill:#f6d3d3,stroke:#a33,color:#1f1a2e
+  classDef sys fill:#fbe9b7,stroke:#8a6d1a,color:#1f1a2e
+</div></div>
+</section>
+
+<section id="onboard">
+<h2>5. Setting up an academy and adding people</h2>
+<p class="lead">From the platform owner creating an academy to a student being able to log in.</p>
+<div class="card"><div class="mermaid">
+flowchart TD
+  A["Super Admin: Academy Onboarding<br/>academy details + first admin"]:::act --> B["Academy and Academy Admin created"]:::sys
+  B --> C["Admin signs in<br/>fills Academy Profile"]:::act
+  C --> D["Admin: Courses<br/>create course with fee model"]:::act
+  D --> E["Admin or granted trainer: Batches<br/>create batch, add trainers"]:::act
+  E --> F["Users: register Trainer or Student<br/>name, phone, email, course, agreed fee"]:::act
+  F --> G{"Person already has<br/>an account? matched by email"}:::sys
+  G -->|"yes"| H["Reuse the account, add a new membership"]:::sys
+  G -->|"no"| I["Create account"]:::sys
+  H --> J
+  I --> J["Membership status = PENDING_CONFIRMATION"]:::sys
+  J --> K["Code sent to the person's phone<br/>plus an in-app notification"]:::sys
+  K --> L["Person enters the code<br/>POST /students/confirm-membership"]:::act
+  L --> M{"Code valid?"}:::sys
+  M -->|"no"| X["Rejected, try again"]:::err
+  M -->|"yes"| N(["Membership = ACTIVE, can use the academy"]):::ok
+  N --> O["Admin assigns student to batches<br/>trainer gets feature + course grants"]:::act
+  classDef act fill:#d9c9f5,stroke:#4b2e83,color:#1f1a2e
+  classDef ok fill:#cfe8d5,stroke:#2f6b45,color:#1f1a2e
+  classDef err fill:#f6d3d3,stroke:#a33,color:#1f1a2e
+  classDef sys fill:#fbe9b7,stroke:#8a6d1a,color:#1f1a2e
+</div></div>
+<p class="note">Nothing grants access until the person confirms the membership. If the first code is lost an admin can resend it, or reset the password (/students/{id}/reset-password).</p>
+</section>
+
+<section id="perm">
+<h2>6. How every request is checked (permissions)</h2>
+<div class="card"><div class="mermaid">
+flowchart TD
+  A["App sends request with token"]:::act --> B{"Token valid<br/>and not logged out?"}:::sys
+  B -->|"no"| X1["401 - back to Login"]:::err
+  B -->|"yes"| C{"Role/feature gate on the endpoint<br/>@RequiresFeature"}:::sys
+  C -->|"missing"| X2["403 - no access"]:::err
+  C -->|"ok"| D{"Is it a write on a course?"}:::sys
+  D -->|"yes"| E{"Granted for THIS course?<br/>assertCourseFeature"}:::sys
+  E -->|"no"| X2
+  E -->|"yes"| G
+  D -->|"no, a read or list"| F["Limit rows to visible courses<br/>visibleCourseIds<br/>admin = no limit"]:::sys
+  F --> G["Query only this academy's rows"]:::sys
+  G --> H(["Response"]):::ok
+  classDef act fill:#d9c9f5,stroke:#4b2e83,color:#1f1a2e
+  classDef ok fill:#cfe8d5,stroke:#2f6b45,color:#1f1a2e
+  classDef err fill:#f6d3d3,stroke:#a33,color:#1f1a2e
+  classDef sys fill:#fbe9b7,stroke:#8a6d1a,color:#1f1a2e
+</div></div>
+</section>
+
+<section id="course">
+<h2>7. Courses and Batches</h2>
+<div class="card"><div class="mermaid">
+flowchart TD
+  A["Admin: More - Courses - New"]:::act --> B["Name, category, icon,<br/>duration, billing day, payment methods"]:::act
+  B --> C{"Fee model"}:::sys
+  C -->|"Fixed"| C1["One amount per cycle"]:::sys
+  C -->|"Per class"| C2["Rate x classes held"]:::sys
+  C -->|"Hybrid"| C3["Expected classes + attendance threshold<br/>full % above, reduced % below, minimum fee"]:::sys
+  C1 --> D(["Course saved, ACTIVE"]):::ok
+  C2 --> D
+  C3 --> D
+  D --> E["More - Batches - New<br/>pick course first"]:::act
+  E --> F["Name, type Regular/Temporary,<br/>start and end dates"]:::act
+  F --> G["Add trainers and students"]:::act
+  G --> H(["Batch ACTIVE"]):::ok
+  H --> I["Later: edit, set INACTIVE,<br/>add or remove members, delete"]:::act
+  classDef act fill:#d9c9f5,stroke:#4b2e83,color:#1f1a2e
+  classDef ok fill:#cfe8d5,stroke:#2f6b45,color:#1f1a2e
+  classDef sys fill:#fbe9b7,stroke:#8a6d1a,color:#1f1a2e
+</div></div>
+</section>
+
+<section id="schedule">
+<h2>8. Scheduling and rescheduling</h2>
+<div class="card"><div class="mermaid">
+flowchart TD
+  A["Batch Scheduling - pick course and batch"]:::act --> B["Set weekly slots<br/>day, start, end, from date"]:::act
+  B --> C["System creates dated classes<br/>class instances = SCHEDULED"]:::sys
+  C --> D["Schedule feed shows classes<br/>to admin, trainer, students"]:::sys
+  D --> E{"Open a class and choose"}:::act
+  E -->|"Reschedule"| F["Pick new date and time + reason<br/>old class = RESCHEDULED_CANCELLED<br/>new class created"]:::sys
+  E -->|"Cancel"| G["Give a reason, class = CANCELLED"]:::sys
+  E -->|"Substitute trainer"| H["Pick cover trainer + reason<br/>this class only"]:::sys
+  E -->|"Add extra class"| I["One-off class on a chosen date"]:::sys
+  F --> J["Students and trainers notified"]:::sys
+  G --> J
+  H --> J
+  J --> K["Undo available:<br/>restore, undo swap, undo reschedule"]:::act
+  C --> L["After class is taken: Attendance<br/>class becomes HELD"]:::sys
+  classDef act fill:#d9c9f5,stroke:#4b2e83,color:#1f1a2e
+  classDef sys fill:#fbe9b7,stroke:#8a6d1a,color:#1f1a2e
+</div></div>
+<p class="note">Needs the Batch scheduling or Reschedule feature. A trainer only sees batches they were granted.</p>
+</section>
+
+<section id="attendance">
+<h2>9. Attendance</h2>
+<div class="card"><div class="mermaid">
+flowchart TD
+  A["Attendance tab"]:::act --> B["Pick course, batch, date<br/>calendar shows marked days"]:::act
+  B --> C{"Class exists that day?"}:::sys
+  C -->|"no"| X["Nothing to mark"]:::err
+  C -->|"yes"| D["Mark Attendance sheet:<br/>every student listed"]:::act
+  D --> E["Tap each student Present or Absent<br/>optional note"]:::act
+  E --> F["Save - POST /class-instances/id/attendance"]:::act
+  F --> G{"Allowed for this course?"}:::sys
+  G -->|"no"| Y["403"]:::err
+  G -->|"yes"| H(["Saved with who marked and when"]):::ok
+  H --> I["Feeds: student attendance history,<br/>per-class and hybrid fee calculation"]:::sys
+  J["Student view:<br/>own attendance only"]:::act -.-> I
+  classDef act fill:#d9c9f5,stroke:#4b2e83,color:#1f1a2e
+  classDef ok fill:#cfe8d5,stroke:#2f6b45,color:#1f1a2e
+  classDef err fill:#f6d3d3,stroke:#a33,color:#1f1a2e
+  classDef sys fill:#fbe9b7,stroke:#8a6d1a,color:#1f1a2e
+</div></div>
+</section>
+
+<section id="fees">
+<h2>10. Fees</h2>
+<p class="lead">Two kinds: Regular (the course fee, every period) and Other (one-off charges).</p>
+<div class="card"><div class="mermaid">
+flowchart TD
+  A["Fees tab - landing<br/>collected vs pending"]:::act --> B{"Which kind?"}:::sys
+  B -->|"Regular"| C["Generate fee slips for a course and month"]:::act
+  C --> D["Slip: amount due =<br/>fee model result + carried forward<br/>status OPEN"]:::sys
+  D --> E["Open a student - Add payment<br/>amount, mode Cash/UPI/Gateway, date, note"]:::act
+  E --> F["Ledger row saved<br/>positive amount"]:::sys
+  F --> G{"Paid in full?"}:::sys
+  G -->|"yes"| H(["Slip CLOSED"]):::ok
+  G -->|"no"| I["Balance carries forward"]:::sys
+  B -->|"Other"| J["Create a fee type for batches<br/>or a fee for one student"]:::act
+  J --> K["Record payment against it"]:::act
+  K --> F
+  F --> L{"Mistake?"}:::sys
+  L -->|"yes"| M["Reverse entry with reason<br/>negative row, original kept"]:::act
+  L -->|"no"| N["Dashboard charts and<br/>statement reports update"]:::sys
+  M --> N
+  classDef act fill:#d9c9f5,stroke:#4b2e83,color:#1f1a2e
+  classDef ok fill:#cfe8d5,stroke:#2f6b45,color:#1f1a2e
+  classDef sys fill:#fbe9b7,stroke:#8a6d1a,color:#1f1a2e
+</div></div>
+<div class="card" style="margin-top:12px"><div class="mermaid">
+flowchart TD
+  A["Student: Fees tab"]:::act --> B["Own statement: dues, paid, history<br/>GET /me/fees/statement"]:::sys
+  B --> C{"Pay now?"}:::act
+  C -->|"no"| D["Download statement report"]:::act
+  C -->|"yes"| E["Choose amount and method<br/>POST /me/fees/pay"]:::act
+  E --> F{"Payment mode"}:::sys
+  F -->|"Mock enabled"| G["Recorded as a test payment"]:::sys
+  F -->|"Gateway"| H["Gateway reference stored"]:::sys
+  G --> I(["Statement updated"]):::ok
+  H --> I
+  classDef act fill:#d9c9f5,stroke:#4b2e83,color:#1f1a2e
+  classDef ok fill:#cfe8d5,stroke:#2f6b45,color:#1f1a2e
+  classDef sys fill:#fbe9b7,stroke:#8a6d1a,color:#1f1a2e
+</div></div>
+<p class="note">Entering fees needs Fees entry; the charts need Fees dashboard. Every payment is an append-only ledger row; corrections are reversals, never edits.</p>
+</section>
+
+<section id="study">
+<h2>11. Study Material</h2>
+<div class="card"><div class="mermaid">
+flowchart TD
+  A["Study Material - pick course and batch"]:::act --> B{"Has Syllabus edit?"}:::sys
+  B -->|"yes"| C["Upload file: song, document or image"]:::act
+  B -->|"no"| V
+  C --> D["Choose who sees it:<br/>whole batch or selected students"]:::act
+  D --> E["Choose permission:<br/>Downloadable or View only"]:::act
+  E --> F["File stored, linked to the batch"]:::sys
+  F --> V["Everyone allowed can open the batch library"]:::sys
+  V --> G{"File type"}:::sys
+  G -->|"Audio"| H["Practice player:<br/>tempo, volume, loop,<br/>trim segments saved per person per track"]:::act
+  G -->|"Image"| I["Image viewer"]:::act
+  G -->|"Document"| J["Cover card + Download<br/>no in-app reader"]:::act
+  H --> K["Add to a playlist:<br/>reorder, repeat a song"]:::act
+  classDef act fill:#d9c9f5,stroke:#4b2e83,color:#1f1a2e
+  classDef sys fill:#fbe9b7,stroke:#8a6d1a,color:#1f1a2e
+</div></div>
+</section>
+
+<section id="events">
+<h2>12. Events and Messages</h2>
+<div class="card"><div class="mermaid">
+flowchart TD
+  A["Events - New (needs Event management)"]:::act --> B["Title, type Programme / Looking for artist,<br/>date, venue, cover"]:::act
+  B --> C["Audience: all students, all trainers,<br/>by course, by batch, or individuals"]:::act
+  C --> D{"Status"}:::sys
+  D -->|"Draft"| E["Saved, hidden"]:::sys
+  D -->|"Published"| F["Visible to the audience<br/>optionally posted to Social"]:::sys
+  F --> G["People tap Interested before the deadline"]:::act
+  G --> H["Organiser sees the interested list"]:::sys
+  F -.->|"Cancel"| I["Status = CANCELLED"]:::err
+  classDef act fill:#d9c9f5,stroke:#4b2e83,color:#1f1a2e
+  classDef err fill:#f6d3d3,stroke:#a33,color:#1f1a2e
+  classDef sys fill:#fbe9b7,stroke:#8a6d1a,color:#1f1a2e
+</div></div>
+<div class="card" style="margin-top:12px"><div class="mermaid">
+flowchart TD
+  A["Admin: Messages - New broadcast"]:::act --> B["Title and message"]:::act
+  B --> C["Audience: whole academy,<br/>courses, batches or individuals"]:::act
+  C --> D["Send"]:::act
+  D --> E["Server counts recipients<br/>and stores the broadcast"]:::sys
+  E --> F["In-app notification created for each recipient"]:::sys
+  F --> G(["Bell shows unread; opening marks it read"]):::ok
+  classDef act fill:#d9c9f5,stroke:#4b2e83,color:#1f1a2e
+  classDef ok fill:#cfe8d5,stroke:#2f6b45,color:#1f1a2e
+  classDef sys fill:#fbe9b7,stroke:#8a6d1a,color:#1f1a2e
+</div></div>
+</section>
+
+<section id="social">
+<h2>13. Social</h2>
+<div class="card"><div class="mermaid">
+flowchart TD
+  A["Open Social tab"]:::act --> B["Feed of posts and events"]:::sys
+  B --> C{"What next?"}:::act
+  C -->|"Search"| D["Find people, open their posts"]:::act
+  C -->|"Create post"| E{"Allowed?<br/>Artist, or Trainer with<br/>Artist-style posting, or staff"}:::sys
+  E -->|"no"| X["Cannot post"]:::err
+  E -->|"yes"| F["Text + photos<br/>visibility Public or Academy only"]:::act
+  F --> G(["Post appears in the feed"]):::ok
+  C -->|"Event post"| H["Tap Interested on the event"]:::act
+  C -->|"My posts"| I["Manage own posts"]:::act
+  classDef act fill:#d9c9f5,stroke:#4b2e83,color:#1f1a2e
+  classDef ok fill:#cfe8d5,stroke:#2f6b45,color:#1f1a2e
+  classDef err fill:#f6d3d3,stroke:#a33,color:#1f1a2e
+  classDef sys fill:#fbe9b7,stroke:#8a6d1a,color:#1f1a2e
+</div></div>
+</section>
+
+<section id="student">
+<h2>14. Student self-service and profile</h2>
+<div class="card"><div class="mermaid">
+flowchart TD
+  A["Student home"]:::act --> B["Dashboard: today's classes,<br/>fees due, new material, events"]:::sys
+  A --> C["My Courses"]:::act
+  C --> D["Explore other courses"]:::act
+  D --> E["Tap Interested<br/>academy sees the interest"]:::sys
+  A --> F["Profile: photo, details,<br/>achievements, performance logs"]:::act
+  A --> G["Settings: password, language,<br/>theme, notifications, App Lock"]:::act
+  G --> H["Request account deletion"]:::act
+  H --> I["Request saved as PENDING<br/>for the academy to handle"]:::sys
+  classDef act fill:#d9c9f5,stroke:#4b2e83,color:#1f1a2e
+  classDef sys fill:#fbe9b7,stroke:#8a6d1a,color:#1f1a2e
+</div></div>
+</section>
+
+<section id="admin">
+<h2>15. Academy Profile, Settings and Platform (Super Admin)</h2>
+<div class="card"><div class="mermaid">
+flowchart TD
+  A["Academy Profile - everyone can read"]:::act --> B{"Has Academy-profile edit?"}:::sys
+  B -->|"yes"| C["Edit about, contact, address, cover,<br/>highlights, featured trainers, branches"]:::act
+  B -->|"no"| D["Read only"]:::sys
+  E["Admin Settings"]:::act --> F["Change password"]:::act
+  E --> G["Academy plan and monthly invoices"]:::act
+  H["Super Admin console"]:::act --> I["Academies list and stats"]:::act
+  H --> J["Billing: plans, invoices,<br/>mark paid or waived"]:::act
+  H --> K["Platform settings:<br/>ERP first or Social first"]:::act
+  H --> L["Artist applications:<br/>approve or reject"]:::act
+  H --> M["Metrics: devices, active users"]:::sys
+  classDef act fill:#d9c9f5,stroke:#4b2e83,color:#1f1a2e
+  classDef sys fill:#fbe9b7,stroke:#8a6d1a,color:#1f1a2e
+</div></div>
+</section>
+
+<section id="journey">
+<h2>16. One full day in the life (end to end)</h2>
+<div class="card"><div class="mermaid">
+sequenceDiagram
+  autonumber
+  participant Ad as Admin
+  participant Tr as Trainer
+  participant St as Student
+  participant App as NEST
+  Ad->>App: Create course, batch, register student
+  App-->>St: Code + notification to confirm membership
+  St->>App: Confirm, log in
+  Ad->>App: Set weekly schedule for the batch
+  App-->>St: Classes appear on dashboard
+  Tr->>App: Reschedule one class
+  App-->>St: Notification about the new time
+  Tr->>App: Take class, mark attendance
+  Tr->>App: Upload practice song to the batch
+  St->>App: Practise with tempo and loop
+  Ad->>App: Generate month fee slips
+  St->>App: See dues, pay
+  Ad->>App: Record cash payment, view dashboard
+  Ad->>App: Broadcast a holiday message
+  App-->>St: Notification
+</div></div>
+</section>
+
+</main>
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
+  const dark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+  mermaid.initialize({ startOnLoad: true, theme: dark ? 'dark' : 'default', flowchart: { useMaxWidth: true, htmlLabels: true, curve: 'basis' }, securityLevel: 'loose' });
+  const nav = document.getElementById('nav');
+  document.querySelectorAll('section').forEach(s => {
+    const a = document.createElement('a');
+    a.href = '#' + s.id; a.textContent = s.querySelector('h2').textContent.replace(/^\d+\.\s*/, '');
+    nav.appendChild(a);
+  });
+</script>
+<noscript>This page needs JavaScript and an internet connection to draw the diagrams.</noscript>
+</body>
+</html>

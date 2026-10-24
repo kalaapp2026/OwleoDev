@@ -1,7 +1,11 @@
 package com.nest.app.academy.dto;
 
+import com.nest.app.validation.Phone;
+import com.nest.app.validation.StrictEmail;
+import com.nest.app.validation.Username;
+import com.nest.app.validation.PersonName;
+
 import com.nest.app.academy.entity.AcademyCategory;
-import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 
@@ -13,13 +17,13 @@ public record OnboardAcademyRequest(
         @NotBlank String address,
         @NotBlank String city,
         @NotBlank String state,
-        @NotBlank String contactNumber,
-        @Email String email,
+        @NotBlank @Phone String contactNumber,
+        @StrictEmail String email,
         String plan,
 
-        @NotBlank String adminUsername,
-        @NotBlank String adminFullName,
-        @NotBlank String adminPhone,
-        @Email String adminEmail
+        @NotBlank @Username String adminUsername,
+        @NotBlank @PersonName String adminFullName,
+        @NotBlank @Phone String adminPhone,
+        @StrictEmail String adminEmail
 ) {
 }

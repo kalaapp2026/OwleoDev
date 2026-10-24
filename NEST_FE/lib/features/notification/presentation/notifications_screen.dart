@@ -151,6 +151,11 @@ class NotificationDropdownContent extends ConsumerWidget {
                             ref.invalidate(unreadCountProvider(module));
                           }
                         },
+                        onMarkRead: () async {
+                          await ref.read(notificationApiProvider).markRead(n.id);
+                          ref.invalidate(notificationsProvider(module));
+                          ref.invalidate(unreadCountProvider(module));
+                        },
                       ),
                   ]);
                 },
@@ -228,10 +233,11 @@ class _EnablePushCardState extends ConsumerState<_EnablePushCard> {
 }
 
 class _NotificationRow extends StatelessWidget {
-  const _NotificationRow({required this.notification, required this.onOpen});
+  const _NotificationRow({required this.notification, required this.onOpen, required this.onMarkRead});
 
   final AppNotification notification;
   final VoidCallback onOpen;
+  final VoidCallback onMarkRead;
 
   /// The prototype's five kinds - attendance, fees, messages, events, study material - mapped from
   /// what the server actually sends. Template events are told apart by their title.
@@ -307,6 +313,17 @@ class _NotificationRow extends StatelessWidget {
                         height: 6,
                         margin: const EdgeInsets.only(left: 6),
                         decoration: BoxDecoration(color: palette.primary, shape: BoxShape.circle),
+                      ),
+                    if (unread)
+                      Pressable(
+                        onTap: onMarkRead,
+                        child: Tooltip(
+                          message: 'Mark as read',
+                          child: Padding(
+                            padding: const EdgeInsets.only(left: 8, top: 2, bottom: 2),
+                            child: Icon(Icons.done, size: 16, color: palette.primary),
+                          ),
+                        ),
                       ),
                   ]),
                   if (notification.body.isNotEmpty) ...[

@@ -27,8 +27,6 @@ public interface AcademyMembershipRepository extends JpaRepository<AcademyMember
      * audience resolves to the distinct user ids behind these rows. */
     List<AcademyMembership> findByAcademyId(UUID academyId);
 
-    boolean existsByUserIdAndAcademyIdAndStatusNot(UUID userId, UUID academyId, MembershipStatus status);
-
     /** The batch trainer-picker's "Academy Admin is also a trainer" source - an Admin isn't ever
      * mapped to a course via CourseMap (they have blanket academy access, not per-course
      * enrolment), so they can't be found the same way a Trainer's course_map row is found. */
@@ -40,8 +38,6 @@ public interface AcademyMembershipRepository extends JpaRepository<AcademyMember
      * two academies is one user but two trainers, which is the right unit for "how big is this
      * academy". Platform-wide user totals come from UserRepository instead. */
     long countByAcademyIdAndRoleTypeAndStatus(UUID academyId, Role roleType, MembershipStatus status);
-
-    long countByRoleTypeAndStatus(Role roleType, MembershipStatus status);
 
     /**
      * Headcount for EVERY academy at once, as (academyId, roleType, count) rows. Grouped on

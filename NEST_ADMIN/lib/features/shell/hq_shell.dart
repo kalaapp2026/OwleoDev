@@ -13,6 +13,7 @@ import '../../core/ui/layout.dart';
 import '../../core/ui/overlays.dart';
 import '../../core/ui/primitives.dart';
 import '../onboarding/add_academy_page.dart';
+import '../onboarding/add_pre_lead_page.dart';
 import 'logo_flip.dart';
 import 'modules.dart';
 import 'nav.dart';
@@ -142,7 +143,14 @@ class _HqShellState extends ConsumerState<HqShell> {
                     bellPortal: _bellPortal,
                     onBell: () => setState(() => _bell = !_bell),
                     action: onOnboarding && user.canWrite
-                        ? HqButton('Onboard academy', icon: 'plus', kind: BtnKind.primary, onPressed: () => showAddAcademy(context, ref))
+                        ? Row(mainAxisSize: MainAxisSize.min, children: [
+                            // On a narrow screen there is only room for one; the pipeline has its own Add buttons.
+                            if (MediaQuery.sizeOf(context).width >= 700) ...[
+                              HqButton('Add pre-lead', icon: 'plus', onPressed: () => showAddPreLead(context, ref)),
+                              const SizedBox(width: 8),
+                            ],
+                            HqButton('Add lead', icon: 'plus', kind: BtnKind.primary, onPressed: () => showAddAcademy(context, ref)),
+                          ])
                         : null,
                     alerts: alerts.valueOrNull ?? const [],
                     onOpenAlert: (a) {

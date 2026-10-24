@@ -36,7 +36,6 @@ class SignupPersonDetails {
     this.state,
     this.country,
     this.pinCode,
-    this.guardianName,
   });
 
   final String? firstName;
@@ -52,7 +51,6 @@ class SignupPersonDetails {
   final String? state;
   final String? country;
   final String? pinCode;
-  final String? guardianName;
 
   Map<String, dynamic> toJson() => {
         'firstName': firstName,
@@ -68,7 +66,6 @@ class SignupPersonDetails {
         'state': state,
         'country': country,
         'pinCode': pinCode,
-        'guardianName': guardianName,
       };
 }
 

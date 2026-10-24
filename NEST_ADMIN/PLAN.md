@@ -99,7 +99,7 @@ Operations, Finance.
 |---|---|---|---|
 | Dashboard (Business + Platform status) | `dashboard/` | `HqOverviewController`, `HqPlatform` | reads (V48) |
 | Entities / academies | `academies/` | `HqAcademyController`, `HqAcademyService`, `HqImport` | V49, V51 |
-| Onboarding | `onboarding/` | `HqOnboardingController`, `HqOnboarding` | `hq_leads` (V54) |
+| Onboarding (Pre-lead, Lead, Demo, Live) | `onboarding/` | `HqOnboardingController`, `HqOnboarding`, `PreLeadRules` | `hq_leads` (V54, V64, V65) |
 | Collections | `collections/` | `HqCollectionsController`, `HqBilling`, `HqCatalog` | V50, V52 |
 | Plans | `plans/` | `HqPlansController` | V49 |
 | Growth, Finance (revenue only) | `growth/`, `finance/` | `HqInsightsController` | V50 |
@@ -134,6 +134,10 @@ Behaviour worth knowing:
 - **Revenue groups**: Platform fees = plan + setup + credits/other adjustments; Marketing fees =
   `MARKETING` lines; Other service fees = add-ons + `COMMISSION` lines. Marketing and commission lines are
   added by hand from Collections ("Counts as revenue from") because the apps do not bill them yet.
+- **Pre-lead comes before Lead.** An academy HQ has only heard of is added as a pre-lead with just its own details
+  (no owner, plan or banks; `AcademyFormData.issues(preLead: true)`). "Make lead" opens the lead form with those
+  filled in; "Drop" retires either stage. A dropped row keeps whatever it had, so V65 lets DROPPED rows be
+  incomplete while the table still forces LEAD, DEMO and LIVE rows to be.
 - **Demo length is in days** (`hq_leads.demo_days`, 15 to 90; the form offers 15 days, 1 month, 45 days,
   2 months, 3 months or custom).
 - **Invoicing** makes real `academy_invoices` rows (so they appear in Collections). One schedule row

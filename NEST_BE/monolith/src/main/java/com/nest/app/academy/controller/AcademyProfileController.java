@@ -2,14 +2,11 @@ package com.nest.app.academy.controller;
 
 import com.nest.app.academy.dto.AcademyProfileResponse;
 import com.nest.app.academy.dto.AddBranchRequest;
-import com.nest.app.academy.dto.AddFeaturedTrainerRequest;
 import com.nest.app.academy.dto.AddHighlightRequest;
 import com.nest.app.academy.dto.BranchResponse;
-import com.nest.app.academy.dto.FeaturedTrainerResponse;
 import com.nest.app.academy.dto.HighlightResponse;
 import com.nest.app.academy.dto.TrainerCandidateResponse;
 import com.nest.app.academy.dto.UpdateAcademyProfileRequest;
-import com.nest.app.academy.dto.UpdateFeaturedTrainerRequest;
 import com.nest.app.academy.dto.UpdateHighlightRequest;
 import com.nest.app.academy.service.AcademyProfileService;
 import com.nest.common.security.FeatureKey;
@@ -85,12 +82,6 @@ public class AcademyProfileController {
         return academyProfileService.addHighlightImage(TenantContext.currentAcademyId(), id, file);
     }
 
-    @DeleteMapping("/academies/me/highlights/{id}/images/{imageId}")
-    @RequiresFeature(FeatureKey.ABOUT_US_EDIT)
-    public void deleteHighlightImage(@PathVariable UUID id, @PathVariable UUID imageId) {
-        academyProfileService.deleteHighlightImage(TenantContext.currentAcademyId(), id, imageId);
-    }
-
     @DeleteMapping("/academies/me/highlights/{id}")
     @RequiresFeature(FeatureKey.ABOUT_US_EDIT)
     public void deleteHighlight(@PathVariable UUID id) {
@@ -101,24 +92,6 @@ public class AcademyProfileController {
     @RequiresFeature(FeatureKey.ABOUT_US_EDIT)
     public List<TrainerCandidateResponse> listTrainerCandidates() {
         return academyProfileService.listTrainerCandidates(TenantContext.currentAcademyId());
-    }
-
-    @PostMapping("/academies/me/featured-trainers")
-    @RequiresFeature(FeatureKey.ABOUT_US_EDIT)
-    public FeaturedTrainerResponse addFeaturedTrainer(@Valid @RequestBody AddFeaturedTrainerRequest request) {
-        return academyProfileService.addFeaturedTrainer(TenantContext.currentAcademyId(), request);
-    }
-
-    @PutMapping("/academies/me/featured-trainers/{id}")
-    @RequiresFeature(FeatureKey.ABOUT_US_EDIT)
-    public FeaturedTrainerResponse updateFeaturedTrainer(@PathVariable UUID id, @Valid @RequestBody UpdateFeaturedTrainerRequest request) {
-        return academyProfileService.updateFeaturedTrainer(TenantContext.currentAcademyId(), id, request);
-    }
-
-    @DeleteMapping("/academies/me/featured-trainers/{id}")
-    @RequiresFeature(FeatureKey.ABOUT_US_EDIT)
-    public void deleteFeaturedTrainer(@PathVariable UUID id) {
-        academyProfileService.deleteFeaturedTrainer(TenantContext.currentAcademyId(), id);
     }
 
     @PostMapping("/academies/me/branches")

@@ -24,10 +24,6 @@ import com.nest.app.identity.service.CourseFeatureGuard;
 import com.nest.app.scheduling.entity.ClassInstance;
 import com.nest.app.scheduling.entity.ClassInstanceStatus;
 import com.nest.app.scheduling.repository.ClassInstanceRepository;
-import com.nest.common.audit.Auditable;
-import com.nest.common.exception.ForbiddenException;
-import com.nest.common.exception.ResourceNotFoundException;
-import com.nest.common.security.FeatureKey;
 import com.nest.common.security.Role;
 import com.nest.common.security.TenantContext;
 import org.slf4j.Logger;
@@ -108,33 +104,6 @@ public class FeeSlipService {
                 log.error("Fee slip generation failed for course {}", course.getId(), e);
             }
         }
-    }
-
-    /** Manual trigger for testing/immediate use - same generation logic as the cron, just for
-     * one course right now, gated to the caller's own active academy so it can't be used to
-     * probe or bill another academy's course. Bypasses {@link #isDueThisMonth} on purpose - an
-     * explicit "generate now" click is allowed to catch up a quarterly/yearly course early. */
-    @Transactional
-    @Auditable(action = "FEE_SLIPS_GENERATED", entityType = "course")
-    public List<FeeSlipResponse> generateNow(java.util.UUID courseId) {
-        Course course = courseRepository.findById(courseId)
-                .orElseThrow(() -> new ResourceNotFoundException("Course not found: " + courseId));
-        if (!course.getAcademyId().equals(TenantContext.currentAcademyId())) {
-            throw new ForbiddenException("That course does not belong to the active academy");
-        }
-        // Per-course enforcement: the controller's @RequiresFeature(FEES_ENTRY) only checks the
-        // union across all courses.
-        courseFeatureGuard.assertCourseFeature(courseId, FeatureKey.FEES_ENTRY);
-        return generateSlipsForCourse(course, LocalDate.now()).stream().map(this::toResponse).collect(Collectors.toList());
-    }
-
-    @Transactional(readOnly = true)
-    public List<FeeSlipResponse> historyForStudent(java.util.UUID membershipId) {
-        List<FeeSlip> slips = feeSlipRepository.findByMembershipIdOrderByGeneratedAtDesc(membershipId);
-        boolean isSelf = membershipId.equals(TenantContext.currentMembershipId());
-        return slips.stream()
-                .filter(s -> isSelf || courseFeatureGuard.hasCourseFeature(s.getCourseId(), FeatureKey.FEES_ENTRY))
-                .map(this::toResponse).collect(Collectors.toList());
     }
 
     /** MONTHLY bills every eligible month (interval 1 - always true, same as before this cycle

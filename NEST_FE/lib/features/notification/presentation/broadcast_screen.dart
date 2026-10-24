@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:nest_fe/core/design/app_text_field.dart';
 import 'package:nest_fe/core/error/api_exception.dart';
 import 'package:nest_fe/core/widgets/app_notice.dart';
 import 'package:nest_fe/core/widgets/async_value_view.dart';
@@ -35,9 +36,13 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen> {
     super.dispose();
   }
 
+  static final _titleRule = FieldPreset.text(label: 'title', min: 3, max: 120);
+  static final _bodyRule = FieldPreset.text(label: 'message', min: 3, max: 1000);
+
   Future<void> _send() async {
-    if (_titleController.text.trim().isEmpty || _bodyController.text.trim().isEmpty) {
-      AppNotice.error(context, 'Give the announcement a title and a message.');
+    final problem = _titleRule.check(_titleController.text) ?? _bodyRule.check(_bodyController.text);
+    if (problem != null) {
+      AppNotice.error(context, problem);
       return;
     }
     if (_audience == 'ACADEMY' && _academyId == null) {
@@ -100,18 +105,9 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen> {
             ),
           ],
           const SizedBox(height: 20),
-          TextField(
-            controller: _titleController,
-            decoration: const InputDecoration(labelText: 'Title'),
-            textCapitalization: TextCapitalization.sentences,
-          ),
+          ValidatedTextField(controller: _titleController, label: 'Title', preset: _titleRule),
           const SizedBox(height: 12),
-          TextField(
-            controller: _bodyController,
-            decoration: const InputDecoration(labelText: 'Message'),
-            maxLines: 4,
-            textCapitalization: TextCapitalization.sentences,
-          ),
+          ValidatedTextField(controller: _bodyController, label: 'Message', preset: _bodyRule, maxLines: 4),
           const SizedBox(height: 24),
           FilledButton.icon(
             icon: const Icon(Icons.send_outlined),

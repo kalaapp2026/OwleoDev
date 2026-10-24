@@ -10,6 +10,7 @@ public record TrainerSummaryResponse(
         UUID userId,
         String username,
         String fullName,
-        boolean active
+        boolean active,
+        String profileImageUrl
 ) {
 }

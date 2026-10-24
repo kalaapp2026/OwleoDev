@@ -16,7 +16,6 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.math.BigDecimal;
-import java.time.YearMonth;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -28,7 +27,6 @@ import java.util.Map;
 @PreAuthorize("hasRole('SUPER_ADMIN')")
 public class HqInsightsController {
 
-    private static final List<String> EXPENSE_CATEGORIES = List.of("SALARY", "CLOUD", "MARKETING", "SUPPORT", "MESSAGING", "MISC");
 
     private final HqAccess access;
     private final HqAcademies academies;
@@ -138,47 +136,6 @@ public class HqInsightsController {
         out.put("overdue", overdue);
         out.put("canEdit", access.role().name().equals("SUPER") || access.role().name().equals("FINANCE"));
         return out;
-    }
-
-    /** Saves one month's expense lines. Missing lines are left as they were; a blank clears to zero. */
-    @PutMapping("/admin/hq/finance/expenses")
-    @Transactional
-    public void saveExpenses(@RequestBody Map<String, Object> body) {
-        access.requireModule("finance");
-        access.requireFinanceWorkspace();
-        if (!access.role().name().equals("SUPER") && !access.role().name().equals("FINANCE")) {
-            throw new BadRequestException("Only a Super admin or Finance admin can edit expenses.");
-        }
-        String month = String.valueOf(body.get("month"));
-        try {
-            YearMonth.parse(month);
-        } catch (Exception e) {
-            throw new BadRequestException("Choose a valid month.");
-        }
-        if (YearMonth.parse(month).isAfter(YearMonth.now())) {
-            throw new BadRequestException("You cannot enter expenses for a future month.");
-        }
-        java.util.UUID actor = com.nest.common.security.TenantContext.currentUserId();
-        for (String cat : EXPENSE_CATEGORIES) {
-            Object raw = body.get(cat.toLowerCase());
-            if (raw == null) continue;
-            String s = raw.toString().replace(",", "").trim();
-            BigDecimal v = s.isEmpty() ? BigDecimal.ZERO : parse(s);
-            if (v.signum() < 0) throw new BadRequestException("Expenses cannot be negative.");
-            jdbc.update("""
-                    INSERT INTO hq_expenses (month, category, amount, updated_by) VALUES (?, ?, ?, ?)
-                    ON CONFLICT (month, category) DO UPDATE SET amount = EXCLUDED.amount, updated_by = EXCLUDED.updated_by, updated_at = now()""",
-                    month, cat, v, actor);
-        }
-        audit.log("finance", "Updated expenses for " + month);
-    }
-
-    private static BigDecimal parse(String s) {
-        try {
-            return new BigDecimal(s);
-        } catch (NumberFormatException e) {
-            throw new BadRequestException("Enter expenses as numbers.");
-        }
     }
 
 }

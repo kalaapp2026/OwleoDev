@@ -4,14 +4,12 @@ import com.nest.app.identity.entity.AcademyMembership;
 import com.nest.app.identity.entity.AccountLinkGrant;
 import com.nest.app.identity.entity.CourseFeatureGrant;
 import com.nest.app.identity.entity.CourseMap;
-import com.nest.app.identity.entity.FeatureGrant;
 import com.nest.app.identity.entity.MembershipStatus;
 import com.nest.app.identity.entity.User;
 import com.nest.app.identity.repository.AcademyMembershipRepository;
 import com.nest.app.identity.repository.AccountLinkGrantRepository;
 import com.nest.app.identity.repository.CourseFeatureGrantRepository;
 import com.nest.app.identity.repository.CourseMapRepository;
-import com.nest.app.identity.repository.FeatureGrantRepository;
 import com.nest.app.identity.repository.UserRepository;
 import com.nest.common.crypto.PiiHasher;
 import com.nest.common.exception.BadRequestException;
@@ -43,7 +41,6 @@ public class IdentityRegistrationService {
 
     private final UserRepository userRepository;
     private final AcademyMembershipRepository membershipRepository;
-    private final FeatureGrantRepository featureGrantRepository;
     private final CourseFeatureGrantRepository courseFeatureGrantRepository;
     private final CourseMapRepository courseMapRepository;
     private final PiiHasher hasher;
@@ -52,14 +49,13 @@ public class IdentityRegistrationService {
     private final AccountLinkGrantRepository accountLinkGrantRepository;
 
     public IdentityRegistrationService(UserRepository userRepository, AcademyMembershipRepository membershipRepository,
-                                        FeatureGrantRepository featureGrantRepository, CourseFeatureGrantRepository courseFeatureGrantRepository,
+                                        CourseFeatureGrantRepository courseFeatureGrantRepository,
                                         CourseMapRepository courseMapRepository,
                                         PiiHasher hasher, PasswordEncoder passwordEncoder, TempPasswordGenerator tempPasswordGenerator,
                                         AccountLinkGrantRepository accountLinkGrantRepository) {
         this.accountLinkGrantRepository = accountLinkGrantRepository;
         this.userRepository = userRepository;
         this.membershipRepository = membershipRepository;
-        this.featureGrantRepository = featureGrantRepository;
         this.courseFeatureGrantRepository = courseFeatureGrantRepository;
         this.courseMapRepository = courseMapRepository;
         this.hasher = hasher;
@@ -310,17 +306,8 @@ public class IdentityRegistrationService {
         membershipRepository.save(membership);
     }
 
-    /** Cascading delegation (PRD 3.5) is enforced by the CALLER, which must pass a subset of its
-     * own held features - this method just persists whatever set it's given. */
-    @Transactional
-    public void replaceFeatureGrants(UUID membershipId, Set<String> featureKeys, UUID grantedBy) {
-        featureGrantRepository.deleteByMembershipId(membershipId);
-        featureKeys.forEach(key -> featureGrantRepository.save(
-                FeatureGrant.builder().membershipId(membershipId).featureKey(key).grantedBy(grantedBy).build()));
-    }
-
-    /** Per-course version (unified trainer model): replaces a trainer's whole feature checklist,
-     * scoped course-by-course. {@code courseFeatures} maps courseId -&gt; the features granted on
+    /** Replaces a trainer's whole feature checklist, scoped course-by-course (unified trainer
+     * model). {@code courseFeatures} maps courseId -&gt; the features granted on
      * that course (an entry with an empty set means "mapped to the course, no features"). */
     @Transactional
     public void replaceCourseFeatureGrants(UUID membershipId, Map<UUID, Set<String>> courseFeatures, UUID grantedBy) {

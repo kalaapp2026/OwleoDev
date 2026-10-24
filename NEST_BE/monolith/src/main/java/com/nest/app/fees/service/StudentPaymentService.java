@@ -59,17 +59,25 @@ public class StudentPaymentService {
         if (!mockEnabled) {
             throw new ConflictException("Online payments are not enabled for this academy yet.");
         }
+        Due due = resolveDue(request);
+
+        String gatewayRef = charge(due.amount());
+        FeeTransaction saved = transactionRepository.saveAndFlush(
+                due.toTransaction(TenantContext.currentAcademyId(), TenantContext.currentMembershipId(),
+                        TenantContext.currentUserId())
+                        .amountPaid(due.amount()).gatewayRef(gatewayRef)
+                        .note("Paid online (" + request.method() + ")").build());
+        return new PayFeeResponse(saved.getId(), due.amount(), gatewayRef);
+    }
+
+    /**
+     * What the caller owes on the fee they named, worked out from the ledger. Shared by the mock
+     * charge and the real gateway so both price a payment the same way - and neither can be talked
+     * into a different amount by the client.
+     */
+    public Due resolveDue(PayFeeRequest request) {
         UUID me = TenantContext.currentMembershipId();
-        UUID academyId = TenantContext.currentAcademyId();
-
         BigDecimal outstanding;
-        FeeTransaction.FeeTransactionBuilder tx = FeeTransaction.builder()
-                .academyId(academyId)
-                .membershipId(me)
-                .mode(FeeMode.GATEWAY)
-                .recordedBy(TenantContext.currentUserId())
-                .occurredOn(LocalDate.now());
-
         if (request.category() == FeeCategory.REGULAR) {
             if (request.courseId() == null || request.period() == null) {
                 throw new ConflictException("A course fee payment needs the course and period.");
@@ -78,7 +86,6 @@ public class StudentPaymentService {
                     .filter(r -> request.courseId().equals(r.courseId()) && request.period().equals(r.label()))
                     .findFirst().orElseThrow(() -> new ResourceNotFoundException("Fee not found"));
             outstanding = row.fee().subtract(row.paid());
-            tx.category(FeeCategory.REGULAR).courseId(request.courseId()).period(request.period());
         } else {
             if ((request.feeTypeId() == null) == (request.studentFeeId() == null)) {
                 throw new ConflictException("A payment must be against exactly one fee.");
@@ -89,17 +96,34 @@ public class StudentPaymentService {
                             : request.studentFeeId().equals(r.studentFeeId()))
                     .findFirst().orElseThrow(() -> new ResourceNotFoundException("Fee not found"));
             outstanding = row.balance();
-            tx.category(FeeCategory.OTHER).feeTypeId(request.feeTypeId()).studentFeeId(request.studentFeeId());
         }
 
         if (outstanding.signum() <= 0) {
             throw new ConflictException("Nothing is owed on this fee.");
         }
+        return request.category() == FeeCategory.REGULAR
+                ? new Due(FeeCategory.REGULAR, request.courseId(), request.period(), null, null, outstanding)
+                : new Due(FeeCategory.OTHER, null, null, request.feeTypeId(), request.studentFeeId(), outstanding);
+    }
 
-        String gatewayRef = charge(outstanding);
-        FeeTransaction saved = transactionRepository.saveAndFlush(
-                tx.amountPaid(outstanding).gatewayRef(gatewayRef).note("Paid online (" + request.method() + ")").build());
-        return new PayFeeResponse(saved.getId(), outstanding, gatewayRef);
+    /** One fee being paid and the amount still owed on it. */
+    public record Due(FeeCategory category, UUID courseId, String period, UUID feeTypeId, UUID studentFeeId,
+                      BigDecimal amount) {
+
+        /** A GATEWAY ledger row against exactly this fee, ready for the amount and reference. */
+        public FeeTransaction.FeeTransactionBuilder toTransaction(UUID academyId, UUID membershipId, UUID recordedBy) {
+            return FeeTransaction.builder()
+                    .academyId(academyId)
+                    .membershipId(membershipId)
+                    .mode(FeeMode.GATEWAY)
+                    .recordedBy(recordedBy)
+                    .occurredOn(LocalDate.now())
+                    .category(category)
+                    .courseId(courseId)
+                    .period(period)
+                    .feeTypeId(feeTypeId)
+                    .studentFeeId(studentFeeId);
+        }
     }
 
     /** The seam for a real provider: take the money and return its reference. */

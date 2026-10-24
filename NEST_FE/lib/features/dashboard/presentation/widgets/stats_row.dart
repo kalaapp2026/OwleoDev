@@ -44,6 +44,11 @@ class DashboardStatsRow extends ConsumerWidget {
           value: stat((s) => s.totalStudents),
           color: palette.primary,
           softColor: palette.primarySoft,
+          // The people list for whoever may register students; the fees/attendance student search for
+          // someone who only works with them.
+          onTap: holdsAny([FeatureKeys.studentRegistration])
+              ? () => context.push('/erp/students/new')
+              : () => context.push('/erp/students'),
         ),
       if (holdsAny([
         FeatureKeys.trainerRegistration,
@@ -57,6 +62,7 @@ class DashboardStatsRow extends ConsumerWidget {
           value: stat((s) => s.totalTrainers),
           color: palette.gold,
           softColor: palette.goldSoft,
+          onTap: holdsAny([FeatureKeys.trainerRegistration]) ? () => context.push('/erp/students/new?tab=trainer') : null,
         ),
       _StatTile(
         icon: Icons.auto_stories_outlined,

@@ -22,8 +22,6 @@ public interface UserRepository extends JpaRepository<User, UUID> {
     /** People search (Social "Search" tab) - partial, case-insensitive match on either field. */
     List<User> findByUsernameContainingIgnoreCaseOrFullNameContainingIgnoreCase(String username, String fullName, Pageable pageable);
 
-    /** Phone is no longer unique - may return more than one account for a shared family phone. */
-    List<User> findAllByPhoneHash(String phoneHash);
 
     Optional<User> findByEmailIgnoreCase(String email);
 

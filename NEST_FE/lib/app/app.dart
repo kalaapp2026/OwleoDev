@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:nest_fe/app/data_sync/data_sync.dart';
 import 'package:nest_fe/app/i18n/app_languages.dart';
 import 'package:nest_fe/app/i18n/locale_controller.dart';
 import 'package:nest_fe/app/router/app_router.dart';
@@ -22,10 +23,15 @@ class OwleoNestApp extends ConsumerStatefulWidget {
   ConsumerState<OwleoNestApp> createState() => _OwleoNestAppState();
 }
 
-class _OwleoNestAppState extends ConsumerState<OwleoNestApp> {
+class _OwleoNestAppState extends ConsumerState<OwleoNestApp> with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
+    // Start listening for successful writes so the screens showing related data refresh
+    // themselves (see DataSync), and catch up on anything stale when the app is brought back.
+    ref.read(dataSyncProvider);
+    WidgetsBinding.instance.addObserver(this);
+
     // (Re-)register this device for push whenever a different person becomes the signed-in user,
     // including the session restored at launch. Signing out unregisters in SessionController.
     ref.listenManual(sessionControllerProvider.select((s) => s.user?.id), (previous, userId) {
@@ -42,6 +48,18 @@ class _OwleoNestAppState extends ConsumerState<OwleoNestApp> {
   }
 
   @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // On the web this fires when the browser tab becomes visible again.
+    if (state == AppLifecycleState.resumed) ref.read(dataSyncProvider).refreshStale();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final router = ref.watch(routerProvider);
     final themeMode = ref.watch(themeModeProvider);
@@ -54,6 +72,10 @@ class _OwleoNestAppState extends ConsumerState<OwleoNestApp> {
       theme: AppTheme.light,
       darkTheme: AppTheme.dark,
       themeMode: themeMode,
+      // A theme change (or the saved preference arriving after sign-in) swaps the palette at once. The
+      // default 200ms cross-fade paints the previous palette's colours for a moment, which read as the old
+      // UI flashing through.
+      themeAnimationDuration: Duration.zero,
 
       // Explicit locale rather than following the device: the language is a per-account
       // preference that has to survive moving between a phone and a shared desktop.

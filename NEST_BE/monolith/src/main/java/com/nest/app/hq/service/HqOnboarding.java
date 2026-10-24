@@ -75,13 +75,24 @@ public class HqOnboarding {
                 SELECT l.*, p.display_name AS plan_name, p.monthly_price,
                        h.decision AS approval_decision
                 FROM hq_leads l LEFT JOIN billing_plans p ON p.code = l.plan_code LEFT JOIN hq_requests h ON h.id = l.approval_id
-                WHERE l.stage IN ('LEAD', 'DEMO') ORDER BY l.created_at DESC""", rs -> {
+                WHERE l.stage IN ('PRELEAD', 'LEAD', 'DEMO') ORDER BY l.created_at DESC""", rs -> {
             Map<String, Object> m = new LinkedHashMap<>();
             m.put("id", rs.getObject("id", UUID.class));
             m.put("stage", rs.getString("stage"));
             m.put("name", rs.getString("name"));
             m.put("owner", rs.getString("owner_name"));
             m.put("city", rs.getString("city"));
+            m.put("state", rs.getString("state"));
+            // The academy's own details, under the names the console's form uses, so a pre-lead can be
+            // handed straight to the lead form to be completed.
+            m.put("aemail", rs.getString("academy_email"));
+            m.put("aphone", rs.getString("academy_phone"));
+            m.put("a1", rs.getString("address_line1"));
+            m.put("a2", rs.getString("address_line2"));
+            m.put("landmark", rs.getString("landmark"));
+            m.put("district", rs.getString("district"));
+            m.put("country", rs.getString("country"));
+            m.put("pin", rs.getString("pin"));
             m.put("type", rs.getString("type"));
             m.put("planCode", rs.getString("plan_code"));
             m.put("planName", rs.getString("plan_name"));
@@ -116,6 +127,7 @@ public class HqOnboarding {
                 ORDER BY a.go_live_on DESC""");
 
         Map<String, Object> out = new LinkedHashMap<>();
+        out.put("preleads", leads.stream().filter(l -> "PRELEAD".equals(l.get("stage"))).toList());
         out.put("leads", leads.stream().filter(l -> "LEAD".equals(l.get("stage"))).toList());
         out.put("demos", leads.stream().filter(l -> "DEMO".equals(l.get("stage"))).toList());
         out.put("live", live);
@@ -129,8 +141,35 @@ public class HqOnboarding {
 
     // ---------------------------------------------------------------- registering
 
+    /** A pre-lead: the academy's own details only. No owner, plan or bank accounts - none of that is known yet. */
     @Transactional
-    public UUID createLead(Map<String, Object> b) {
+    public UUID createPreLead(Map<String, Object> b) {
+        String problem = PreLeadRules.problem(b);
+        if (problem != null) throw new BadRequestException(problem);
+        String name = s(b, "name"), aemail = s(b, "aemail");
+        requireNewName(name, null);
+        if (!aemail.isEmpty()) requireNewEmail(aemail, null);
+
+        UUID id = UUID.randomUUID();
+        jdbc.update("""
+                INSERT INTO hq_leads (id, stage, name, type, academy_email, academy_phone, address_line1, address_line2, landmark, city, district, state, country, pin)
+                VALUES (?, 'PRELEAD', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                id, name, s(b, "type"), nullIfBlank(aemail), nullIfBlank(s(b, "aphone")), nullIfBlank(s(b, "a1")), nullIfBlank(s(b, "a2")),
+                nullIfBlank(s(b, "landmark")), s(b, "city"), nullIfBlank(s(b, "district")), s(b, "state"),
+                s(b, "country").isEmpty() ? "India" : s(b, "country"), nullIfBlank(s(b, "pin")));
+        audit.log("onboarding", "Added " + name + " as a pre-lead");
+        return id;
+    }
+
+    /** Everything a lead needs, validated. Shared by registering a lead and by making one from a pre-lead. */
+    private record LeadInput(String name, String type, String aemail, String aphone, String a1, String a2, String landmark,
+                             String city, String district, String state, String country, String pin,
+                             String owner, String ophone, String oemail, String plan, int est, int demoDays,
+                             List<Map<String, Object>> banks) {
+    }
+
+    /** [self] is the row being promoted, which must not count as its own duplicate. */
+    private LeadInput validatedLead(Map<String, Object> b, UUID self) {
         String name = s(b, "name"), type = s(b, "type"), aemail = s(b, "aemail"), aphone = s(b, "aphone");
         String a1 = s(b, "a1"), city = s(b, "city"), state = s(b, "state"), pin = s(b, "pin");
         String owner = s(b, "owner"), ophone = s(b, "ophone"), oemail = s(b, "oemail"), plan = s(b, "plan");
@@ -152,25 +191,68 @@ public class HqOnboarding {
         if (jdbc.queryForObject("SELECT count(*) FROM billing_plans WHERE code = ? AND active", Integer.class, plan) == 0) {
             throw new BadRequestException("Choose a plan.");
         }
-        Integer dup = jdbc.queryForObject("""
-                SELECT (SELECT count(*) FROM academies WHERE lower(name) = lower(?)) + (SELECT count(*) FROM hq_leads WHERE lower(name) = lower(?) AND stage <> 'DROPPED')""",
-                Integer.class, name, name);
-        if (dup != null && dup > 0) throw new ConflictException("An academy with this name already exists.");
-        Integer emailDup = jdbc.queryForObject("""
-                SELECT (SELECT count(*) FROM academies WHERE lower(email) = lower(?)) + (SELECT count(*) FROM hq_leads WHERE lower(academy_email) = lower(?) AND stage <> 'DROPPED')""",
-                Integer.class, aemail, aemail);
-        if (emailDup != null && emailDup > 0) throw new ConflictException("This academy email is already registered.");
-
+        requireNewName(name, self);
+        requireNewEmail(aemail, self);
         List<Map<String, Object>> banks = banks(b.get("accts"), b.get("primary"));
+        return new LeadInput(name, type, aemail, aphone, a1, nullIfBlank(s(b, "a2")), nullIfBlank(s(b, "landmark")), city,
+                nullIfBlank(s(b, "district")), state, s(b, "country").isEmpty() ? "India" : s(b, "country"), pin,
+                owner, ophone, oemail, plan, est, demoDays, banks);
+    }
+
+    private void requireNewName(String name, UUID self) {
+        Integer dup = jdbc.queryForObject("""
+                SELECT (SELECT count(*) FROM academies WHERE lower(name) = lower(?)) + (SELECT count(*) FROM hq_leads WHERE lower(name) = lower(?) AND stage <> 'DROPPED' AND id IS DISTINCT FROM ?::uuid)""",
+                Integer.class, name, name, self == null ? null : self.toString());
+        if (dup != null && dup > 0) throw new ConflictException("An academy with this name already exists.");
+    }
+
+    private void requireNewEmail(String email, UUID self) {
+        Integer dup = jdbc.queryForObject("""
+                SELECT (SELECT count(*) FROM academies WHERE lower(email) = lower(?)) + (SELECT count(*) FROM hq_leads WHERE lower(academy_email) = lower(?) AND stage <> 'DROPPED' AND id IS DISTINCT FROM ?::uuid)""",
+                Integer.class, email, email, self == null ? null : self.toString());
+        if (dup != null && dup > 0) throw new ConflictException("This academy email is already registered.");
+    }
+
+    @Transactional
+    public UUID createLead(Map<String, Object> b) {
+        LeadInput in = validatedLead(b, null);
         UUID id = UUID.randomUUID();
         jdbc.update("""
                 INSERT INTO hq_leads (id, name, type, academy_email, academy_phone, address_line1, address_line2, landmark, city, district, state, country, pin,
                                       owner_name, owner_phone, owner_email, plan_code, est_students, demo_days, banks)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                id, name, type, aemail, aphone, a1, nullIfBlank(s(b, "a2")), nullIfBlank(s(b, "landmark")), city, nullIfBlank(s(b, "district")), state,
-                s(b, "country").isEmpty() ? "India" : s(b, "country"), pin, owner, ophone, oemail, plan, est, demoDays, write(banks));
-        audit.log("onboarding", "Registered " + name + " as a lead");
+                id, in.name(), in.type(), in.aemail(), in.aphone(), in.a1(), in.a2(), in.landmark(), in.city(), in.district(), in.state(), in.country(),
+                in.pin(), in.owner(), in.ophone(), in.oemail(), in.plan(), in.est(), in.demoDays(), write(in.banks()));
+        audit.log("onboarding", "Registered " + in.name() + " as a lead");
         return id;
+    }
+
+    /**
+     * Turns a pre-lead into a lead: the academy details (which may be corrected here) plus everything a
+     * pre-lead did not have - the owner, the plan and expected students, the demo length and the bank accounts.
+     */
+    @Transactional
+    public void promote(UUID id, Map<String, Object> b) {
+        var l = lead(id);
+        if (!"PRELEAD".equals(l.get("stage"))) throw new ConflictException("Only a pre-lead can be made into a lead.");
+        LeadInput in = validatedLead(b, id);
+        jdbc.update("""
+                UPDATE hq_leads SET stage = 'LEAD', name = ?, type = ?, academy_email = ?, academy_phone = ?, address_line1 = ?, address_line2 = ?,
+                       landmark = ?, city = ?, district = ?, state = ?, country = ?, pin = ?, owner_name = ?, owner_phone = ?, owner_email = ?,
+                       plan_code = ?, est_students = ?, demo_days = ?, banks = ? WHERE id = ?""",
+                in.name(), in.type(), in.aemail(), in.aphone(), in.a1(), in.a2(), in.landmark(), in.city(), in.district(), in.state(), in.country(),
+                in.pin(), in.owner(), in.ophone(), in.oemail(), in.plan(), in.est(), in.demoDays(), write(in.banks()), id);
+        audit.log("onboarding", "Made " + in.name() + " a lead");
+    }
+
+    /** Gives up on a pre-lead or a lead. The row stays as the record, and its name and email are free to use again. */
+    @Transactional
+    public void drop(UUID id) {
+        var l = lead(id);
+        String stage = (String) l.get("stage");
+        if (!"PRELEAD".equals(stage) && !"LEAD".equals(stage)) throw new ConflictException("Only a pre-lead or a lead can be dropped.");
+        jdbc.update("UPDATE hq_leads SET stage = 'DROPPED' WHERE id = ?", id);
+        audit.log("onboarding", "Dropped " + l.get("name") + " (was a " + stage.toLowerCase().replace("prelead", "pre-lead") + ")");
     }
 
     /** Validates up to two bank accounts and returns them ready to store, with the number encrypted. */
@@ -212,6 +294,7 @@ public class HqOnboarding {
     @Transactional
     public Map<String, Object> startDemo(UUID id) {
         var l = lead(id);
+        if ("PRELEAD".equals(l.get("stage"))) throw new BadRequestException("Make this a lead first: a pre-lead has no owner, plan or bank accounts yet.");
         if (!"LEAD".equals(l.get("stage"))) throw new ConflictException("This one is already in a demo.");
         String name = (String) l.get("name"), owner = (String) l.get("owner_name");
         String username = uniqueUsername(owner);
@@ -255,6 +338,7 @@ public class HqOnboarding {
     @Transactional
     public void validate(UUID id) {
         var l = lead(id);
+        if ("PRELEAD".equals(l.get("stage"))) throw new BadRequestException("Make this a lead first: a pre-lead has no owner details to validate.");
         List<String> issues = new ArrayList<>();
         for (String k : new String[]{"name", "owner_name", "city", "academy_phone", "academy_email", "address_line1", "owner_email"}) {
             if (l.get(k) == null || l.get(k).toString().trim().length() < 2) issues.add(k.replace('_', ' ') + " is missing");

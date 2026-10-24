@@ -772,6 +772,20 @@ public class HqDemoSeeder implements ApplicationRunner {
                     VALUES (?, ?, ?, ?, '12 MG Road', ?, ?, ?, ?, ?, ?, ?, ?, ?, '[]')""",
                     l[0], l[1], "hello@" + slug + ".in", phone(), l[3], l[4], l[5], l[2], phone(), slug(l[2]) + "@gmail.com", l[6], Integer.parseInt(l[7]), Integer.parseInt(l[8]));
         }
+        // Pre-leads: academies HQ has heard of. Only the academy's own details - no owner, plan or bank accounts yet.
+        String[][] preleads = {
+                {"Kalakshetra Foundation Studio", "Dance", "Chennai", "Tamil Nadu"},
+                {"Surtaal Academy", "Music", "Jaipur", "Rajasthan"},
+                {"Chitrakala Arts Hub", "Fine Arts", "Kolkata", "West Bengal"},
+                {"Natya Roopa", "Dance", "Hyderabad", "Telangana"}};
+        for (int i = 0; i < preleads.length; i++) {
+            String[] p = preleads[i];
+            // Some are known by phone, some by email, some by both - a pre-lead only needs one.
+            jdbc.update("""
+                    INSERT INTO hq_leads (stage, name, type, academy_email, academy_phone, city, state)
+                    VALUES ('PRELEAD', ?, ?, ?, ?, ?, ?)""",
+                    p[0], p[1], i % 2 == 0 ? "hello@" + slug(p[0]) + ".in" : null, i % 3 == 1 ? null : phone(), p[2], p[3]);
+        }
         int n = 0;
         for (Acad a : academies) {
             if (!"trial".equals(a.fate())) continue;

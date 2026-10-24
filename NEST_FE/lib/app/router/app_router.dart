@@ -16,6 +16,7 @@ import 'package:nest_fe/features/curriculum/presentation/my_courses_screen.dart'
 import 'package:nest_fe/features/events/presentation/student_events_screen.dart';
 import 'package:nest_fe/features/enrolment/presentation/batch_list_screen.dart';
 import 'package:nest_fe/features/enrolment/presentation/student_search_screen.dart';
+import 'package:nest_fe/features/enrolment/data/user_tab.dart';
 import 'package:nest_fe/features/enrolment/presentation/user_list_screen.dart';
 import 'package:nest_fe/features/messages/presentation/messages_home_screen.dart';
 import 'package:nest_fe/features/events/presentation/event_form_screen.dart';
@@ -98,7 +99,13 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/profile',
         builder: (context, state) => Scaffold(appBar: AppBar(title: const Text('Profile')), body: const ProfileScreen()),
       ),
-      GoRoute(path: '/erp/students/new', builder: (context, state) => const _WithNavBar(child: UserListScreen())),
+      GoRoute(
+        path: '/erp/students/new',
+        // ?tab=trainer opens on the Trainers tab (the Dashboard's Trainers tile).
+        builder: (context, state) => _WithNavBar(
+          child: UserListScreen(initialTab: state.uri.queryParameters['tab'] == 'trainer' ? UserTab.trainer : null),
+        ),
+      ),
       GoRoute(path: '/erp/students', builder: (context, state) => const _WithNavBar(child: StudentSearchScreen())),
       GoRoute(path: '/erp/messages', builder: (context, state) => const _WithNavBar(child: MessagesHomeScreen())),
       GoRoute(path: '/erp/courses', builder: (context, state) => const _WithNavBar(child: CourseListScreen())),

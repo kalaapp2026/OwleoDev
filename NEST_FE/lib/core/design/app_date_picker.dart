@@ -57,10 +57,21 @@ class _AppDatePickerDialogState extends State<_AppDatePickerDialog> {
   int? _day;
   _PickerView _view = _PickerView.day;
 
-  // One key per rendered year row, so the selected one can be scrolled to centre with
-  // Scrollable.ensureVisible - simpler and more correct than hand-computing a scroll offset,
-  // since it doesn't need to know the viewport's own height.
-  final _yearKeys = <int, GlobalKey>{};
+  // The year list runs oldest to newest, and opens scrolled so the browsed year is in the middle - for
+  // today's year that is the very bottom, so it opens on this year and older ones are a scroll UP.
+  // Rows have a fixed height, so the offset is plain arithmetic - Scrollable.ensureVisible cannot be
+  // used here because it does nothing for a row the lazy list has not built yet, which is every year
+  // more than a few rows away.
+  static const _yearRowHeight = 52.0;
+  static const _yearGap = AppSpacing.sm;
+  static const _yearViewHeight = 300.0;
+  final _yearScroll = ScrollController();
+
+  @override
+  void dispose() {
+    _yearScroll.dispose();
+    super.dispose();
+  }
 
   static DateTime _dateOnly(DateTime d) => DateTime(d.year, d.month, d.day);
   static DateTime _monthOnly(DateTime d) => DateTime(d.year, d.month);
@@ -123,12 +134,12 @@ class _AppDatePickerDialogState extends State<_AppDatePickerDialog> {
 
   void _openYearView() {
     setState(() => _view = _PickerView.year);
-    // The list only exists once this frame builds - the key lookup has to wait for it.
+    // The list only exists once this frame builds, so the position has to wait for it.
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final ctx = _yearKeys[_month.year]?.currentContext;
-      if (ctx != null) {
-        Scrollable.ensureVisible(ctx, alignment: 0.5, duration: const Duration(milliseconds: 200));
-      }
+      if (!_yearScroll.hasClients) return;
+      final index = (_month.year - _minYear).clamp(0, _maxYear - _minYear);
+      final centred = index * (_yearRowHeight + _yearGap) - (_yearViewHeight - _yearRowHeight) / 2;
+      _yearScroll.jumpTo(centred.clamp(0.0, _yearScroll.position.maxScrollExtent));
     });
   }
 
@@ -377,16 +388,15 @@ class _AppDatePickerDialogState extends State<_AppDatePickerDialog> {
       key: const ValueKey('year'),
       // Tall enough to show ~5 rows with a partial one peeking at each edge (matching the
       // reference), short enough that a century-long list doesn't try to lay out unscrolled.
-      height: 300,
+      height: _yearViewHeight,
       child: ListView.separated(
+        controller: _yearScroll,
         itemCount: years.length,
-        separatorBuilder: (context, _) => const SizedBox(height: AppSpacing.sm),
+        separatorBuilder: (context, _) => const SizedBox(height: _yearGap),
         itemBuilder: (context, index) {
           final year = years[index];
           final selected = year == _month.year;
-          final key = _yearKeys.putIfAbsent(year, () => GlobalKey());
           return _YearRow(
-            key: key,
             label: DateFormat.y(locale).format(DateTime(year)),
             selected: selected,
             onTap: () => _selectYear(year),
@@ -508,7 +518,7 @@ class _GridChip extends StatelessWidget {
 }
 
 class _YearRow extends StatelessWidget {
-  const _YearRow({super.key, required this.label, required this.selected, required this.onTap});
+  const _YearRow({required this.label, required this.selected, required this.onTap});
 
   final String label;
   final bool selected;
@@ -520,7 +530,7 @@ class _YearRow extends StatelessWidget {
     return Pressable(
       onTap: onTap,
       child: Container(
-        height: 52,
+        height: _AppDatePickerDialogState._yearRowHeight,
         alignment: Alignment.center,
         decoration: BoxDecoration(
           color: selected ? palette.primary : palette.surfaceHigh,

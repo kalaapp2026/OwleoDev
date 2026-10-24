@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:nest_fe/app/theme/app_tokens.dart';
 import 'package:nest_fe/app/theme/app_typography.dart';
+import 'package:nest_fe/core/design/app_text_field.dart';
 import 'package:nest_fe/core/design/attached_select.dart';
 import 'package:nest_fe/core/design/buttons.dart';
 import 'package:nest_fe/core/design/category_meta.dart';
@@ -80,20 +80,37 @@ class _CourseFormScreenState extends ConsumerState<CourseFormScreen> {
 
   int? _intOf(TextEditingController c) => int.tryParse(c.text.trim());
 
+  // One rule per field: the same ones the fields show under themselves, so the button and the
+  // messages cannot disagree.
+  static final _nameRule = FieldPreset.title(label: 'course name', max: 60);
+  static final _perClassRule = FieldPreset.wholeNumber(label: 'fee per class', min: 1, max: 100000);
+  static final _monthlyRule = FieldPreset.wholeNumber(label: 'fee', min: 1, max: 1000000);
+  static final _expectedRule = FieldPreset.wholeNumber(label: 'expected classes', min: 1, max: 31, required: false);
+  static final _thresholdRule = FieldPreset.wholeNumber(label: 'minimum classes', min: 0, max: 31);
+  static final _percentRule = FieldPreset.wholeNumber(label: 'percentage', min: 0, max: 100);
+
   /// Mirrors the backend's per-model requirements, so the button disables rather than letting the
   /// admin submit into a 400 they then have to decode.
   bool get _billingValid => _feeModel == FeeModel.perClass
-      ? (_intOf(_feePerClassController) ?? 0) > 0
-      : (_intOf(_feeController) ?? 0) > 0;
+      ? _perClassRule.check(_feePerClassController.text) == null
+      : _monthlyRule.check(_feeController.text) == null;
 
-  // Both fields accept 0 as a deliberately-entered value (a 0 threshold means "the discount never
-  // applies" - a valid, if degenerate, configuration). The `?? -1` fallback is what still catches
-  // an empty field: an unparsed/blank controller must fail this check, not silently pass as 0.
-  bool get _hybridValid => _feeModel != FeeModel.hybrid ||
-      ((_intOf(_thresholdController) ?? -1) >= 0 && (_intOf(_belowPercentController) ?? -1) >= 0);
+  // A 0 threshold is a deliberately-entered value (the discount never applies), so 0 is allowed;
+  // an empty field is not. The minimum cannot be more than the classes expected, when both are set.
+  bool get _hybridValid {
+    if (_feeModel != FeeModel.hybrid) return true;
+    if (_thresholdRule.check(_thresholdController.text) != null ||
+        _percentRule.check(_belowPercentController.text) != null ||
+        _expectedRule.check(_expectedClassesController.text) != null) {
+      return false;
+    }
+    final expected = _intOf(_expectedClassesController);
+    final minimum = _intOf(_thresholdController);
+    return expected == null || minimum == null || minimum <= expected;
+  }
 
   bool get _valid =>
-      _nameController.text.trim().length > 1 &&
+      _nameRule.check(_nameController.text) == null &&
       _billingValid &&
       _hybridValid &&
       _billingDay != null &&
@@ -217,7 +234,7 @@ class _CourseFormScreenState extends ConsumerState<CourseFormScreen> {
         children: [
           _Field(
             label: 'Course name',
-            child: _textField(palette, _nameController, 'e.g. Guitar Beginner'),
+            child: _textField(palette, _nameController, 'e.g. Guitar Beginner', _nameRule),
           ),
           _Field(
             label: 'Category',
@@ -314,14 +331,14 @@ class _CourseFormScreenState extends ConsumerState<CourseFormScreen> {
             _Field(
               label: 'Fee per class',
               hint: 'The fee is calculated from actual attendance - classes attended x this rate.',
-              child: _amountField(palette, _feePerClassController, 'e.g. 150'),
+              child: _amountField(palette, _feePerClassController, 'e.g. 150', _perClassRule),
             )
           else
             _Field(
               label: _feeModel == FeeModel.hybrid
                   ? 'Base fee · per month'
                   : 'Fixed fee · per month',
-              child: _amountField(palette, _feeController, 'e.g. 1000'),
+              child: _amountField(palette, _feeController, 'e.g. 1000', _monthlyRule),
             ),
           if (_feeModel == FeeModel.hybrid) ...[
             Row(
@@ -330,14 +347,14 @@ class _CourseFormScreenState extends ConsumerState<CourseFormScreen> {
                 Expanded(
                   child: _Field(
                     label: 'Expected classes',
-                    child: _numberField(palette, _expectedClassesController, 'e.g. 8'),
+                    child: _numberField(palette, _expectedClassesController, 'e.g. 8', _expectedRule),
                   ),
                 ),
                 const SizedBox(width: AppSpacing.md),
                 Expanded(
                   child: _Field(
                     label: 'Min. classes',
-                    child: _numberField(palette, _thresholdController, 'e.g. 6'),
+                    child: _numberField(palette, _thresholdController, 'e.g. 6', _thresholdRule),
                   ),
                 ),
               ],
@@ -346,7 +363,7 @@ class _CourseFormScreenState extends ConsumerState<CourseFormScreen> {
               label: 'Fee % if attendance is low',
               hint: 'e.g. 50 - the student pays the full fee if they attend at least the minimum '
                   'above; if not, only this % of the fee applies.',
-              child: _numberField(palette, _belowPercentController, 'e.g. 50'),
+              child: _numberField(palette, _belowPercentController, 'e.g. 50', _percentRule),
             ),
           ],
           _Field(
@@ -445,7 +462,8 @@ class _CourseFormScreenState extends ConsumerState<CourseFormScreen> {
   /// Names the one thing still blocking save. A disabled button with no explanation is the most
   /// common way a long form dead-ends.
   String _missingRequirement() {
-    if (_nameController.text.trim().length <= 1) return 'Enter a course name to continue.';
+    final nameProblem = _nameRule.check(_nameController.text);
+    if (nameProblem != null) return nameProblem;
     if (!_billingValid) {
       return _feeModel == FeeModel.perClass
           ? 'Enter the fee charged per class.'
@@ -633,42 +651,53 @@ class _CourseFormScreenState extends ConsumerState<CourseFormScreen> {
     );
   }
 
-  Widget _textField(AppPalette palette, TextEditingController controller, String hint) {
-    return TextField(
+  Widget _textField(AppPalette palette, TextEditingController controller, String hint, FieldPreset preset) {
+    return CheckedField(
       controller: controller,
-      onChanged: (_) => setState(() {}),
-      style: TextStyle(
-          fontSize: AppType.xxl, fontWeight: AppType.medium, color: palette.text),
-      decoration: _decoration(palette, hint),
+      preset: preset,
+      builder: (context, hasError) => TextField(
+        controller: controller,
+        onChanged: (_) => setState(() {}),
+        textCapitalization: preset.textCapitalization,
+        inputFormatters: preset.formatters,
+        style: TextStyle(fontSize: AppType.xxl, fontWeight: AppType.medium, color: palette.text),
+        decoration: _decoration(palette, hint),
+      ),
     );
   }
 
-  Widget _numberField(AppPalette palette, TextEditingController controller, String hint) {
-    return TextField(
+  Widget _numberField(AppPalette palette, TextEditingController controller, String hint, FieldPreset preset) {
+    return CheckedField(
       controller: controller,
-      onChanged: (_) => setState(() {}),
-      keyboardType: TextInputType.number,
-      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-      style: TextStyle(
-          fontSize: AppType.xxl, fontWeight: AppType.medium, color: palette.text),
-      decoration: _decoration(palette, hint),
+      preset: preset,
+      builder: (context, hasError) => TextField(
+        controller: controller,
+        onChanged: (_) => setState(() {}),
+        keyboardType: preset.keyboardType,
+        inputFormatters: preset.formatters,
+        style: TextStyle(fontSize: AppType.xxl, fontWeight: AppType.medium, color: palette.text),
+        decoration: _decoration(palette, hint),
+      ),
     );
   }
 
-  Widget _amountField(AppPalette palette, TextEditingController controller, String hint) {
-    return TextField(
+  Widget _amountField(AppPalette palette, TextEditingController controller, String hint, FieldPreset preset) {
+    return CheckedField(
       controller: controller,
-      onChanged: (_) => setState(() {}),
-      keyboardType: TextInputType.number,
-      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-      style: TextStyle(
-          fontSize: AppType.xxl, fontWeight: AppType.medium, color: palette.text),
-      decoration: _decoration(palette, hint).copyWith(
-        prefixIcon: Padding(
-          padding: const EdgeInsets.only(left: AppSpacing.xl, right: AppSpacing.sm),
-          child: Icon(Icons.currency_rupee, size: 15, color: palette.textFaint),
+      preset: preset,
+      builder: (context, hasError) => TextField(
+        controller: controller,
+        onChanged: (_) => setState(() {}),
+        keyboardType: preset.keyboardType,
+        inputFormatters: preset.formatters,
+        style: TextStyle(fontSize: AppType.xxl, fontWeight: AppType.medium, color: palette.text),
+        decoration: _decoration(palette, hint).copyWith(
+          prefixIcon: Padding(
+            padding: const EdgeInsets.only(left: AppSpacing.xl, right: AppSpacing.sm),
+            child: Icon(Icons.currency_rupee, size: 15, color: palette.textFaint),
+          ),
+          prefixIconConstraints: const BoxConstraints(minWidth: 0, minHeight: 0),
         ),
-        prefixIconConstraints: const BoxConstraints(minWidth: 0, minHeight: 0),
       ),
     );
   }

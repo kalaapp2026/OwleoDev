@@ -8,7 +8,6 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -56,11 +55,6 @@ public class BillingController {
         return billingService.overdueInvoices();
     }
 
-    @GetMapping("/admin/billing/academies/{academyId}/invoices")
-    public List<BillingDtos.InvoiceResponse> forAcademy(@PathVariable UUID academyId) {
-        return billingService.invoicesForAcademy(academyId);
-    }
-
     /** Safe to call repeatedly - idempotent per (academy, period), so a retry can't double-charge. */
     @PostMapping("/admin/billing/invoices/generate")
     public Map<String, Object> generate(@RequestParam(required = false) String period) {
@@ -80,9 +74,4 @@ public class BillingController {
         return billingService.waive(invoiceId, note);
     }
 
-    @PutMapping("/admin/billing/academies/{academyId}/plan")
-    public void changePlan(@PathVariable UUID academyId,
-                           @Valid @RequestBody BillingDtos.ChangePlanRequest request) {
-        billingService.changePlan(academyId, request.planCode());
-    }
 }

@@ -42,6 +42,10 @@
   -->
   <style>
     input:focus, textarea:focus { outline: none; }
+    /* The page behind the app is the app's own background, so nothing white shows before the first frame in
+       dark mode (or the dark palette before it in light). Matches AppPalette.bg. */
+    html, body { background: #F7F1E4; }
+    @media (prefers-color-scheme: dark) { html, body { background: #0A0F1C; } }
   </style>
 </head>
 <body>
@@ -53,6 +57,12 @@
     For more details:
     * https://docs.flutter.dev/platform-integration/web/initialization
   -->
+  <!--
+    Razorpay's hosted checkout, used by the student "Pay now" flow (UPI only). Razorpay requires
+    its own script to be loaded from its domain - it cannot be bundled - and it does nothing until
+    the app opens it, so it costs nothing on screens that never pay.
+  -->
+  <script src="https://checkout.razorpay.com/v1/checkout.js" async></script>
   <script src="flutter_bootstrap.js" async></script>
 </body>
 </html>

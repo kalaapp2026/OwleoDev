@@ -7,20 +7,17 @@ import com.nest.app.fees.dto.StudentFeeProfileResponse;
 import com.nest.app.fees.dto.StudentStatementResponse;
 import com.nest.app.fees.entity.FeeCategory;
 import com.nest.app.fees.dto.UpdateAgreedFeeRequest;
-import com.nest.app.fees.dto.FeeSlipResponse;
 import com.nest.app.fees.dto.FeeTransactionResponse;
 import com.nest.app.fees.dto.RecordFeeEntryRequest;
 import com.nest.app.fees.service.FeeSlipService;
 import com.nest.app.fees.service.StudentPaymentService;
 import com.nest.app.fees.service.FeesService;
+import com.nest.app.fees.service.OnlinePaymentService;
 import com.nest.common.security.FeatureKey;
 import com.nest.common.security.RequiresFeature;
 import com.nest.common.security.TenantContext;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.MediaType;
-import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -29,8 +26,6 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.nio.charset.StandardCharsets;
-import java.util.List;
 import java.util.UUID;
 
 @RestController
@@ -40,12 +35,14 @@ public class FeesController {
     private final FeesService feesService;
     private final FeeSlipService feeSlipService;
     private final StudentPaymentService studentPaymentService;
+    private final OnlinePaymentService onlinePaymentService;
 
     public FeesController(FeesService feesService, FeeSlipService feeSlipService,
-                          StudentPaymentService studentPaymentService) {
+                          StudentPaymentService studentPaymentService, OnlinePaymentService onlinePaymentService) {
         this.feesService = feesService;
         this.feeSlipService = feeSlipService;
         this.studentPaymentService = studentPaymentService;
+        this.onlinePaymentService = onlinePaymentService;
     }
 
     @PostMapping("/fees/entries")
@@ -104,42 +101,34 @@ public class FeesController {
         return feesService.statement(membershipId, category);
     }
 
-    /**
-     * The statement as a CSV download. Takes the same category filter as the screen, so the file
-     * is exactly what the reader was looking at rather than silently widening to everything.
-     */
-    @GetMapping("/students/{membershipId}/statement/report")
-    @RequiresFeature(FeatureKey.FEES_ENTRY)
-    public ResponseEntity<byte[]> statementReport(@PathVariable UUID membershipId,
-                                                  @RequestParam(required = false) FeeCategory category) {
-        byte[] csv = feesService.generateStatementCsv(membershipId, category)
-                .getBytes(StandardCharsets.UTF_8);
-        return ResponseEntity.ok()
-                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=fee-statement.csv")
-                .contentType(MediaType.parseMediaType("text/csv"))
-                .body(csv);
-    }
-
     /** The caller's own statement - no feature needed, since it can only ever be their own. */
     @GetMapping("/me/fees/statement")
     public StudentStatementResponse myStatement(@RequestParam(required = false) FeeCategory category) {
         return feesService.statement(TenantContext.currentMembershipId(), category);
     }
 
-    @GetMapping("/me/fees/statement/report")
-    public ResponseEntity<byte[]> myStatementReport(@RequestParam(required = false) FeeCategory category) {
-        byte[] csv = feesService.generateStatementCsv(TenantContext.currentMembershipId(), category)
-                .getBytes(StandardCharsets.UTF_8);
-        return ResponseEntity.ok()
-                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=fee-statement.csv")
-                .contentType(MediaType.parseMediaType("text/csv"))
-                .body(csv);
-    }
-
-    /** Whether online payment is switched on - the app hides "Pay now" when it is not. */
+    /**
+     * Whether online payment is switched on, and through whom - the app hides "Pay now" when it is
+     * not, and picks the checkout to open from {@code provider}.
+     */
     @GetMapping("/me/fees/payment-config")
     public java.util.Map<String, Object> paymentConfig() {
-        return java.util.Map.of("enabled", studentPaymentService.enabled());
+        String provider = onlinePaymentService.enabled() ? "RAZORPAY" : studentPaymentService.enabled() ? "MOCK" : "NONE";
+        return java.util.Map.of("enabled", !provider.equals("NONE"), "provider", provider);
+    }
+
+    /** Starts a Razorpay checkout for the caller's own fee. The amount is the server's, never the client's. */
+    @PostMapping("/me/fees/pay/order")
+    public com.nest.app.fees.dto.OnlineOrderResponse createOnlineOrder(
+            @Valid @RequestBody com.nest.app.fees.dto.PayFeeRequest request) {
+        return onlinePaymentService.createOrder(request);
+    }
+
+    /** The browser reporting a finished checkout; the signature is checked before anything is settled. */
+    @PostMapping("/me/fees/pay/verify")
+    public com.nest.app.fees.dto.PayFeeResponse confirmOnlinePayment(
+            @Valid @RequestBody com.nest.app.fees.dto.ConfirmOnlinePaymentRequest request) {
+        return onlinePaymentService.confirm(request);
     }
 
     /** The caller paying their own fee. No feature gate: it can only ever settle their own rows. */
@@ -154,41 +143,4 @@ public class FeesController {
         return feesService.getBalance(membershipId, courseId, period);
     }
 
-    @GetMapping("/students/{membershipId}/fees")
-    public List<FeeTransactionResponse> history(@PathVariable UUID membershipId) {
-        return feesService.historyForStudent(membershipId);
-    }
-
-    @GetMapping("/fees/dashboard")
-    @RequiresFeature(FeatureKey.FEES_DASHBOARD)
-    public java.math.BigDecimal dashboardCollected(@RequestParam UUID courseId, @RequestParam String period) {
-        return feesService.collectedForCourseAndPeriod(courseId, period);
-    }
-
-    /** Manual "generate now" trigger for a course's fee slips - same calculation the daily cron
-     * runs, exposed for testing and for catching up a course whose billing day already passed
-     * this month. Gated by FEES_ENTRY, same access level as recording a payment. */
-    @PostMapping("/courses/{courseId}/fee-slips/generate")
-    @RequiresFeature(FeatureKey.FEES_ENTRY)
-    public List<FeeSlipResponse> generateFeeSlips(@PathVariable UUID courseId) {
-        return feeSlipService.generateNow(courseId);
-    }
-
-    @GetMapping("/students/{membershipId}/fee-slips")
-    public List<FeeSlipResponse> feeSlipHistory(@PathVariable UUID membershipId) {
-        return feeSlipService.historyForStudent(membershipId);
-    }
-
-    /** The download button: a CSV of every student mapped to this course for this period - what
-     * they owe, what they've paid, and the course's own billing cycle. Gated the same as the
-     * existing Fees Dashboard aggregate. */
-    @GetMapping("/fees/report")
-    @RequiresFeature(FeatureKey.FEES_DASHBOARD)
-    public ResponseEntity<byte[]> downloadReport(@RequestParam UUID courseId, @RequestParam String period) {
-        byte[] csv = feesService.generateCourseReport(courseId, period).getBytes(StandardCharsets.UTF_8);
-        return ResponseEntity.ok()
-                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=fees-report-" + period + ".csv")
-                .contentType(MediaType.parseMediaType("text/csv"))
-                .body(csv);
-    }
 }

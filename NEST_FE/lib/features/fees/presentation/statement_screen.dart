@@ -8,7 +8,7 @@ import 'package:nest_fe/core/design/status_badge.dart';
 import 'package:nest_fe/features/fees/data/student_statement.dart';
 import 'package:nest_fe/features/fees/presentation/fee_format.dart';
 import 'package:nest_fe/features/fees/presentation/fee_reports.dart';
-import 'package:nest_fe/features/fees/presentation/fees_screen.dart' show feesApiProvider;
+import 'package:nest_fe/features/fees/data/fees_api.dart' show feesApiProvider;
 
 typedef _StatementKey = ({String membershipId, FeeCategory? category});
 

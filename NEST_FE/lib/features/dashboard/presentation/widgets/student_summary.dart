@@ -9,37 +9,11 @@ import 'package:nest_fe/core/widgets/async_value_view.dart';
 import 'package:nest_fe/features/attendance/data/attendance_api.dart';
 import 'package:nest_fe/core/format/money.dart';
 import 'package:nest_fe/features/attendance/data/student_attendance.dart';
-import 'package:nest_fe/features/fees/data/student_statement.dart' show FeeCategory;
-import 'package:nest_fe/features/fees/presentation/fees_screen.dart' show feesApiProvider;
+import 'package:nest_fe/features/fees/presentation/my_fee_due.dart';
 import 'package:nest_fe/features/scheduling/data/scheduling_api.dart';
 import 'package:nest_fe/features/shell/presentation/app_shell.dart';
 
 DateTime _dateOnly(DateTime d) => DateTime(d.year, d.month, d.day);
-
-/// What the student still owes, with the most pressing item to name on the dashboard's Due card.
-typedef _FeeDue = ({num amount, String? line, DateTime? due});
-
-final _myFeeDueProvider = FutureProvider.autoDispose<_FeeDue>((ref) async {
-  final statement = await ref.watch(feesApiProvider).myStatement();
-  final other = await ref.watch(feesApiProvider).myOtherFees();
-  final unpaidOther = other.fees.where((f) => !f.status.isSettled).toList()
-    ..sort((a, b) => (a.dueDate ?? DateTime(9999)).compareTo(b.dueDate ?? DateTime(9999)));
-  final unpaidRegular =
-      statement.rows.where((r) => r.category == FeeCategory.regular && !r.status.isSettled).toList();
-  // A fee with a due date outranks one without; otherwise the course fee is the headline.
-  final datedOther = unpaidOther.where((f) => f.dueDate != null).toList();
-  String? line;
-  DateTime? due;
-  if (datedOther.isNotEmpty) {
-    line = datedOther.first.name;
-    due = datedOther.first.dueDate;
-  } else if (unpaidRegular.isNotEmpty) {
-    line = '${unpaidRegular.first.context} · ${unpaidRegular.first.label}';
-  } else if (unpaidOther.isNotEmpty) {
-    line = unpaidOther.first.name;
-  }
-  return (amount: statement.outstanding + other.outstanding, line: line, due: due);
-});
 
 /// Four at-a-glance tiles: this month's attendance, enrolled course count and today's class
 /// count. Mirrors [DashboardStatsRow]'s tile layout but colour-coded per figure and wired to a
@@ -78,7 +52,7 @@ class StudentQuickStats extends ConsumerWidget {
       orElse: () => '—',
     );
 
-    final feeDue = ref.watch(_myFeeDueProvider).maybeWhen(data: (d) => money(d.amount), orElse: () => '—');
+    final feeDue = ref.watch(myFeeDueProvider).maybeWhen(data: (d) => money(d.amount), orElse: () => '—');
     final palette = context.palette;
     return Row(
       children: [
@@ -277,7 +251,7 @@ class _DueCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final palette = context.palette;
-    final async = ref.watch(_myFeeDueProvider);
+    final async = ref.watch(myFeeDueProvider);
     final due = async.valueOrNull;
     final clear = due != null && due.amount <= 0;
     final color = clear ? palette.paidManual : palette.notPaid;

@@ -16,15 +16,27 @@ class ApiException implements Exception {
   });
 
   factory ApiException.fromJson(Map<String, dynamic> json, {int status = 0}) {
+    final validationErrors = (json['validationErrors'] as List?)
+        ?.map((e) => Map<String, String>.from(e as Map))
+        .toList();
     return ApiException(
       status: (json['status'] as num?)?.toInt() ?? status,
       error: json['error'] as String? ?? 'Error',
       code: json['code'] as String? ?? 'UNKNOWN',
-      message: json['message'] as String? ?? 'Something went wrong',
-      validationErrors: (json['validationErrors'] as List?)
-          ?.map((e) => Map<String, String>.from(e as Map))
-          .toList(),
+      message: _messageFor(json['message'] as String?, validationErrors),
+      validationErrors: validationErrors,
     );
+  }
+
+  /// A rejected form comes back as "Request failed validation" plus the real reasons per field.
+  /// Every screen shows [message], so it carries the first reason (and says how many more there are)
+  /// instead of that generic line.
+  static String _messageFor(String? message, List<Map<String, String>>? errors) {
+    if (errors == null || errors.isEmpty) return message ?? 'Something went wrong';
+    final first = errors.first['message'];
+    if (first == null || first.isEmpty) return message ?? 'Something went wrong';
+    final more = errors.length - 1;
+    return more > 0 ? '$first (and $more more to fix)' : first;
   }
 
   factory ApiException.network([String? detail]) => ApiException(

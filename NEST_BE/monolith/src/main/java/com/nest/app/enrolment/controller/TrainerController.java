@@ -8,10 +8,13 @@ import com.nest.app.enrolment.dto.TrainerResponse;
 import com.nest.app.enrolment.dto.TrainerSummaryResponse;
 import com.nest.app.enrolment.dto.UpdateTrainerRequest;
 import com.nest.app.enrolment.service.TrainerRegistrationService;
+import com.nest.app.enrolment.service.TrainerRemovalService;
 import com.nest.common.security.FeatureKey;
 import com.nest.common.security.RequiresFeature;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -28,9 +31,12 @@ import java.util.UUID;
 public class TrainerController {
 
     private final TrainerRegistrationService trainerRegistrationService;
+    private final TrainerRemovalService trainerRemovalService;
 
-    public TrainerController(TrainerRegistrationService trainerRegistrationService) {
+    public TrainerController(TrainerRegistrationService trainerRegistrationService,
+                             TrainerRemovalService trainerRemovalService) {
         this.trainerRegistrationService = trainerRegistrationService;
+        this.trainerRemovalService = trainerRemovalService;
     }
 
     @PostMapping("/trainers")
@@ -67,6 +73,15 @@ public class TrainerController {
     @GetMapping("/trainers/{membershipId}/card")
     public TrainerCardResponse card(@PathVariable UUID membershipId) {
         return trainerRegistrationService.getTrainerCard(membershipId);
+    }
+
+    /** Takes a trainer off one course for good (their place, features, batch scoping and batch seats).
+     * Different from the active flag, which only greys them out and can be flipped back. */
+    @DeleteMapping("/courses/{courseId}/trainers/{membershipId}")
+    @RequiresFeature(FeatureKey.TRAINER_REGISTRATION)
+    public ResponseEntity<Void> removeFromCourse(@PathVariable UUID courseId, @PathVariable UUID membershipId) {
+        trainerRemovalService.removeFromCourse(courseId, membershipId);
+        return ResponseEntity.noContent().build();
     }
 
     /** Batch default-trainer picker + Users management screen. includeInactive=false (default,

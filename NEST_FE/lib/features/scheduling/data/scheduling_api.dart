@@ -104,13 +104,6 @@ class SchedulingApi {
     );
   }
 
-  Future<List<ClassInstance>> upcomingClassInstances(String batchId) {
-    return _client.call(
-      (dio) => dio.get('/batches/$batchId/class-instances'),
-      (data) => (data as List).map((e) => ClassInstance.fromJson(e as Map<String, dynamic>)).toList(),
-    );
-  }
-
   Future<ClassInstance> reschedule({
     required String classInstanceId,
     required String newDate,

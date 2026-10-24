@@ -19,8 +19,6 @@ public interface EventRepository extends JpaRepository<Event, UUID> {
     /** Still-upcoming events across every academy. */
     long countByEventDateAfter(LocalDateTime now);
 
-    long countByAcademyId(UUID academyId);
-
     /** Event counts for every academy at once (Super Admin academy list). */
     @Query("select e.academyId, count(e) from Event e group by e.academyId")
     List<Object[]> countByAcademyGrouped();

@@ -17,6 +17,9 @@ import 'package:nest_fe/core/design/segmented_control.dart';
 import 'package:nest_fe/core/design/sheets.dart';
 import 'package:nest_fe/core/design/toast.dart';
 import 'package:nest_fe/core/format/money.dart';
+import 'package:nest_fe/core/validation/countries.dart';
+import 'package:nest_fe/core/validation/phone_rules.dart';
+import 'package:nest_fe/core/validation/validators.dart';
 import 'package:nest_fe/features/curriculum/data/course.dart';
 import 'package:nest_fe/features/curriculum/data/curriculum_api.dart';
 import 'package:nest_fe/features/enrolment/data/batch.dart';
@@ -102,6 +105,13 @@ class _UserFormScreenState extends ConsumerState<UserFormScreen> {
   String _phoneCode = '+91';
   String _altPhoneCode = '+91';
   String _emergencyCode = '+91';
+  Country? _phoneCountry;
+  Country? _altCountry;
+  Country? _emergencyCountry;
+
+  /// Set when Save is attempted with something wrong, so every error shows at once instead of
+  /// only on the fields that have been visited.
+  bool _showErrors = false;
 
   /// True once the username has been typed into by hand. Until then it tracks the name, which is
   /// what makes the auto-suggestion useful rather than something to fight with.
@@ -114,6 +124,10 @@ class _UserFormScreenState extends ConsumerState<UserFormScreen> {
   bool _active = true;
 
   Uint8List? _photoBytes;
+
+  /// Editing: the photo already on file and whose it is, so it shows in the circle and a new pick can be uploaded.
+  String? _existingPhotoUrl;
+  String? _editingUserId;
   String? _photoFilename;
 
   /// Students: which courses to enrol in, and optionally which batches within them.
@@ -226,6 +240,8 @@ class _UserFormScreenState extends ConsumerState<UserFormScreen> {
           dob: detail.dob,
           details: detail.details,
         );
+        _existingPhotoUrl = detail.profileImageUrl;
+        _editingUserId = detail.userId;
         _experienceController.text = detail.yearsOfExperience?.toString() ?? '';
         _groups.clear();
         // One group per course as stored. Regrouping courses that happen to share a feature set
@@ -255,6 +271,8 @@ class _UserFormScreenState extends ConsumerState<UserFormScreen> {
           dob: detail.dob,
           details: detail.details,
         );
+        _existingPhotoUrl = detail.profileImageUrl;
+        _editingUserId = detail.userId;
         _studentCourseIds
           ..clear()
           ..addAll(detail.courseFees.keys);
@@ -263,6 +281,22 @@ class _UserFormScreenState extends ConsumerState<UserFormScreen> {
       if (mounted) showAppToast(context, e.toString().replaceFirst('Exception: ', ''), error: true);
     } finally {
       if (mounted) setState(() => _loadingExisting = false);
+    }
+  }
+
+  /// A photo chosen while editing is uploaded after the details are saved. Like the one at registration it is a
+  /// follow-up: if it fails the edit still went through, and the toast says so.
+  Future<void> _saveEditedPhoto() async {
+    final bytes = _photoBytes;
+    final userId = _editingUserId;
+    if (bytes == null || userId == null) return;
+    try {
+      await ref.read(enrolmentApiProvider).uploadProfileImage(userId, bytes, _photoFilename ?? 'photo.jpg');
+    } catch (e) {
+      if (mounted) {
+        showAppToast(context, 'Saved, but the photo did not upload: ${e.toString().replaceFirst('Exception: ', '')}',
+            error: true);
+      }
     }
   }
 
@@ -290,15 +324,17 @@ class _UserFormScreenState extends ConsumerState<UserFormScreen> {
     _usernameTouched = true;
     _emailController.text = email ?? '';
 
-    final phoneParts = CountryCode.split(phone);
-    _phoneCode = phoneParts.code;
+    final phoneParts = PhoneRules.parseStored(phone);
+    _phoneCode = phoneParts.dial;
+    _phoneCountry = phoneParts.country;
     _phoneController.text = phoneParts.digits;
 
     if (dob != null && dob.isNotEmpty) _dob = DateTime.tryParse(dob);
 
     if (details != null) {
-      final altParts = CountryCode.split(details.altPhone);
-      _altPhoneCode = altParts.code;
+      final altParts = PhoneRules.parseStored(details.altPhone);
+      _altPhoneCode = altParts.dial;
+      _altCountry = altParts.country;
       _altPhoneController.text = altParts.digits;
 
       _gender = details.gender;
@@ -314,8 +350,9 @@ class _UserFormScreenState extends ConsumerState<UserFormScreen> {
       _pinController.text = details.pinCode ?? '';
 
       _guardianController.text = details.guardianName ?? '';
-      final emergencyParts = CountryCode.split(details.emergencyContact);
-      _emergencyCode = emergencyParts.code;
+      final emergencyParts = PhoneRules.parseStored(details.emergencyContact);
+      _emergencyCode = emergencyParts.dial;
+      _emergencyCountry = emergencyParts.country;
       _emergencyController.text = emergencyParts.digits;
 
       _qualificationController.text = details.qualification ?? '';
@@ -443,54 +480,82 @@ class _UserFormScreenState extends ConsumerState<UserFormScreen> {
   // Validation
   // ---------------------------------------------------------------------------
 
-  static final _emailPattern = RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$');
+  // One rule per field, from core/validation, so a name or a number means the same here as on every
+  // other screen (and the server applies the same rules).
+  final _emailRule = Validators.email();
 
-  bool get _emailValid => _emailPattern.hasMatch(_emailController.text.trim());
+  String? get _emailError => _emailRule(_emailController.text);
+
+  bool get _emailValid => _emailError == null;
+
+  String? get _phoneError => PhoneRules.validate(
+        dial: _phoneCode,
+        digits: _phoneController.text,
+        iso: _phoneCountry?.iso,
+      );
+
+  String? get _altPhoneError => PhoneRules.validate(
+        dial: _altPhoneCode,
+        digits: _altPhoneController.text,
+        iso: _altCountry?.iso,
+        kind: PhoneKind.any,
+        required: false,
+      );
+
+  /// A student's guardian is who is called first, so their number is required, exactly as their name is.
+  String? get _emergencyError => PhoneRules.validate(
+        dial: _emergencyCode,
+        digits: _emergencyController.text,
+        iso: _emergencyCountry?.iso,
+        kind: PhoneKind.any,
+        required: !_isTrainer,
+      );
 
   /// The address is required in full because it is what an academy falls back on when a phone
   /// number stops working - a half-filled one has none of that value.
-  bool get _addressValid =>
-      _line1Controller.text.trim().length > 3 &&
-      _cityController.text.trim().length > 1 &&
-      _stateController.text.trim().length > 1 &&
-      _pinController.text.trim().length >= 4;
+  String? _addressProblem() =>
+      Validators.text(label: 'address line 1', min: 4, max: 120)(_line1Controller.text) ??
+      Validators.text(label: 'address line 2', max: 120, required: false)(_line2Controller.text) ??
+      Validators.text(label: 'landmark', max: 80, required: false)(_landmarkController.text) ??
+      Validators.title(label: 'city', max: 60)(_cityController.text) ??
+      Validators.title(label: 'district', max: 60, required: false)(_districtController.text) ??
+      Validators.title(label: 'state', max: 60)(_stateController.text) ??
+      Validators.title(label: 'country', max: 60)(_countryController.text) ??
+      Validators.pinCode(countryName: _countryController.text)(_pinController.text);
 
-  bool get _commonValid =>
-      _emailValid &&
-      _firstNameController.text.trim().isNotEmpty &&
-      _lastNameController.text.trim().isNotEmpty &&
-      _usernameController.text.trim().length > 1 &&
-      _dob != null &&
-      (_gender ?? '').isNotEmpty &&
-      _phoneController.text.trim().length >= 10 &&
-      _addressValid;
+  bool get _addressValid => _addressProblem() == null;
+
+  /// The first thing wrong with the form, in the order the sections appear; null when it can be
+  /// saved.
+  String? _firstProblem() {
+    final age = ageFrom(_dob);
+    return _emailError ??
+        Validators.personName(label: 'first name')(_firstNameController.text) ??
+        Validators.personName(label: 'last name')(_lastNameController.text) ??
+        Validators.username()(_usernameController.text) ??
+        (_dob == null ? 'Select a date of birth.' : null) ??
+        (_isTrainer && age != null && age < 16 ? 'A trainer must be at least 16 years old.' : null) ??
+        ((_gender ?? '').isEmpty ? 'Select a gender.' : null) ??
+        _phoneError ??
+        _altPhoneError ??
+        _addressProblem() ??
+        (_isTrainer
+            ? Validators.text(label: 'qualification', min: 2, max: 200)(_qualificationController.text) ??
+                Validators.wholeNumber(label: 'experience', min: 0, max: 60, required: false)(_experienceController.text) ??
+                Validators.amount(label: 'salary', allowZero: true, required: false)(_salaryController.text)
+            : Validators.personName(label: "guardian's name")(_guardianController.text) ?? _emergencyError);
+  }
 
   bool get _valid {
     // A verified existing account brings its own profile, which this form neither edits nor
     // requires. All that is left to choose is what to add them to (trainers do that on step 2).
     if (_linked) return _isTrainer || _studentCourseIds.isNotEmpty;
-    return _isTrainer
-        ? _commonValid && _qualificationController.text.trim().length > 1
-        : _commonValid && _guardianController.text.trim().length > 1;
+    return _firstProblem() == null;
   }
 
   String _missingRequirement() {
     if (_linked) return 'Pick at least one course to add them to.';
-    if (!_emailValid) return 'Enter a valid email address.';
-    if (_firstNameController.text.trim().isEmpty) return 'First name is required.';
-    if (_lastNameController.text.trim().isEmpty) return 'Last name is required.';
-    if (_usernameController.text.trim().length < 2) return 'Pick a username.';
-    if (_dob == null) return 'Select a date of birth.';
-    if ((_gender ?? '').isEmpty) return 'Select a gender.';
-    if (_phoneController.text.trim().length < 10) return 'Enter a 10-digit phone number.';
-    if (!_addressValid) return 'Fill in address line 1, city, state and PIN code.';
-    if (_isTrainer && _qualificationController.text.trim().length < 2) {
-      return 'Add a qualification or experience summary.';
-    }
-    if (!_isTrainer && _guardianController.text.trim().length < 2) {
-      return "Add the parent's or guardian's name.";
-    }
-    return '';
+    return _firstProblem() ?? '';
   }
 
   // ---------------------------------------------------------------------------
@@ -535,9 +600,10 @@ class _UserFormScreenState extends ConsumerState<UserFormScreen> {
     if (picked != null) setState(() => _joiningDate = picked);
   }
 
-  String _joined(String code, TextEditingController controller) {
-    final digits = controller.text.trim();
-    return digits.isEmpty ? '' : '$code $digits';
+  /// The number as it is stored: `+91 9876543210`, with any trunk prefix (a UK 0) already dropped.
+  String _joined(String code, TextEditingController controller, Country? country, {PhoneKind kind = PhoneKind.any}) {
+    final check = PhoneRules.check(dial: code, digits: controller.text, iso: country?.iso, kind: kind, required: false);
+    return PhoneRules.format(code, check.ok ? check.nsn : controller.text.trim());
   }
 
   PersonDetails _buildDetails() => PersonDetails(
@@ -545,7 +611,7 @@ class _UserFormScreenState extends ConsumerState<UserFormScreen> {
         lastName: _lastNameController.text.trim(),
         gender: _gender,
         bloodGroup: _bloodGroup,
-        altPhone: _joined(_altPhoneCode, _altPhoneController),
+        altPhone: _joined(_altPhoneCode, _altPhoneController, _altCountry),
         addressLine1: _line1Controller.text.trim(),
         addressLine2: _line2Controller.text.trim(),
         landmark: _landmarkController.text.trim(),
@@ -556,7 +622,7 @@ class _UserFormScreenState extends ConsumerState<UserFormScreen> {
         pinCode: _pinController.text.trim(),
         guardianName: _isTrainer ? null : _guardianController.text.trim(),
         emergencyContact:
-            _isTrainer ? null : _joined(_emergencyCode, _emergencyController),
+            _isTrainer ? null : _joined(_emergencyCode, _emergencyController, _emergencyCountry),
         qualification: _isTrainer ? _qualificationController.text.trim() : null,
         salary: _isTrainer ? num.tryParse(_salaryController.text.trim()) : null,
         joiningDate: _joiningDate,
@@ -598,7 +664,7 @@ class _UserFormScreenState extends ConsumerState<UserFormScreen> {
     // A verified existing account may predate the date-of-birth field. The server doesn't use it
     // for them (their own profile stands), it only has to be present.
     final dob = PersonDetails.isoDate(_dob ?? DateTime(2000, 1, 1));
-    final phone = _joined(_phoneCode, _phoneController);
+    final phone = _joined(_phoneCode, _phoneController, _phoneCountry, kind: PhoneKind.mobile);
 
     try {
       if (_isTrainer) {
@@ -618,6 +684,7 @@ class _UserFormScreenState extends ConsumerState<UserFormScreen> {
             courseBatches: expanded.batches,
             details: _buildDetails(),
           );
+          await _saveEditedPhoto();
           if (mounted) {
             showAppToast(context, '$fullName updated.');
             Navigator.of(context).pop(true);
@@ -669,6 +736,7 @@ class _UserFormScreenState extends ConsumerState<UserFormScreen> {
           courses: courses,
           details: _buildDetails(),
         );
+        await _saveEditedPhoto();
         if (mounted) {
           showAppToast(context, '$fullName updated.');
           Navigator.of(context).pop(true);
@@ -801,7 +869,7 @@ class _UserFormScreenState extends ConsumerState<UserFormScreen> {
       fullName: fullName,
       username: username,
       temporaryPassword: temporaryPassword ?? '(unavailable)',
-      phone: _joined(_phoneCode, _phoneController),
+      phone: _joined(_phoneCode, _phoneController, _phoneCountry, kind: PhoneKind.mobile),
     );
     if (mounted) Navigator.of(context).pop(true);
   }
@@ -910,9 +978,18 @@ class _UserFormScreenState extends ConsumerState<UserFormScreen> {
                 ),
               if (!_valid) ...[
                 const SizedBox(height: AppSpacing.sm),
-                Text(_missingRequirement(),
-                    textAlign: TextAlign.center,
-                    style: TextStyle(fontSize: AppType.sm, color: palette.textFaint)),
+                // Tapping shows every problem under its own field, with the sections opened, rather
+                // than leaving the person to hunt for the one this line mentions.
+                GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => setState(() {
+                    _showErrors = true;
+                    _openSections.addAll(['identity', 'personal', 'address', 'professional', 'guardian']);
+                  }),
+                  child: Text(_showErrors ? _missingRequirement() : '${_missingRequirement()} Tap to see every problem.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontSize: AppType.sm, color: _showErrors ? palette.notPaid : palette.textFaint)),
+                ),
               ],
             ],
           );
@@ -978,16 +1055,13 @@ class _UserFormScreenState extends ConsumerState<UserFormScreen> {
                 ? null
                 : "If this email already has an Owleo account, we'll offer to auto-fill the rest "
                     'of the form.',
-            error: _emailController.text.trim().isEmpty || _emailValid
-                ? null
-                : "That doesn't look like an email address.",
             child: AppTextField(
               controller: _emailController,
               focusNode: _emailFocus,
               hint: 'name@example.com',
               icon: Icons.alternate_email,
-              keyboardType: TextInputType.emailAddress,
-              hasError: _emailController.text.trim().isNotEmpty && !_emailValid,
+              preset: FieldPreset.email(),
+              showErrors: _showErrors,
               onChanged: (_) => _onEmailChanged(),
               // Enter counts as leaving the field, which is when the account lookup runs.
               onSubmitted: (_) => _emailFocus.unfocus(),
@@ -1011,7 +1085,8 @@ class _UserFormScreenState extends ConsumerState<UserFormScreen> {
                   child: AppTextField(
                     controller: _firstNameController,
                     hint: 'e.g. Aarav',
-                    textCapitalization: TextCapitalization.words,
+                    preset: FieldPreset.personName(label: 'first name'),
+                    showErrors: _showErrors,
                     onChanged: (_) => setState(_syncUsername),
                   ),
                 ),
@@ -1024,7 +1099,8 @@ class _UserFormScreenState extends ConsumerState<UserFormScreen> {
                   child: AppTextField(
                     controller: _lastNameController,
                     hint: 'e.g. Shah',
-                    textCapitalization: TextCapitalization.words,
+                    preset: FieldPreset.personName(label: 'last name'),
+                    showErrors: _showErrors,
                     onChanged: (_) => setState(_syncUsername),
                   ),
                 ),
@@ -1041,9 +1117,8 @@ class _UserFormScreenState extends ConsumerState<UserFormScreen> {
               controller: _usernameController,
               hint: 'auto-filled from the name',
               icon: Icons.alternate_email,
-              inputFormatters: [
-                FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z0-9.]')),
-              ],
+              preset: FieldPreset.username(),
+              showErrors: _showErrors,
               onChanged: (v) => setState(() {
                 _usernameTouched = true;
                 final lower = v.toLowerCase();
@@ -1133,24 +1208,36 @@ class _UserFormScreenState extends ConsumerState<UserFormScreen> {
           LabeledField(
             label: 'Phone number',
             required: true,
-            child: PhoneField(
-              code: _phoneCode,
+            child: PhoneInput(
+              dial: _phoneCode,
+              country: _phoneCountry,
               controller: _phoneController,
-              hint: '10-digit number',
-              hasError: _phoneController.text.isNotEmpty &&
-                  _phoneController.text.trim().length < 10,
-              onCodeChanged: (c) => setState(() => _phoneCode = c),
+              showErrors: _showErrors,
+              onDialChanged: (c) => setState(() {
+                _phoneCode = c;
+                _phoneCountry = null;
+              }),
+              onCountryChanged: (c) => setState(() => _phoneCountry = c),
               onChanged: (_) => setState(() {}),
             ),
           ),
           LabeledField(
             label: 'Alternate number',
             hint: 'Optional.',
-            child: PhoneField(
-              code: _altPhoneCode,
+            child: PhoneInput(
+              dial: _altPhoneCode,
+              country: _altCountry,
               controller: _altPhoneController,
               hint: 'Optional',
-              onCodeChanged: (c) => setState(() => _altPhoneCode = c),
+              kind: PhoneKind.any,
+              required: false,
+              showErrors: _showErrors,
+              onDialChanged: (c) => setState(() {
+                _altPhoneCode = c;
+                _altCountry = null;
+              }),
+              onCountryChanged: (c) => setState(() => _altCountry = c),
+              onChanged: (_) => setState(() {}),
             ),
           ),
         ],
@@ -1172,7 +1259,9 @@ class _UserFormScreenState extends ConsumerState<UserFormScreen> {
             child: AppTextField(
               controller: _line1Controller,
               hint: 'House no., street',
+              preset: FieldPreset.text(label: 'address line 1', min: 4, max: 120),
               textCapitalization: TextCapitalization.words,
+              showErrors: _showErrors,
               onChanged: (_) => setState(() {}),
             ),
           ),
@@ -1182,7 +1271,10 @@ class _UserFormScreenState extends ConsumerState<UserFormScreen> {
             child: AppTextField(
               controller: _line2Controller,
               hint: 'Area, apartment (optional)',
+              preset: FieldPreset.text(label: 'address line 2', max: 120, required: false),
               textCapitalization: TextCapitalization.words,
+              showErrors: _showErrors,
+              onChanged: (_) => setState(() {}),
             ),
           ),
           LabeledField(
@@ -1191,7 +1283,10 @@ class _UserFormScreenState extends ConsumerState<UserFormScreen> {
             child: AppTextField(
               controller: _landmarkController,
               hint: 'Optional',
+              preset: FieldPreset.text(label: 'landmark', max: 80, required: false),
               textCapitalization: TextCapitalization.words,
+              showErrors: _showErrors,
+              onChanged: (_) => setState(() {}),
             ),
           ),
           Row(
@@ -1205,7 +1300,8 @@ class _UserFormScreenState extends ConsumerState<UserFormScreen> {
                   child: AppTextField(
                     controller: _cityController,
                     hint: 'City',
-                    textCapitalization: TextCapitalization.words,
+                    preset: FieldPreset.title(label: 'city', max: 60),
+                    showErrors: _showErrors,
                     onChanged: (_) => setState(() {}),
                   ),
                 ),
@@ -1218,7 +1314,9 @@ class _UserFormScreenState extends ConsumerState<UserFormScreen> {
                   child: AppTextField(
                     controller: _districtController,
                     hint: 'District',
-                    textCapitalization: TextCapitalization.words,
+                    preset: FieldPreset.title(label: 'district', max: 60, required: false),
+                    showErrors: _showErrors,
+                    onChanged: (_) => setState(() {}),
                   ),
                 ),
               ),
@@ -1235,7 +1333,8 @@ class _UserFormScreenState extends ConsumerState<UserFormScreen> {
                   child: AppTextField(
                     controller: _stateController,
                     hint: 'State',
-                    textCapitalization: TextCapitalization.words,
+                    preset: FieldPreset.title(label: 'state', max: 60),
+                    showErrors: _showErrors,
                     onChanged: (_) => setState(() {}),
                   ),
                 ),
@@ -1248,7 +1347,10 @@ class _UserFormScreenState extends ConsumerState<UserFormScreen> {
                   child: AppTextField(
                     controller: _countryController,
                     hint: 'Country',
-                    textCapitalization: TextCapitalization.words,
+                    preset: FieldPreset.title(label: 'country', max: 60),
+                    showErrors: _showErrors,
+                    // The PIN rule depends on the country, so re-check it when this changes.
+                    onChanged: (_) => setState(() {}),
                   ),
                 ),
               ),
@@ -1263,11 +1365,8 @@ class _UserFormScreenState extends ConsumerState<UserFormScreen> {
               child: AppTextField(
                 controller: _pinController,
                 hint: 'PIN code',
-                keyboardType: TextInputType.number,
-                inputFormatters: [
-                  FilteringTextInputFormatter.digitsOnly,
-                  LengthLimitingTextInputFormatter(10),
-                ],
+                preset: FieldPreset.pinCode(countryName: _countryController.text),
+                showErrors: _showErrors,
                 onChanged: (_) => setState(() {}),
               ),
             ),
@@ -1291,7 +1390,8 @@ class _UserFormScreenState extends ConsumerState<UserFormScreen> {
               child: AppTextField(
                 controller: _qualificationController,
                 hint: 'e.g. Bharatanatyam Visharad, 12 yrs stage experience',
-                textCapitalization: TextCapitalization.sentences,
+                preset: FieldPreset.text(label: 'qualification', min: 2, max: 200),
+                showErrors: _showErrors,
                 onChanged: (_) => setState(() {}),
               ),
             )),
@@ -1304,8 +1404,9 @@ class _UserFormScreenState extends ConsumerState<UserFormScreen> {
                     child: AppTextField(
                       controller: _experienceController,
                       hint: 'e.g. 8',
-                      keyboardType: TextInputType.number,
-                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                      preset: FieldPreset.wholeNumber(label: 'experience', min: 0, max: 60, required: false),
+                      showErrors: _showErrors,
+                      onChanged: (_) => setState(() {}),
                     ),
                   )),
                 ),
@@ -1318,8 +1419,9 @@ class _UserFormScreenState extends ConsumerState<UserFormScreen> {
                       controller: _salaryController,
                       hint: 'e.g. 20000',
                       icon: Icons.currency_rupee,
-                      keyboardType: TextInputType.number,
-                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                      preset: FieldPreset.amount(label: 'salary', allowZero: true, required: false),
+                      showErrors: _showErrors,
+                      onChanged: (_) => setState(() {}),
                     ),
                   ),
                 ),
@@ -1334,7 +1436,7 @@ class _UserFormScreenState extends ConsumerState<UserFormScreen> {
           icon: Icons.emergency_outlined,
           accent: accent,
           locked: _linked,
-          badge: _guardianController.text.trim().length > 1 || _linked ? null : 'INCOMPLETE',
+          badge: (_guardianController.text.trim().length > 1 && _emergencyError == null) || _linked ? null : 'INCOMPLETE',
           expanded: _openSections.contains('guardian'),
           onToggle: () => _toggleSection('guardian'),
           children: [
@@ -1344,18 +1446,28 @@ class _UserFormScreenState extends ConsumerState<UserFormScreen> {
               child: AppTextField(
                 controller: _guardianController,
                 hint: 'e.g. Nikhil Shah',
-                textCapitalization: TextCapitalization.words,
+                preset: FieldPreset.personName(label: "guardian's name"),
+                showErrors: _showErrors,
                 onChanged: (_) => setState(() {}),
               ),
             ),
             LabeledField(
-              label: 'Emergency contact number',
-              hint: 'Optional, but this is the number called when the usual one does not answer.',
-              child: PhoneField(
-                code: _emergencyCode,
+              label: "Parent's / guardian's phone number",
+              required: true,
+              hint: 'The number called first, and when the usual one does not answer.',
+              child: PhoneInput(
+                dial: _emergencyCode,
+                country: _emergencyCountry,
                 controller: _emergencyController,
-                hint: '10-digit number',
-                onCodeChanged: (c) => setState(() => _emergencyCode = c),
+                kind: PhoneKind.any,
+                required: true,
+                showErrors: _showErrors,
+                onDialChanged: (c) => setState(() {
+                  _emergencyCode = c;
+                  _emergencyCountry = null;
+                }),
+                onCountryChanged: (c) => setState(() => _emergencyCountry = c),
+                onChanged: (_) => setState(() {}),
               ),
             ),
           ],
@@ -1419,9 +1531,13 @@ class _UserFormScreenState extends ConsumerState<UserFormScreen> {
               Container(
                 height: 68,
                 width: 68,
+                // One ring, not two: the avatar draws its own, so the frame is only added around the picked
+                // photo and the empty "add a photo" state.
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  border: Border.all(color: accent.withValues(alpha: 0.4), width: 2),
+                  border: _photoBytes == null && name.isNotEmpty
+                      ? null
+                      : Border.all(color: accent.withValues(alpha: 0.4), width: 2),
                   image: _photoBytes == null
                       ? null
                       : DecorationImage(
@@ -1432,10 +1548,7 @@ class _UserFormScreenState extends ConsumerState<UserFormScreen> {
                     : name.isEmpty
                         ? Icon(Icons.add_a_photo_outlined,
                             size: 22, color: palette.textFaint)
-                        : Padding(
-                            padding: const EdgeInsets.all(2),
-                            child: PersonAvatar(name: name, seed: name, size: 60),
-                          ),
+                        : PersonAvatar(name: name, seed: name, size: 68, imageUrl: _existingPhotoUrl),
               ),
               Positioned(
                 right: -2,

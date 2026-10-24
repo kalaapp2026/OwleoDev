@@ -61,20 +61,8 @@ public interface FeeTransactionRepository extends JpaRepository<FeeTransaction, 
             """)
     BigDecimal sumPaidForStudentFee(@Param("studentFeeId") UUID studentFeeId);
 
-    /**
-     * Rows already reversed, so the UI can hide "undo" on them rather than offering an action the
-     * database will refuse.
-     */
-    @Query("""
-            select f.reversalOfTransactionId from FeeTransaction f
-            where f.reversalOfTransactionId in :transactionIds
-            """)
-    List<UUID> findReversedTransactionIds(@Param("transactionIds") List<UUID> transactionIds);
-
     /** Every payment against one Other fee type, across all its batches. */
     List<FeeTransaction> findByFeeTypeId(UUID feeTypeId);
-
-    List<FeeTransaction> findByStudentFeeId(UUID studentFeeId);
 
     /** The academy-wide ledger for a date range, newest first. Indexed by
      * idx_fee_tx_academy_occurred, which exists for exactly this query. */

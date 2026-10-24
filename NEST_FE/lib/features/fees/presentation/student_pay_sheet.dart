@@ -6,21 +6,15 @@ import 'package:nest_fe/core/design/toast.dart';
 import 'package:nest_fe/core/export/report_export.dart';
 import 'package:nest_fe/core/format/money.dart';
 
-const _methods = [
-  (key: 'UPI', label: 'UPI', sub: 'Google Pay, PhonePe, Paytm', icon: Icons.smartphone_outlined),
-  (key: 'CARD', label: 'Credit / Debit Card', sub: 'Visa, Mastercard, RuPay', icon: Icons.credit_card_outlined),
-  (key: 'NETBANKING', label: 'Netbanking', sub: 'All major banks', icon: Icons.account_balance_outlined),
-];
-
-/// The student's pay flow: confirm the amount, pick a method, pay, then a success screen with a
-/// reference and a receipt to download. [onPay] performs the payment and returns its reference; the
-/// amount shown is only for display - the server decides what is actually owed.
+/// The student's pay flow: confirm the amount, pay by UPI, then a success screen with a reference and
+/// a receipt to download. [onPay] performs the payment and returns its reference; the amount shown is
+/// only for display - the server decides what is actually owed.
 Future<bool> showPaySheet({
   required BuildContext context,
   required String title,
   required String subtitle,
   required num amount,
-  required Future<String> Function(String method) onPay,
+  required Future<String> Function() onPay,
   bool available = true,
 }) async {
   final paid = await showModalBottomSheet<bool>(
@@ -171,7 +165,7 @@ Future<void> showFeeReceipt({
   );
 }
 
-enum _Step { amount, method, processing, success }
+enum _Step { amount, processing, success }
 
 class _PaySheet extends StatefulWidget {
   const _PaySheet({
@@ -184,7 +178,7 @@ class _PaySheet extends StatefulWidget {
   final String title;
   final String subtitle;
   final num amount;
-  final Future<String> Function(String method) onPay;
+  final Future<String> Function() onPay;
 
   /// False when the academy has no online payments yet. The sheet still shows the whole flow, but
   /// paying says so instead of starting a payment that cannot settle.
@@ -196,7 +190,6 @@ class _PaySheet extends StatefulWidget {
 
 class _PaySheetState extends State<_PaySheet> {
   _Step _step = _Step.amount;
-  String? _method;
   String _ref = '';
   String? _error;
 
@@ -213,7 +206,7 @@ class _PaySheetState extends State<_PaySheet> {
       _error = null;
     });
     try {
-      final ref = await widget.onPay(_method!);
+      final ref = await widget.onPay();
       if (!mounted) return;
       setState(() {
         _ref = ref;
@@ -223,7 +216,7 @@ class _PaySheetState extends State<_PaySheet> {
       if (!mounted) return;
       setState(() {
         _error = e.toString().replaceFirst('Exception: ', '');
-        _step = _Step.method;
+        _step = _Step.amount;
       });
     }
   }
@@ -258,13 +251,10 @@ class _PaySheetState extends State<_PaySheet> {
             Padding(
               padding: const EdgeInsets.fromLTRB(18, 16, 18, 12),
               child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                _step == _Step.method
-                    ? _tile(Icons.arrow_back, () => setState(() => _step = _Step.amount))
-                    : const SizedBox(width: 28),
+                const SizedBox(width: 28),
                 Text(
                   switch (_step) {
                     _Step.amount => 'Pay fee',
-                    _Step.method => 'Choose payment method',
                     _Step.processing => 'Processing',
                     _Step.success => 'Payment successful',
                   },
@@ -277,7 +267,6 @@ class _PaySheetState extends State<_PaySheet> {
               padding: const EdgeInsets.fromLTRB(18, 4, 18, 24),
               child: switch (_step) {
                 _Step.amount => _amountStep(palette),
-                _Step.method => _methodStep(palette),
                 _Step.processing => _processingStep(palette),
                 _Step.success => _successStep(palette),
               },
@@ -362,79 +351,15 @@ class _PaySheetState extends State<_PaySheet> {
             ]),
           ),
         ),
-      const SizedBox(height: 16),
-      _primaryButton('Pay ${money(widget.amount)}', () => setState(() => _step = _Step.method)),
-    ]);
-  }
-
-  Widget _methodStep(AppPalette palette) {
-    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        decoration: BoxDecoration(
-          color: palette.surfaceHigh,
-          borderRadius: AppRadii.all(AppRadii.lg),
-          border: Border.all(color: palette.border),
-        ),
-        child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-          Text('Amount to pay', style: TextStyle(fontSize: 11, fontWeight: AppType.semi, color: palette.textMuted)),
-          Text(money(widget.amount), style: TextStyle(fontSize: 15, fontWeight: AppType.heavy, color: palette.text)),
-        ]),
-      ),
-      const SizedBox(height: 16),
-      for (final m in _methods)
-        Padding(
-          padding: const EdgeInsets.only(bottom: 8),
-          child: Pressable(
-            onTap: () => setState(() => _method = m.key),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-              decoration: BoxDecoration(
-                color: _method == m.key ? palette.primarySoft : palette.surfaceRaised,
-                borderRadius: AppRadii.all(13),
-                border: Border.all(color: _method == m.key ? palette.primary : palette.border, width: 1.5),
-              ),
-              child: Row(children: [
-                Container(
-                  width: 36,
-                  height: 36,
-                  decoration: BoxDecoration(
-                    color: _method == m.key ? palette.primary : palette.surfaceHigh,
-                    borderRadius: AppRadii.all(11),
-                  ),
-                  child: Icon(m.icon, size: 16, color: _method == m.key ? palette.onPrimary : palette.textMuted),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Text(m.label, style: TextStyle(fontSize: 12.5, fontWeight: AppType.bold, color: palette.text)),
-                    const SizedBox(height: 1),
-                    Text(m.sub, style: TextStyle(fontSize: 10, color: palette.textFaint)),
-                  ]),
-                ),
-                Container(
-                  width: 18,
-                  height: 18,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: _method == m.key ? palette.primary : Colors.transparent,
-                    border: Border.all(color: _method == m.key ? palette.primary : palette.border, width: 1.5),
-                  ),
-                  child: _method == m.key ? Icon(Icons.check, size: 11, color: palette.onPrimary) : null,
-                ),
-              ]),
-            ),
-          ),
-        ),
-      const SizedBox(height: 8),
-      _note(Icons.lock_outline, 'Secured, encrypted payment'),
       if (_error != null)
         Padding(
-          padding: const EdgeInsets.only(top: 8),
+          padding: const EdgeInsets.only(top: 10),
           child: Text(_error!, textAlign: TextAlign.center, style: TextStyle(fontSize: 11.5, color: palette.notPaid)),
         ),
       const SizedBox(height: 16),
-      _primaryButton('Pay ${money(widget.amount)}', _method == null ? null : _pay),
+      _primaryButton('Pay ${money(widget.amount)} with UPI', _pay),
+      const SizedBox(height: 10),
+      _note(Icons.smartphone_outlined, 'Google Pay, PhonePe, Paytm or any UPI app'),
     ]);
   }
 

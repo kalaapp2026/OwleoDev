@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:nest_fe/app/theme/app_tokens.dart';
 import 'package:nest_fe/app/theme/app_typography.dart';
+import 'package:nest_fe/core/design/app_text_field.dart';
 import 'package:nest_fe/core/design/app_top_bar.dart';
 import 'package:nest_fe/core/design/attached_select.dart';
 import 'package:nest_fe/core/design/avatar.dart';
@@ -13,6 +14,9 @@ import 'package:nest_fe/core/design/people_picker_sheet.dart';
 import 'package:nest_fe/core/design/pressable.dart';
 import 'package:nest_fe/core/design/sheets.dart';
 import 'package:nest_fe/core/error/api_exception.dart';
+import 'package:nest_fe/core/validation/countries.dart';
+import 'package:nest_fe/core/validation/input_formats.dart';
+import 'package:nest_fe/core/validation/phone_rules.dart';
 import 'package:nest_fe/core/widgets/app_notice.dart';
 import 'package:nest_fe/features/academy/data/academy_profile.dart';
 import 'package:nest_fe/features/academy/presentation/academy_profile_shared.dart';
@@ -59,9 +63,17 @@ class _AcademyProfileEditScreenState extends ConsumerState<AcademyProfileEditScr
   late final _area = TextEditingController(text: d.area);
   late final _city = TextEditingController(text: d.city);
   late final _pin = TextEditingController(text: d.pinCode);
-  late final _phone = TextEditingController(text: d.contactNumber);
+  // The two phone numbers are edited as a calling code beside the digits; the draft keeps them as one
+  // string ("+91 9876543210"), which is also what the page and its WhatsApp link read.
+  late final _phoneParts = PhoneRules.parseStored(d.contactNumber);
+  late final _waParts = PhoneRules.parseStored(d.whatsapp);
+  late final _phone = TextEditingController(text: _phoneParts.digits);
+  late String _phoneDial = _phoneParts.dial;
+  late Country? _phoneCountry = d.contactNumber.trim().isEmpty ? null : _phoneParts.country;
+  late final _whatsapp = TextEditingController(text: _waParts.digits);
+  late String _waDial = _waParts.dial;
+  late Country? _waCountry = d.whatsapp.trim().isEmpty ? null : _waParts.country;
   late final _email = TextEditingController(text: d.email);
-  late final _whatsapp = TextEditingController(text: d.whatsapp);
 
   @override
   void dispose() {
@@ -69,6 +81,26 @@ class _AcademyProfileEditScreenState extends ConsumerState<AcademyProfileEditScr
       c.dispose();
     }
     super.dispose();
+  }
+
+  /// The phone number as the draft stores it: the calling code and the digits, with any trunk prefix
+  /// dropped. Left as typed while it is not yet valid, so nothing the person typed is lost.
+  String _joinPhone(String dial, TextEditingController digits, Country? country, {PhoneKind kind = PhoneKind.mobile}) {
+    if (digits.text.trim().isEmpty) return '';
+    final check = PhoneRules.check(dial: dial, digits: digits.text, iso: country?.iso, kind: kind, required: false);
+    return PhoneRules.format(dial, check.ok ? check.nsn : digits.text.trim());
+  }
+
+  void _syncPhone() {
+    d.contactNumber = _joinPhone(_phoneDial, _phone, _phoneCountry);
+    if (_sameAsPhone) {
+      d.whatsapp = d.contactNumber;
+      _whatsapp.text = _phone.text;
+      _waDial = _phoneDial;
+      _waCountry = _phoneCountry;
+    } else {
+      d.whatsapp = _joinPhone(_waDial, _whatsapp, _waCountry);
+    }
   }
 
   void _changed(VoidCallback mutate) {
@@ -180,7 +212,13 @@ class _AcademyProfileEditScreenState extends ConsumerState<AcademyProfileEditScr
                 children: [
                   _coverLogoEditor(palette),
                   const SizedBox(height: AppSpacing.x3l),
-                  _Field(label: 'Institute name', controller: _name, hint: 'e.g. Owleo Performing Arts Academy', onChanged: (v) => _changed(() => d.name = v)),
+                  _Field(
+                    label: 'Institute name',
+                    controller: _name,
+                    hint: 'e.g. Owleo Performing Arts Academy',
+                    preset: FieldPreset.title(label: 'institute name', max: 80),
+                    onChanged: (v) => _changed(() => d.name = v),
+                  ),
                   const SizedBox(height: AppSpacing.x3l),
                   _Field(
                     label: 'Tagline',
@@ -204,12 +242,31 @@ class _AcademyProfileEditScreenState extends ConsumerState<AcademyProfileEditScr
                   _Note(text: "Active students, trainers and course counts are pulled automatically from your records and can't be edited here."),
                   const SizedBox(height: AppSpacing.x3l),
                   _Label('Location'),
-                  _Box(controller: _address, hint: 'Address line', onChanged: (v) => _changed(() => d.address = v)),
+                  _Box(
+                    controller: _address,
+                    hint: 'Address line',
+                    preset: FieldPreset.text(label: 'address line', min: 4, max: 160),
+                    onChanged: (v) => _changed(() => d.address = v),
+                  ),
                   const SizedBox(height: AppSpacing.sm),
                   Row(children: [
-                    Expanded(child: _Box(controller: _area, hint: 'Area', onChanged: (v) => _changed(() => d.area = v))),
+                    Expanded(
+                      child: _Box(
+                        controller: _area,
+                        hint: 'Area',
+                        preset: FieldPreset.text(label: 'area', max: 80, required: false),
+                        onChanged: (v) => _changed(() => d.area = v),
+                      ),
+                    ),
                     const SizedBox(width: AppSpacing.sm),
-                    Expanded(child: _Box(controller: _city, hint: 'City', onChanged: (v) => _changed(() => d.city = v))),
+                    Expanded(
+                      child: _Box(
+                        controller: _city,
+                        hint: 'City',
+                        preset: FieldPreset.title(label: 'city', max: 60),
+                        onChanged: (v) => _changed(() => d.city = v),
+                      ),
+                    ),
                   ]),
                   const SizedBox(height: AppSpacing.sm),
                   Row(children: [
@@ -232,8 +289,7 @@ class _AcademyProfileEditScreenState extends ConsumerState<AcademyProfileEditScr
                       child: _Box(
                         controller: _pin,
                         hint: 'Pin code',
-                        keyboardType: TextInputType.number,
-                        formatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(6)],
+                        preset: FieldPreset.pinCode(countryName: _phoneDial == '+91' ? null : 'elsewhere', required: false),
                         onChanged: (v) => _changed(() => d.pinCode = v),
                       ),
                     ),
@@ -242,47 +298,59 @@ class _AcademyProfileEditScreenState extends ConsumerState<AcademyProfileEditScr
                   _LinkToggleRow(linkKey: 'maps', draft: d, onChanged: () => _changed(() {})),
                   const SizedBox(height: AppSpacing.x3l),
                   _Label('Contact details'),
-                  _Box(
+                  PhoneInput(
+                    dial: _phoneDial,
+                    country: _phoneCountry,
                     controller: _phone,
                     hint: 'Phone number',
-                    icon: Icons.call_outlined,
-                    keyboardType: TextInputType.phone,
-                    formatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9+ ]'))],
-                    onChanged: (v) => _changed(() {
-                      d.contactNumber = v;
-                      if (_sameAsPhone) {
-                        d.whatsapp = v;
-                        _whatsapp.text = v;
-                      }
+                    onDialChanged: (c) => _changed(() {
+                      _phoneDial = c;
+                      _phoneCountry = null;
+                      _syncPhone();
                     }),
+                    onCountryChanged: (c) => _changed(() {
+                      _phoneCountry = c;
+                      _syncPhone();
+                    }),
+                    onChanged: (_) => _changed(_syncPhone),
                   ),
                   const SizedBox(height: AppSpacing.sm),
                   _Box(
                     controller: _email,
                     hint: 'Email address',
                     icon: Icons.mail_outline,
-                    keyboardType: TextInputType.emailAddress,
+                    preset: FieldPreset.email(required: false),
                     onChanged: (v) => _changed(() => d.email = v),
                   ),
                   const SizedBox(height: AppSpacing.sm),
-                  _Box(
-                    controller: _whatsapp,
-                    hint: 'WhatsApp number',
-                    icon: Icons.chat_outlined,
-                    iconColor: palette.paidManual,
-                    enabled: !_sameAsPhone,
-                    keyboardType: TextInputType.phone,
-                    formatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9+ ]'))],
-                    onChanged: (v) => _changed(() => d.whatsapp = v),
+                  IgnorePointer(
+                    ignoring: _sameAsPhone,
+                    child: Opacity(
+                      opacity: _sameAsPhone ? 0.5 : 1,
+                      child: PhoneInput(
+                        dial: _waDial,
+                        country: _waCountry,
+                        controller: _whatsapp,
+                        hint: 'WhatsApp number',
+                        required: false,
+                        onDialChanged: (c) => _changed(() {
+                          _waDial = c;
+                          _waCountry = null;
+                          _syncPhone();
+                        }),
+                        onCountryChanged: (c) => _changed(() {
+                          _waCountry = c;
+                          _syncPhone();
+                        }),
+                        onChanged: (_) => _changed(_syncPhone),
+                      ),
+                    ),
                   ),
                   const SizedBox(height: AppSpacing.sm),
                   Pressable(
                     onTap: () => _changed(() {
                       _sameAsPhone = !_sameAsPhone;
-                      if (_sameAsPhone) {
-                        d.whatsapp = d.contactNumber;
-                        _whatsapp.text = d.contactNumber;
-                      }
+                      _syncPhone();
                     }),
                     child: Row(mainAxisSize: MainAxisSize.min, children: [
                       AppCheckbox(checked: _sameAsPhone, size: 16),
@@ -359,9 +427,21 @@ class _AcademyProfileEditScreenState extends ConsumerState<AcademyProfileEditScr
         ),
         if (_moreOpen) ...[
           const SizedBox(height: AppSpacing.md),
-          _Field(label: 'Established by', controller: _establishedBy, hint: 'Founder', onChanged: (v) => _changed(() => d.establishedBy = v)),
+          _Field(
+            label: 'Established by',
+            controller: _establishedBy,
+            hint: 'Founder',
+            preset: FieldPreset.personName(label: "founder's name", required: false),
+            onChanged: (v) => _changed(() => d.establishedBy = v),
+          ),
           const SizedBox(height: AppSpacing.md),
-          _Field(label: 'Owner', controller: _owner, hint: 'Owner name', onChanged: (v) => _changed(() => d.ownerName = v)),
+          _Field(
+            label: 'Owner',
+            controller: _owner,
+            hint: 'Owner name',
+            preset: FieldPreset.personName(label: "owner's name", required: false),
+            onChanged: (v) => _changed(() => d.ownerName = v),
+          ),
           const SizedBox(height: AppSpacing.md),
           _Field(
             label: 'Additional info',
@@ -626,13 +706,22 @@ class _Note extends StatelessWidget {
 
 /// A labelled input, with an "n/limit" counter beside the label when [maxLength] is set.
 class _Field extends StatelessWidget {
-  const _Field({required this.label, required this.controller, required this.onChanged, this.hint, this.maxLength, this.maxLines = 1});
+  const _Field({
+    required this.label,
+    required this.controller,
+    required this.onChanged,
+    this.hint,
+    this.maxLength,
+    this.maxLines = 1,
+    this.preset,
+  });
   final String label;
   final TextEditingController controller;
   final ValueChanged<String> onChanged;
   final String? hint;
   final int? maxLength;
   final int maxLines;
+  final FieldPreset? preset;
 
   @override
   Widget build(BuildContext context) {
@@ -656,6 +745,7 @@ class _Field extends StatelessWidget {
           controller: controller,
           hint: hint ?? label,
           maxLines: maxLines,
+          preset: preset,
           formatters: [if (maxLength != null) LengthLimitingTextInputFormatter(maxLength)],
           onChanged: onChanged,
         ),
@@ -671,35 +761,55 @@ class _Box extends StatelessWidget {
     required this.onChanged,
     required this.hint,
     this.icon,
-    this.iconColor,
     this.maxLines = 1,
-    this.enabled = true,
-    this.keyboardType,
     this.formatters = const [],
+    this.preset,
   });
   final TextEditingController controller;
   final ValueChanged<String> onChanged;
   final String hint;
   final IconData? icon;
-  final Color? iconColor;
   final int maxLines;
-  final bool enabled;
-  final TextInputType? keyboardType;
   final List<TextInputFormatter> formatters;
+
+  /// Keyboard, filters and rule (core/validation). The error shows under the box once the field has
+  /// been left, then live.
+  final FieldPreset? preset;
 
   @override
   Widget build(BuildContext context) {
+    final rule = preset?.validator;
+    if (rule == null) return _box(context, null);
+    return FieldGuard(
+      controller: controller,
+      check: () => rule(controller.text),
+      builder: (context, error) => Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _box(context, error),
+          if (error != null)
+            Padding(
+              padding: const EdgeInsets.only(top: AppSpacing.xs, left: AppSpacing.xs),
+              child: Text(error, style: TextStyle(fontSize: AppType.sm, color: context.palette.notPaid, height: 1.4)),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _box(BuildContext context, String? error) {
     final palette = context.palette;
-    return Opacity(
-      opacity: enabled ? 1 : 0.5,
-      child: Container(
+    return Container(
         padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl, vertical: AppSpacing.md),
-        decoration: BoxDecoration(color: palette.surfaceRaised, border: Border.all(color: palette.border), borderRadius: AppRadii.all(AppRadii.xl)),
+        decoration: BoxDecoration(
+            color: palette.surfaceRaised,
+            border: Border.all(color: error != null ? palette.notPaid : palette.border),
+            borderRadius: AppRadii.all(AppRadii.xl)),
         child: Row(
           crossAxisAlignment: maxLines > 1 ? CrossAxisAlignment.start : CrossAxisAlignment.center,
           children: [
             if (icon != null) ...[
-              Icon(icon, size: 15, color: iconColor ?? palette.primary),
+              Icon(icon, size: 15, color: palette.primary),
               const SizedBox(width: AppSpacing.md),
             ],
             Expanded(
@@ -707,9 +817,9 @@ class _Box extends StatelessWidget {
                 controller: controller,
                 onChanged: onChanged,
                 maxLines: maxLines,
-                enabled: enabled,
-                keyboardType: maxLines > 1 ? TextInputType.multiline : keyboardType,
-                inputFormatters: formatters,
+                keyboardType: maxLines > 1 ? TextInputType.multiline : preset?.keyboardType,
+                textCapitalization: preset?.textCapitalization ?? TextCapitalization.none,
+                inputFormatters: [...?preset?.formatters, ...formatters],
                 decoration: InputDecoration(
                   isDense: true,
                   filled: false,
@@ -731,7 +841,6 @@ class _Box extends StatelessWidget {
             ),
           ],
         ),
-      ),
     );
   }
 }
@@ -825,6 +934,7 @@ class _LinkToggleRowState extends State<_LinkToggleRow> {
                     child: TextField(
                       controller: _controller,
                       keyboardType: TextInputType.url,
+                      inputFormatters: InputFormats.noSpaces(),
                       onChanged: (v) {
                         widget.draft.links[widget.linkKey] = v;
                         widget.onChanged();

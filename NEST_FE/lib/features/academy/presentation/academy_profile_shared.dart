@@ -7,6 +7,8 @@ import 'package:nest_fe/app/theme/app_tokens.dart';
 import 'package:nest_fe/app/theme/app_typography.dart';
 import 'package:nest_fe/core/design/pressable.dart';
 import 'package:nest_fe/core/network/api_config.dart';
+import 'package:nest_fe/core/validation/phone_rules.dart';
+import 'package:nest_fe/core/validation/validators.dart';
 import 'package:nest_fe/core/providers/core_providers.dart';
 import 'package:nest_fe/core/widgets/app_notice.dart';
 import 'package:nest_fe/features/academy/data/academy_profile.dart';
@@ -329,13 +331,40 @@ class ProfileDraft {
 
   /// The first thing blocking Publish, or null.
   String? validationError() {
-    if (name.trim().isEmpty) return 'Give the institute a name.';
-    if (address.trim().isEmpty) return 'Add an address line under Location.';
-    if (city.trim().isEmpty) return 'Add a city under Location.';
-    if (state.trim().isEmpty) return 'Choose a state under Location.';
-    if (pinCode.trim().isNotEmpty && !RegExp(r'^\d{6}$').hasMatch(pinCode.trim())) return 'A pin code is 6 digits.';
-    if (_digits(contactNumber).length < 10) return 'Add a phone number with at least 10 digits.';
-    if (email.trim().isNotEmpty && !RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(email.trim())) return 'That email address looks incomplete.';
+    final contact = PhoneRules.parseStored(contactNumber);
+    final wa = PhoneRules.parseStored(whatsapp);
+    // The PIN rule follows the country of the contact number: six digits for India, looser elsewhere.
+    final pinCountry = contact.dial == '+91' ? null : 'elsewhere';
+    return Validators.title(label: 'institute name', max: 80)(name) ??
+        Validators.text(label: 'tagline', max: 120, required: false)(tagline) ??
+        Validators.text(label: 'description', max: 1500, required: false)(description) ??
+        Validators.text(label: 'address line under Location', min: 4, max: 160)(address) ??
+        Validators.text(label: 'area', max: 80, required: false)(area) ??
+        Validators.title(label: 'city under Location', max: 60)(city) ??
+        (state.trim().isEmpty ? 'Choose a state under Location.' : null) ??
+        Validators.pinCode(countryName: pinCountry, required: false)(pinCode) ??
+        PhoneRules.validate(dial: contact.dial, digits: contact.digits, iso: contact.country.iso) ??
+        Validators.email(required: false)(email) ??
+        (whatsapp.trim().isEmpty
+            ? null
+            : PhoneRules.validate(dial: wa.dial, digits: wa.digits, iso: wa.country.iso)) ??
+        Validators.personName(label: "founder's name", required: false)(establishedBy) ??
+        Validators.personName(label: "owner's name", required: false)(ownerName) ??
+        Validators.text(label: 'additional information', max: 1000, required: false)(additionalInfo) ??
+        _linkError();
+  }
+
+  /// Every link that will show on the page must be a real address (or, for a social profile, a
+  /// handle). A switched-off link is not checked: it keeps its text but is never shown.
+  String? _linkError() {
+    for (final key in [...socialLinkKeys, 'maps']) {
+      final value = links[key] ?? '';
+      if (hiddenLinks.contains(key) || value.trim().isEmpty) continue;
+      final label = '${key == 'x' ? 'X' : key[0].toUpperCase() + key.substring(1)} link';
+      final isPlainUrl = key == 'website' || key == 'maps';
+      final error = isPlainUrl ? Validators.url(label: label)(value) : Validators.linkOrHandle(label: label)(value);
+      if (error != null) return error;
+    }
     return null;
   }
 }

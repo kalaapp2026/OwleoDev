@@ -7,7 +7,7 @@ import 'package:nest_fe/core/design/pressable.dart';
 import 'package:nest_fe/core/format/money.dart';
 import 'package:nest_fe/core/widgets/async_value_view.dart';
 import 'package:nest_fe/features/fees/data/fee_summary.dart';
-import 'package:nest_fe/features/fees/presentation/fees_screen.dart' show feesApiProvider;
+import 'package:nest_fe/features/fees/data/fees_api.dart' show feesApiProvider;
 import 'package:nest_fe/features/shell/presentation/app_shell.dart';
 
 final _dashboardSummaryProvider = FutureProvider.autoDispose.family<FeeSummary, String>((ref, period) {

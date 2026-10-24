@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:nest_fe/core/design/app_text_field.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:nest_fe/app/theme/app_tokens.dart';
 import 'package:nest_fe/app/theme/app_typography.dart';
@@ -356,9 +357,18 @@ class _AchievementFormScreenState extends ConsumerState<AchievementFormScreen> {
         padding: const EdgeInsets.all(AppSpacing.page),
         children: [
           LabeledTextField(
-              label: 'Title', controller: _title, hint: 'e.g. Annual Day — Best Performer', onChanged: (_) => setState(() {})),
+              label: 'Title',
+              controller: _title,
+              hint: 'e.g. Annual Day — Best Performer',
+              preset: FieldPreset.text(label: 'title', min: 2, max: 100),
+              onChanged: (_) => setState(() {})),
           const SizedBox(height: AppSpacing.xxl),
-          LabeledTextField(label: 'Description', controller: _description, hint: 'What was this for?', maxLines: 3),
+          LabeledTextField(
+              label: 'Description',
+              controller: _description,
+              hint: 'What was this for?',
+              maxLines: 3,
+              preset: FieldPreset.text(label: 'description', max: 500, required: false)),
           const SizedBox(height: AppSpacing.xxl),
           const FormLabel('Type'),
           ChipChoices<AchievementType>(
@@ -477,7 +487,11 @@ class _PerformanceLogFormScreenState extends ConsumerState<PerformanceLogFormScr
         padding: const EdgeInsets.all(AppSpacing.page),
         children: [
           LabeledTextField(
-              label: 'Title', controller: _title, hint: 'e.g. Term 2 Practical Exam', onChanged: (_) => setState(() {})),
+              label: 'Title',
+              controller: _title,
+              hint: 'e.g. Term 2 Practical Exam',
+              preset: FieldPreset.text(label: 'title', min: 2, max: 100),
+              onChanged: (_) => setState(() {})),
           const SizedBox(height: AppSpacing.xxl),
           const FormLabel('Category'),
           ChipChoices<PerformanceCategory>(
@@ -493,12 +507,18 @@ class _PerformanceLogFormScreenState extends ConsumerState<PerformanceLogFormScr
               label: 'Result / score',
               controller: _result,
               hint: 'e.g. 92/100, Excellent, Level 2 Cleared',
+              preset: FieldPreset.text(label: 'result', min: 1, max: 80),
               onChanged: (_) => setState(() {})),
           const SizedBox(height: AppSpacing.xxl),
           PickerField(label: 'Date', text: longDate(_date), icon: Icons.calendar_today_outlined, onTap: _pickDate),
           _AcademyField(academies: widget.academies, value: _academyId, onChanged: (id) => setState(() => _academyId = id)),
           const SizedBox(height: AppSpacing.xxl),
-          LabeledTextField(label: 'Notes (optional)', controller: _notes, hint: 'Any additional context', maxLines: 3),
+          LabeledTextField(
+              label: 'Notes (optional)',
+              controller: _notes,
+              hint: 'Any additional context',
+              maxLines: 3,
+              preset: FieldPreset.text(label: 'notes', max: 500, required: false)),
           const SizedBox(height: AppSpacing.x5l),
           AppPrimaryButton(
             label: _editing ? 'Save changes' : 'Add performance log',

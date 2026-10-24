@@ -55,6 +55,8 @@ dependencies:
   pdfrx: ^2.4.8
   pdf: ^3.13.1
   archive: ^4.5.2
+  razorpay_flutter: ^1.4.7
+  phone_numbers_parser: ^9.0.28
 
 dev_dependencies:
   flutter_test:

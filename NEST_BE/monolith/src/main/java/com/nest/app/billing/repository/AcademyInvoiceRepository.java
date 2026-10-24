@@ -9,16 +9,11 @@ import org.springframework.data.repository.query.Param;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
-import java.util.Optional;
 import java.util.UUID;
 
 public interface AcademyInvoiceRepository extends JpaRepository<AcademyInvoice, UUID> {
 
-    Optional<AcademyInvoice> findByAcademyIdAndPeriod(UUID academyId, String period);
-
     List<AcademyInvoice> findByAcademyIdOrderByPeriodDesc(UUID academyId);
-
-    List<AcademyInvoice> findByStatusOrderByDueOnAsc(InvoiceStatus status);
 
     List<AcademyInvoice> findByPeriodOrderByAmountDesc(String period);
 

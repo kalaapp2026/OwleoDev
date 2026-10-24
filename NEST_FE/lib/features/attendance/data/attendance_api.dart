@@ -39,43 +39,11 @@ class AttendanceApi {
   AttendanceApi(this._client);
   final DioClient _client;
 
-  Future<List<ClassInstance>> classInstancesForBatch(String batchId) {
-    return _client.call(
-      (dio) => dio.get('/batches/$batchId/class-instances'),
-      (data) => (data as List).map((e) => ClassInstance.fromJson(e as Map<String, dynamic>)).toList(),
-    );
-  }
-
-  Future<List<String>> membersForBatch(String batchId) {
-    return _client.call(
-      (dio) => dio.get('/batches/$batchId/members'),
-      (data) => List<String>.from(data as List),
-    );
-  }
-
   /// A real name and photo per student, not a bare membership UUID - the marking screen's roster source.
   Future<List<BatchMemberSummary>> memberSummariesForBatch(String batchId) {
     return _client.call(
       (dio) => dio.get('/batches/$batchId/members/summary'),
       (data) => (data as List).map((e) => BatchMemberSummary.fromJson(e as Map<String, dynamic>)).toList(),
-    );
-  }
-
-  /// "Add a class" - a one-off session not on the weekly schedule, immediately available to mark
-  /// attendance against.
-  Future<ClassInstance> addClassInstance({
-    required String batchId,
-    required String date,
-    required String startTime,
-    required String endTime,
-  }) {
-    return _client.call(
-      (dio) => dio.post('/batches/$batchId/class-instances', data: {
-        'date': date,
-        'startTime': startTime,
-        'endTime': endTime,
-      }),
-      (data) => ClassInstance.fromJson(data as Map<String, dynamic>),
     );
   }
 

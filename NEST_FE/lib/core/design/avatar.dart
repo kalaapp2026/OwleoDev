@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:nest_fe/app/theme/app_tokens.dart';
+import 'package:nest_fe/core/network/api_config.dart';
 import 'package:nest_fe/app/theme/app_typography.dart';
 
 /// A student's initials in a rounded square, standing in for a photo.
@@ -60,11 +61,15 @@ class PersonAvatar extends StatelessWidget {
     required this.name,
     required this.seed,
     this.size = 32,
+    this.imageUrl,
   });
 
   final String name;
   final String seed;
   final double size;
+
+  /// A photo, when the person has one; the initials stand in while it loads or if it fails.
+  final String? imageUrl;
 
   /// The six category-adjacent accents, chosen because they are already tuned to this palette
   /// and to sit on [AppPalette.surfaceRaised].
@@ -86,7 +91,21 @@ class PersonAvatar extends StatelessWidget {
   Widget build(BuildContext context) {
     final palette = context.palette;
     final color = colorFor(seed, palette);
+    final initials = _initialsCircle(color);
+    final photo = ApiConfig.resolveMediaUrl(imageUrl);
+    if (photo == null) return initials;
+    return ClipOval(
+      child: Image.network(
+        photo,
+        width: size,
+        height: size,
+        fit: BoxFit.cover,
+        errorBuilder: (_, _, _) => initials,
+      ),
+    );
+  }
 
+  Widget _initialsCircle(Color color) {
     return Container(
       width: size,
       height: size,

@@ -51,5 +51,4 @@ public final class BillingDtos {
             String note
     ) {}
 
-    public record ChangePlanRequest(@NotBlank String planCode) {}
 }

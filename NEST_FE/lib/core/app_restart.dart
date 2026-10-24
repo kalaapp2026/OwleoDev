@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:nest_fe/core/data_freshness.dart';
 
 /// Owns the app's [ProviderScope] so it can be thrown away and rebuilt. Switching account uses
 /// this: every cached provider (feeds, course lists, fees...) belongs to the previous user, and
@@ -24,6 +25,7 @@ class AppRestart extends StatefulWidget {
 
 class _AppRestartState extends State<AppRestart> {
   Key _scopeKey = UniqueKey();
+  var _freshness = DataFreshness();
 
   @override
   void initState() {
@@ -37,8 +39,16 @@ class _AppRestartState extends State<AppRestart> {
     super.dispose();
   }
 
-  void _restart() => setState(() => _scopeKey = UniqueKey());
+  void _restart() => setState(() {
+        _scopeKey = UniqueKey();
+        _freshness = DataFreshness();
+      });
 
   @override
-  Widget build(BuildContext context) => ProviderScope(key: _scopeKey, child: widget.child);
+  Widget build(BuildContext context) => ProviderScope(
+        key: _scopeKey,
+        overrides: [dataFreshnessProvider.overrideWithValue(_freshness)],
+        observers: [_freshness],
+        child: widget.child,
+      );
 }

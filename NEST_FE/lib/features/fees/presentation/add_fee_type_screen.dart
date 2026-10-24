@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:nest_fe/core/auth/feature_keys.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:nest_fe/app/theme/app_tokens.dart';
 import 'package:nest_fe/app/theme/app_typography.dart';
+import 'package:nest_fe/core/design/app_text_field.dart';
 import 'package:nest_fe/core/design/buttons.dart';
 import 'package:nest_fe/core/design/calendar_modal.dart';
 import 'package:nest_fe/core/design/pressable.dart';
@@ -13,7 +13,7 @@ import 'package:nest_fe/features/enrolment/data/batch.dart';
 import 'package:nest_fe/features/enrolment/data/enrolment_api.dart';
 import 'package:nest_fe/features/fees/presentation/fee_format.dart';
 import 'package:nest_fe/features/fees/data/fee_type.dart';
-import 'package:nest_fe/features/fees/presentation/fees_screen.dart' show feesApiProvider;
+import 'package:nest_fe/features/fees/data/fees_api.dart' show feesApiProvider;
 import 'package:nest_fe/features/fees/presentation/widgets/payment_methods_field.dart';
 
 /// A batch of one course, labelled so it reads unambiguously in a picker.
@@ -107,9 +107,13 @@ class _AddFeeTypeScreenState extends ConsumerState<AddFeeTypeScreen> {
   bool get _duplicate =>
       widget.existingNames.contains(_nameController.text.trim().toLowerCase());
 
+  // The same rules the fields show under themselves, so the button and the messages agree.
+  static final _nameRule = FieldPreset.title(label: 'fee type name', max: 80);
+  static final _amountRule = FieldPreset.wholeNumber(label: 'amount', min: 1, max: 1000000);
+
   bool get _valid =>
-      _nameController.text.trim().length > 1 &&
-      (num.tryParse(_amountController.text.trim()) ?? 0) > 0 &&
+      _nameRule.check(_nameController.text) == null &&
+      _amountRule.check(_amountController.text) == null &&
       _batches.isNotEmpty &&
       !_duplicate &&
       _methods.isNotEmpty;
@@ -200,24 +204,34 @@ class _AddFeeTypeScreenState extends ConsumerState<AddFeeTypeScreen> {
             label: 'Fee type name',
             hint: _duplicate ? 'A fee type with this name already exists' : null,
             hintColor: _duplicate ? palette.notPaid : null,
-            child: TextField(
+            child: CheckedField(
               controller: _nameController,
-              onChanged: (_) => setState(() {}),
-              style: _inputStyle(palette),
-              decoration: _decoration(palette, 'e.g. Recital Fee'),
+              preset: _nameRule,
+              builder: (context, hasError) => TextField(
+                controller: _nameController,
+                onChanged: (_) => setState(() {}),
+                textCapitalization: _nameRule.textCapitalization,
+                inputFormatters: _nameRule.formatters,
+                style: _inputStyle(palette),
+                decoration: _decoration(palette, 'e.g. Recital Fee'),
+              ),
             ),
           ),
           _Field(
             label: 'Amount',
-            child: TextField(
+            child: CheckedField(
+              controller: _amountController,
+              preset: _amountRule,
+              builder: (context, hasError) => TextField(
               controller: _amountController,
               onChanged: (_) => setState(() {}),
-              keyboardType: TextInputType.number,
-              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              keyboardType: _amountRule.keyboardType,
+              inputFormatters: _amountRule.formatters,
               style: _inputStyle(palette),
               decoration: _decoration(palette, 'e.g. 600').copyWith(
                 prefixText: '₹',
                 prefixStyle: TextStyle(fontSize: AppType.md, color: palette.textFaint),
+              ),
               ),
             ),
           ),

@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:nest_fe/app/theme/app_tokens.dart';
 import 'package:nest_fe/app/theme/app_typography.dart';
+import 'package:nest_fe/core/design/app_text_field.dart';
 import 'package:nest_fe/core/design/buttons.dart';
 import 'package:nest_fe/core/design/calendar_modal.dart';
 import 'package:nest_fe/core/design/pressable.dart';
 import 'package:nest_fe/features/fees/presentation/fee_format.dart';
-import 'package:nest_fe/features/fees/presentation/fees_screen.dart' show feesApiProvider;
+import 'package:nest_fe/features/fees/data/fees_api.dart' show feesApiProvider;
 import 'package:nest_fe/features/fees/presentation/widgets/payment_methods_field.dart';
 
 /// A one-off charge for a single student - a replacement book, an extra costume.
@@ -45,9 +45,15 @@ class _AddStudentFeeScreenState extends ConsumerState<AddStudentFeeScreen> {
     super.dispose();
   }
 
+  // The same rules the fields show under themselves, so the button and the messages agree.
+  static final _nameRule = FieldPreset.title(label: 'fee name', max: 80);
+  static final _amountRule = FieldPreset.wholeNumber(label: 'amount', min: 1, max: 1000000);
+  static final _noteRule = FieldPreset.text(label: 'note', max: 300, required: false);
+
   bool get _valid =>
-      _nameController.text.trim().length > 1 &&
-      (num.tryParse(_amountController.text.trim()) ?? 0) > 0 &&
+      _nameRule.check(_nameController.text) == null &&
+      _amountRule.check(_amountController.text) == null &&
+      _noteRule.check(_noteController.text) == null &&
       _methods.isNotEmpty;
 
   void _toggleMethod(String method) => setState(() {
@@ -130,24 +136,34 @@ class _AddStudentFeeScreenState extends ConsumerState<AddStudentFeeScreen> {
           const SizedBox(height: AppSpacing.xl),
           _Field(
             label: 'Fee name',
-            child: TextField(
+            child: CheckedField(
               controller: _nameController,
-              onChanged: (_) => setState(() {}),
-              style: _inputStyle(palette),
-              decoration: _decoration(palette, 'e.g. Extra costume, replacement book'),
+              preset: _nameRule,
+              builder: (context, hasError) => TextField(
+                controller: _nameController,
+                onChanged: (_) => setState(() {}),
+                textCapitalization: _nameRule.textCapitalization,
+                inputFormatters: _nameRule.formatters,
+                style: _inputStyle(palette),
+                decoration: _decoration(palette, 'e.g. Extra costume, replacement book'),
+              ),
             ),
           ),
           _Field(
             label: 'Amount',
-            child: TextField(
+            child: CheckedField(
+              controller: _amountController,
+              preset: _amountRule,
+              builder: (context, hasError) => TextField(
               controller: _amountController,
               onChanged: (_) => setState(() {}),
-              keyboardType: TextInputType.number,
-              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              keyboardType: _amountRule.keyboardType,
+              inputFormatters: _amountRule.formatters,
               style: _inputStyle(palette),
               decoration: _decoration(palette, 'e.g. 350').copyWith(
                 prefixText: '₹',
                 prefixStyle: TextStyle(fontSize: AppType.md, color: palette.textFaint),
+              ),
               ),
             ),
           ),
@@ -196,11 +212,18 @@ class _AddStudentFeeScreenState extends ConsumerState<AddStudentFeeScreen> {
           _Field(
             label: 'Note',
             hint: 'Optional. Why this charge exists, for whoever reads it later.',
-            child: TextField(
+            child: CheckedField(
               controller: _noteController,
-              maxLines: 2,
-              style: TextStyle(fontSize: AppType.lg, color: palette.text),
-              decoration: _decoration(palette, 'e.g. Replaced a damaged costume'),
+              preset: _noteRule,
+              builder: (context, hasError) => TextField(
+                controller: _noteController,
+                maxLines: 2,
+                onChanged: (_) => setState(() {}),
+                textCapitalization: _noteRule.textCapitalization,
+                inputFormatters: _noteRule.formatters,
+                style: TextStyle(fontSize: AppType.lg, color: palette.text),
+                decoration: _decoration(palette, 'e.g. Replaced a damaged costume'),
+              ),
             ),
           ),
           const SizedBox(height: AppSpacing.sm),

@@ -5,7 +5,6 @@ import com.nest.app.identity.repository.AcademyMembershipRepository;
 import com.nest.app.identity.repository.AccountLinkGrantRepository;
 import com.nest.app.identity.repository.CourseFeatureGrantRepository;
 import com.nest.app.identity.repository.CourseMapRepository;
-import com.nest.app.identity.repository.FeatureGrantRepository;
 import com.nest.app.identity.repository.UserRepository;
 import com.nest.common.crypto.PiiHasher;
 import com.nest.common.exception.BadRequestException;
@@ -35,7 +34,6 @@ class LinkGrantTest {
 
     @Mock private UserRepository userRepository;
     @Mock private AcademyMembershipRepository membershipRepository;
-    @Mock private FeatureGrantRepository featureGrantRepository;
     @Mock private CourseFeatureGrantRepository courseFeatureGrantRepository;
     @Mock private CourseMapRepository courseMapRepository;
     @Mock private PiiHasher hasher;
@@ -52,7 +50,7 @@ class LinkGrantTest {
 
     @BeforeEach
     void setUp() {
-        service = new IdentityRegistrationService(userRepository, membershipRepository, featureGrantRepository,
+        service = new IdentityRegistrationService(userRepository, membershipRepository,
                 courseFeatureGrantRepository, courseMapRepository, hasher, passwordEncoder, tempPasswordGenerator,
                 accountLinkGrantRepository);
     }

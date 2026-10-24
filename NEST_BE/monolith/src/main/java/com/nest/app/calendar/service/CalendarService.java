@@ -97,7 +97,8 @@ public class CalendarService {
                     batch.getId(), batch.getName(),
                     course != null ? course.getId() : null, course != null ? course.getName() : null,
                     membership.getAcademyId(), membership.getAcademyName(),
-                    membership.getId()
+                    membership.getId(),
+                    batch.getMeetingLink()
             ));
         }
         return result;
