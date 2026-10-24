@@ -33,6 +33,7 @@ class FeeType {
     required this.batches,
     this.dueDate,
     this.defaultMode,
+    this.paymentMethods = const [],
     this.active = true,
   });
 
@@ -44,6 +45,9 @@ class FeeType {
   final DateTime? dueDate;
 
   final String? defaultMode;
+
+  /// Every method this fee accepts, in the order they were chosen. [defaultMode] is the first.
+  final List<String> paymentMethods;
   final bool active;
   final List<FeeTypeBatchBinding> batches;
 
@@ -57,6 +61,7 @@ class FeeType {
         amount: json['amount'] as num? ?? 0,
         dueDate: DateTime.tryParse(json['dueDate'] as String? ?? ''),
         defaultMode: json['defaultMode'] as String?,
+        paymentMethods: (json['paymentMethods'] as List<dynamic>? ?? const []).cast<String>(),
         active: json['active'] as bool? ?? true,
         batches: (json['batches'] as List<dynamic>? ?? [])
             .map((e) => FeeTypeBatchBinding.fromJson(e as Map<String, dynamic>))

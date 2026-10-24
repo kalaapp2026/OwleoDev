@@ -250,6 +250,7 @@ class FeesApi {
     required List<String> batchIds,
     DateTime? dueDate,
     String? defaultMode,
+    List<String>? paymentMethods,
   }) {
     return _client.call(
       (dio) => dio.post('/fees/other/types', data: {
@@ -258,8 +259,49 @@ class FeesApi {
         'batchIds': batchIds,
         'dueDate': ?dueDate?.toIso8601String().split('T').first,
         'defaultMode': ?defaultMode,
+        'paymentMethods': ?paymentMethods,
       }),
       (data) => FeeType.fromJson(data as Map<String, dynamic>),
+    );
+  }
+
+  /// Edits a shared fee in place. Everything is replaced as sent, so a null [dueDate] clears it.
+  Future<FeeType> updateFeeType({
+    required String feeTypeId,
+    required String name,
+    required num amount,
+    required List<String> batchIds,
+    DateTime? dueDate,
+    List<String>? paymentMethods,
+  }) {
+    return _client.call(
+      (dio) => dio.put('/fees/other/types/$feeTypeId', data: {
+        'name': name,
+        'amount': amount,
+        'batchIds': batchIds,
+        'dueDate': dueDate?.toIso8601String().split('T').first,
+        'paymentMethods': ?paymentMethods,
+      }),
+      (data) => FeeType.fromJson(data as Map<String, dynamic>),
+    );
+  }
+
+  /// Changes what ONE student owes for one Other fee - a discount on a shared fee, or the price of
+  /// their own one-off. Exactly one of [feeTypeId] and [studentFeeId] is set.
+  Future<void> updateOtherAmount({
+    required String membershipId,
+    String? feeTypeId,
+    String? studentFeeId,
+    required num amount,
+  }) {
+    return _client.call(
+      (dio) => dio.patch('/fees/other/amount', data: {
+        'membershipId': membershipId,
+        'feeTypeId': ?feeTypeId,
+        'studentFeeId': ?studentFeeId,
+        'amount': amount,
+      }),
+      (_) {},
     );
   }
 
@@ -298,6 +340,7 @@ class FeesApi {
     required num amount,
     DateTime? dueDate,
     String? defaultMode,
+    List<String>? paymentMethods,
     String? note,
   }) {
     return _client.call(
@@ -307,6 +350,7 @@ class FeesApi {
         'amount': amount,
         'dueDate': ?dueDate?.toIso8601String().split('T').first,
         'defaultMode': ?defaultMode,
+        'paymentMethods': ?paymentMethods,
         'note': ?note,
       }),
       (_) {},

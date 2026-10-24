@@ -1,16 +1,13 @@
-import 'dart:typed_data';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:share_plus/share_plus.dart';
 import 'package:nest_fe/app/theme/app_tokens.dart';
 import 'package:nest_fe/app/theme/app_typography.dart';
 import 'package:nest_fe/core/design/buttons.dart';
 import 'package:nest_fe/core/design/pressable.dart';
 import 'package:nest_fe/core/design/status_badge.dart';
-import 'package:nest_fe/core/design/toast.dart';
 import 'package:nest_fe/features/fees/data/student_statement.dart';
 import 'package:nest_fe/features/fees/presentation/fee_format.dart';
+import 'package:nest_fe/features/fees/presentation/fee_reports.dart';
 import 'package:nest_fe/features/fees/presentation/fees_screen.dart' show feesApiProvider;
 
 typedef _StatementKey = ({String membershipId, FeeCategory? category});
@@ -42,38 +39,15 @@ class _StatementScreenState extends ConsumerState<StatementScreen> {
 
   _StatementKey get _key => (membershipId: widget.membershipId, category: _category);
 
-  Future<void> _download() async {
+  /// Handed over as a PDF or an Excel sheet, whichever the admin picks - built from the rows on screen,
+  /// so a download never widens past the filter that produced it. Shared rather than written
+  /// silently: on web it opens the browser's own save flow, and on a phone it lets the admin send
+  /// the statement straight to the parent, which is what the document exists for.
+  Future<void> _download(StudentStatement statement) async {
     if (_downloading) return;
     setState(() => _downloading = true);
     try {
-      // Filtered exactly as the screen is. A download that silently widens to everything is worse
-      // than none - it gets sent to a parent with periods they should not see.
-      final bytes = await ref.read(feesApiProvider).downloadStatement(
-            membershipId: widget.membershipId,
-            category: _category,
-          );
-      final name = ref.read(_statementProvider(_key)).valueOrNull?.studentName ?? 'student';
-      final safeName = name.replaceAll(RegExp(r'[^A-Za-z0-9]+'), '_');
-      // Shared rather than written silently: on web this opens the browser's own save flow, and
-      // on mobile it lets the admin send the statement straight to the parent - which is what the
-      // document exists for.
-      await Share.shareXFiles(
-        [
-          XFile.fromData(
-            Uint8List.fromList(bytes),
-            name: '${safeName}_fee_statement.csv',
-            mimeType: 'text/csv',
-          ),
-        ],
-        text: 'Fee statement for $name',
-      );
-      if (mounted) showAppToast(context, 'Statement ready to save or share');
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
-        );
-      }
+      await shareStatementReport(context, statement: statement);
     } finally {
       if (mounted) setState(() => _downloading = false);
     }
@@ -139,7 +113,7 @@ class _StatementScreenState extends ConsumerState<StatementScreen> {
                   label: 'Download full statement',
                   icon: Icons.download_outlined,
                   busy: _downloading,
-                  onPressed: statement.rows.isEmpty ? null : _download,
+                  onPressed: statement.rows.isEmpty ? null : () => _download(statement),
                 ),
               ),
             ),

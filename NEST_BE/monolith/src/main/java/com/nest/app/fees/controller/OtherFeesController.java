@@ -5,6 +5,8 @@ import com.nest.app.fees.dto.CreateStudentFeeRequest;
 import com.nest.app.fees.dto.FeeRosterResponse;
 import com.nest.app.fees.dto.FeeTypeResponse;
 import com.nest.app.fees.dto.RecordOtherFeeRequest;
+import com.nest.app.fees.dto.UpdateFeeTypeRequest;
+import com.nest.app.fees.dto.UpdateOtherAmountRequest;
 import com.nest.app.fees.dto.StudentOtherFeesResponse;
 import com.nest.app.fees.dto.TransactionLedgerResponse;
 import com.nest.app.fees.entity.FeeCategory;
@@ -17,7 +19,9 @@ import com.nest.common.security.RequiresFeature;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -68,6 +72,20 @@ public class OtherFeesController {
     @RequiresFeature(FeatureKey.FEES_ENTRY)
     public FeeTypeResponse createType(@Valid @RequestBody CreateFeeTypeRequest request) {
         return otherFeesService.createFeeType(request);
+    }
+
+    @PutMapping("/fees/other/types/{feeTypeId}")
+    @RequiresFeature(FeatureKey.FEES_ENTRY)
+    public FeeTypeResponse updateType(@PathVariable UUID feeTypeId,
+                                      @Valid @RequestBody UpdateFeeTypeRequest request) {
+        return otherFeesService.updateFeeType(feeTypeId, request);
+    }
+
+    /** Changes what one student owes for one Other fee - their discount, or their one-off's price. */
+    @PatchMapping("/fees/other/amount")
+    @RequiresFeature(FeatureKey.FEES_ENTRY)
+    public void updateStudentAmount(@Valid @RequestBody UpdateOtherAmountRequest request) {
+        otherFeesService.updateStudentAmount(request);
     }
 
     /** Everyone in a batch and where they stand on one fee type. */

@@ -18,6 +18,8 @@ import com.nest.app.fees.repository.FeeSlipRepository;
 import com.nest.app.fees.repository.FeeTransactionRepository;
 import com.nest.app.fees.repository.FeeTypeBatchRepository;
 import com.nest.app.fees.repository.FeeTypeRepository;
+import com.nest.app.fees.repository.StudentFeeTypeAmountRepository;
+import com.nest.app.fees.entity.StudentFeeTypeAmount;
 import com.nest.app.identity.entity.AcademyMembership;
 import com.nest.app.identity.entity.CourseMap;
 import com.nest.app.identity.entity.MembershipStatus;
@@ -63,6 +65,7 @@ public class FeesDashboardService {
     private final AcademyMembershipRepository membershipRepository;
     private final UserRepository userRepository;
     private final CourseFeatureGuard courseFeatureGuard;
+    private final StudentFeeTypeAmountRepository amountRepository;
 
     public FeesDashboardService(CourseRepository courseRepository,
                                 CourseMapRepository courseMapRepository,
@@ -74,7 +77,8 @@ public class FeesDashboardService {
                                 BatchMemberRepository batchMemberRepository,
                                 AcademyMembershipRepository membershipRepository,
                                 UserRepository userRepository,
-                                CourseFeatureGuard courseFeatureGuard) {
+                                CourseFeatureGuard courseFeatureGuard,
+                                StudentFeeTypeAmountRepository amountRepository) {
         this.courseRepository = courseRepository;
         this.courseMapRepository = courseMapRepository;
         this.feeSlipRepository = feeSlipRepository;
@@ -86,6 +90,7 @@ public class FeesDashboardService {
         this.membershipRepository = membershipRepository;
         this.userRepository = userRepository;
         this.courseFeatureGuard = courseFeatureGuard;
+        this.amountRepository = amountRepository;
     }
 
     /**
@@ -225,6 +230,14 @@ public class FeesDashboardService {
         // One obligation per (student, fee type). A student in two batches that a costume fee
         // applies to still owes the costume fee once, not twice.
         Map<String, BigDecimal> expectedByObligation = new HashMap<>();
+        // What a student owes may have been set separately (a discount); that is the expected figure.
+        Map<String, BigDecimal> amountOverrides = new HashMap<>();
+        if (!types.isEmpty()) {
+            for (StudentFeeTypeAmount o : amountRepository
+                    .findByFeeTypeIdIn(types.stream().map(FeeType::getId).toList())) {
+                amountOverrides.put(o.getMembershipId() + "|" + o.getFeeTypeId(), o.getAmount());
+            }
+        }
         for (FeeType type : types) {
             for (FeeTypeBatch binding : bindingsByType.getOrDefault(type.getId(), List.of())) {
                 Batch batch = batchesById.get(binding.getBatchId());
@@ -242,7 +255,8 @@ public class FeesDashboardService {
                 }
                 for (UUID membershipId : membersByBatch.getOrDefault(binding.getBatchId(), Set.of())) {
                     if (activeStudents.contains(membershipId)) {
-                        expectedByObligation.put(membershipId + "|" + type.getId(), type.getAmount());
+                        String obligation = membershipId + "|" + type.getId();
+                        expectedByObligation.put(obligation, amountOverrides.getOrDefault(obligation, type.getAmount()));
                     }
                 }
             }

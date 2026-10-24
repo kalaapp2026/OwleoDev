@@ -67,6 +67,8 @@ class FeesDashboardServiceTest {
     private UserRepository userRepository;
     @Mock
     private CourseFeatureGuard courseFeatureGuard;
+    @Mock
+    private com.nest.app.fees.repository.StudentFeeTypeAmountRepository amountRepository;
 
     private FeesDashboardService dashboardService;
 
@@ -78,7 +80,7 @@ class FeesDashboardServiceTest {
     void setUp() {
         dashboardService = new FeesDashboardService(courseRepository, courseMapRepository, feeSlipRepository,
                 feeTransactionRepository, feeTypeRepository, feeTypeBatchRepository, batchRepository,
-                batchMemberRepository, membershipRepository, userRepository, courseFeatureGuard);
+                batchMemberRepository, membershipRepository, userRepository, courseFeatureGuard, amountRepository);
         UUID trainerMembershipId = UUID.randomUUID();
         MembershipClaim claim = new MembershipClaim(trainerMembershipId, academyId, "Natyalaya",
                 Role.TRAINER, Set.of(), Set.of());

@@ -75,6 +75,7 @@ class OtherFeesServiceTest {
     @Mock private AcademyMembershipRepository membershipRepository;
     @Mock private UserRepository userRepository;
     @Mock private CourseFeatureGuard courseFeatureGuard;
+    @Mock private com.nest.app.fees.repository.StudentFeeTypeAmountRepository amountRepository;
 
     private OtherFeesService service;
 
@@ -88,7 +89,7 @@ class OtherFeesServiceTest {
     void setUp() {
         service = new OtherFeesService(feeTypeRepository, feeTypeBatchRepository, studentFeeRepository,
                 feeTransactionRepository, batchRepository, batchMemberRepository, courseRepository,
-                membershipRepository, userRepository, courseFeatureGuard);
+                membershipRepository, userRepository, courseFeatureGuard, amountRepository);
         UUID adminMembershipId = UUID.randomUUID();
         TenantContext.set(new NestPrincipal(UUID.randomUUID(), "meera", Role.ACADEMY_ADMIN,
                 List.of(new MembershipClaim(adminMembershipId, academyId, "Kalakshetra",
@@ -135,7 +136,7 @@ class OtherFeesServiceTest {
                 .thenReturn(List.of(course(courseId, otherAcademyId)));
 
         assertThatThrownBy(() -> service.createFeeType(new CreateFeeTypeRequest(
-                "Costume Fee", new BigDecimal("750"), List.of(batchId), null, null)))
+                "Costume Fee", new BigDecimal("750"), List.of(batchId), null, null, null)))
                 .isInstanceOf(ResourceNotFoundException.class);
 
         verify(feeTypeRepository, org.mockito.Mockito.never()).save(any());
@@ -147,7 +148,7 @@ class OtherFeesServiceTest {
                 .thenReturn(true);
 
         assertThatThrownBy(() -> service.createFeeType(new CreateFeeTypeRequest(
-                "Costume Fee", new BigDecimal("750"), List.of(batchId), null, null)))
+                "Costume Fee", new BigDecimal("750"), List.of(batchId), null, null, null)))
                 .isInstanceOf(ConflictException.class)
                 .hasMessageContaining("already exists");
     }
@@ -161,7 +162,7 @@ class OtherFeesServiceTest {
                 .assertCourseFeature(courseId, FeatureKey.FEES_ENTRY);
 
         assertThatThrownBy(() -> service.createFeeType(new CreateFeeTypeRequest(
-                "Costume Fee", new BigDecimal("750"), List.of(batchId), null, null)))
+                "Costume Fee", new BigDecimal("750"), List.of(batchId), null, null, null)))
                 .isInstanceOf(ForbiddenException.class);
 
         verify(feeTypeRepository, org.mockito.Mockito.never()).save(any());
@@ -358,6 +359,113 @@ class OtherFeesServiceTest {
         assertThat(entry.totalPaid()).isEqualByComparingTo("0");
         assertThat(entry.status()).isEqualTo(PaymentStatus.NOT_PAID);
         assertThat(entry.lastPaymentId()).isNull();
+    }
+
+    // ---- editing what is owed ----
+
+    @Test
+    void aStudentsOwnAmountReplacesTheTypesForThatStudentOnly() {
+        UUID discounted = UUID.randomUUID();
+        UUID everyoneElse = UUID.randomUUID();
+        wireRoster(List.of(discounted, everyoneElse), feeType("750", null), List.of());
+        when(amountRepository.findByFeeTypeId(feeTypeId)).thenReturn(List.of(
+                com.nest.app.fees.entity.StudentFeeTypeAmount.builder().academyId(academyId)
+                        .membershipId(discounted).feeTypeId(feeTypeId).amount(new BigDecimal("500")).build()));
+
+        var roster = service.roster(feeTypeId, batchId);
+
+        assertThat(entryFor(roster, discounted).agreedFee()).isEqualByComparingTo("500");
+        assertThat(entryFor(roster, everyoneElse).agreedFee()).isEqualByComparingTo("750");
+        // The batch's expected total is what each student actually owes, not 2 x the type's amount.
+        assertThat(roster.expected()).isEqualByComparingTo("1250");
+    }
+
+    @Test
+    void settingASharedFeesAmountForOneStudentStoresAnOverrideAndLeavesTheTypeAlone() {
+        UUID student = UUID.randomUUID();
+        FeeType type = feeType("750", null);
+        when(membershipRepository.findById(student)).thenReturn(Optional.of(
+                AcademyMembership.builder().id(student).academyId(academyId).roleType(Role.STUDENT).build()));
+        when(feeTypeRepository.findByIdAndAcademyId(feeTypeId, academyId)).thenReturn(Optional.of(type));
+        when(amountRepository.findByMembershipIdAndFeeTypeId(student, feeTypeId)).thenReturn(Optional.empty());
+
+        service.updateStudentAmount(new com.nest.app.fees.dto.UpdateOtherAmountRequest(
+                student, feeTypeId, null, new BigDecimal("500")));
+
+        ArgumentCaptor<com.nest.app.fees.entity.StudentFeeTypeAmount> saved =
+                ArgumentCaptor.forClass(com.nest.app.fees.entity.StudentFeeTypeAmount.class);
+        verify(amountRepository).save(saved.capture());
+        assertThat(saved.getValue().getAmount()).isEqualByComparingTo("500");
+        assertThat(saved.getValue().getMembershipId()).isEqualTo(student);
+        assertThat(type.getAmount()).isEqualByComparingTo("750");
+    }
+
+    @Test
+    void settingAOneOffsAmountChangesTheFeeItself() {
+        UUID student = UUID.randomUUID();
+        UUID studentFeeId = UUID.randomUUID();
+        StudentFee fee = StudentFee.builder().id(studentFeeId).academyId(academyId).membershipId(student)
+                .name("Extra costume").amount(new BigDecimal("350")).build();
+        when(membershipRepository.findById(student)).thenReturn(Optional.of(
+                AcademyMembership.builder().id(student).academyId(academyId).roleType(Role.STUDENT).build()));
+        when(studentFeeRepository.findByIdAndAcademyId(studentFeeId, academyId)).thenReturn(Optional.of(fee));
+
+        service.updateStudentAmount(new com.nest.app.fees.dto.UpdateOtherAmountRequest(
+                student, null, studentFeeId, new BigDecimal("400")));
+
+        assertThat(fee.getAmount()).isEqualByComparingTo("400");
+        verify(studentFeeRepository).save(fee);
+    }
+
+    @Test
+    void anAmountCannotBeSetForAStudentOfAnotherAcademy() {
+        UUID student = UUID.randomUUID();
+        when(membershipRepository.findById(student)).thenReturn(Optional.of(
+                AcademyMembership.builder().id(student).academyId(otherAcademyId).roleType(Role.STUDENT).build()));
+
+        assertThatThrownBy(() -> service.updateStudentAmount(new com.nest.app.fees.dto.UpdateOtherAmountRequest(
+                student, feeTypeId, null, new BigDecimal("500"))))
+                .isInstanceOf(ResourceNotFoundException.class);
+        verify(amountRepository, org.mockito.Mockito.never()).save(any());
+    }
+
+    @Test
+    void editingAFeeTypeToAnotherTypesNameIsRefused() {
+        when(feeTypeRepository.findByIdAndAcademyId(feeTypeId, academyId))
+                .thenReturn(Optional.of(feeType("750", null)));
+        when(feeTypeRepository.existsByAcademyIdAndNameIgnoreCase(academyId, "Exam Fee")).thenReturn(true);
+
+        assertThatThrownBy(() -> service.updateFeeType(feeTypeId, new com.nest.app.fees.dto.UpdateFeeTypeRequest(
+                "Exam Fee", new BigDecimal("600"), List.of(batchId), null, null)))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("already exists");
+    }
+
+    @Test
+    void editingAFeeTypeKeepingItsOwnNameIsNotAConflictAndRebindsItsBatches() {
+        FeeType type = feeType("750", null);
+        when(feeTypeRepository.findByIdAndAcademyId(feeTypeId, academyId)).thenReturn(Optional.of(type));
+        when(batchRepository.findAllById(List.of(batchId))).thenReturn(List.of(batch(batchId, courseId)));
+        when(courseRepository.findAllById(Set.of(courseId))).thenReturn(List.of(course(courseId, academyId)));
+        when(courseFeatureGuard.hasCourseFeature(courseId, FeatureKey.FEES_ENTRY)).thenReturn(true);
+        when(feeTypeBatchRepository.findByFeeTypeId(feeTypeId)).thenReturn(List.of(
+                FeeTypeBatch.builder().feeTypeId(feeTypeId).batchId(batchId).build()));
+        when(feeTypeRepository.findByAcademyIdOrderByNameAsc(academyId)).thenReturn(List.of(type));
+        when(feeTypeBatchRepository.findByFeeTypeIdIn(any())).thenReturn(List.of(
+                FeeTypeBatch.builder().feeTypeId(feeTypeId).batchId(batchId).build()));
+        when(batchRepository.findAllById(Set.of(batchId))).thenReturn(List.of(batch(batchId, courseId)));
+        when(courseFeatureGuard.visibleCourseIds(FeatureKey.FEES_ENTRY)).thenReturn(Optional.empty());
+
+        var updated = service.updateFeeType(feeTypeId, new com.nest.app.fees.dto.UpdateFeeTypeRequest(
+                "Costume Fee", new BigDecimal("900"), List.of(batchId), LocalDate.of(2026, 11, 5),
+                List.of(FeeMode.CASH, FeeMode.UPI)));
+
+        assertThat(type.getAmount()).isEqualByComparingTo("900");
+        assertThat(type.getDueDate()).isEqualTo(LocalDate.of(2026, 11, 5));
+        assertThat(type.getDefaultMode()).isEqualTo(FeeMode.CASH);
+        assertThat(type.getPaymentMethods()).isEqualTo("CASH,UPI");
+        verify(feeTypeBatchRepository).deleteAllForFeeType(feeTypeId);
+        assertThat(updated.paymentMethods()).containsExactly(FeeMode.CASH, FeeMode.UPI);
     }
 
     // ---- the academy-wide ledger ----

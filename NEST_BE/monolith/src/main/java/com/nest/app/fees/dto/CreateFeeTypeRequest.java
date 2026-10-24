@@ -22,6 +22,7 @@ public record CreateFeeTypeRequest(
         @NotNull @DecimalMin(value = "0", inclusive = false) BigDecimal amount,
         @NotEmpty List<UUID> batchIds,
         LocalDate dueDate,
-        FeeMode defaultMode
+        FeeMode defaultMode,
+        List<FeeMode> paymentMethods
 ) {
 }

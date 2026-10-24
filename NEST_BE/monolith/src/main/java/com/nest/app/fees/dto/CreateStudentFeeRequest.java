@@ -21,6 +21,7 @@ public record CreateStudentFeeRequest(
         @NotNull @DecimalMin(value = "0", inclusive = false) BigDecimal amount,
         LocalDate dueDate,
         FeeMode defaultMode,
-        String note
+        String note,
+        java.util.List<FeeMode> paymentMethods
 ) {
 }

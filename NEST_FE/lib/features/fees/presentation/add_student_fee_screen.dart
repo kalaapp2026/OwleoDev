@@ -8,6 +8,7 @@ import 'package:nest_fe/core/design/calendar_modal.dart';
 import 'package:nest_fe/core/design/pressable.dart';
 import 'package:nest_fe/features/fees/presentation/fee_format.dart';
 import 'package:nest_fe/features/fees/presentation/fees_screen.dart' show feesApiProvider;
+import 'package:nest_fe/features/fees/presentation/widgets/payment_methods_field.dart';
 
 /// A one-off charge for a single student - a replacement book, an extra costume.
 ///
@@ -32,7 +33,8 @@ class _AddStudentFeeScreenState extends ConsumerState<AddStudentFeeScreen> {
   final _amountController = TextEditingController();
   final _noteController = TextEditingController();
   DateTime? _dueDate;
-  String _mode = 'CASH';
+  // In the order they were switched on: the first is the fee's default method.
+  final List<String> _methods = ['CASH'];
   bool _busy = false;
 
   @override
@@ -45,7 +47,12 @@ class _AddStudentFeeScreenState extends ConsumerState<AddStudentFeeScreen> {
 
   bool get _valid =>
       _nameController.text.trim().length > 1 &&
-      (num.tryParse(_amountController.text.trim()) ?? 0) > 0;
+      (num.tryParse(_amountController.text.trim()) ?? 0) > 0 &&
+      _methods.isNotEmpty;
+
+  void _toggleMethod(String method) => setState(() {
+        _methods.contains(method) ? _methods.remove(method) : _methods.add(method);
+      });
 
   Future<void> _pickDueDate() async {
     final picked = await showAppCalendar(
@@ -65,7 +72,8 @@ class _AddStudentFeeScreenState extends ConsumerState<AddStudentFeeScreen> {
             name: _nameController.text.trim(),
             amount: num.parse(_amountController.text.trim()),
             dueDate: _dueDate,
-            defaultMode: _mode,
+            defaultMode: _methods.first,
+            paymentMethods: List.of(_methods),
             note: _noteController.text.trim().isEmpty ? null : _noteController.text.trim(),
           );
       if (mounted) Navigator.of(context).pop(true);
@@ -181,25 +189,9 @@ class _AddStudentFeeScreenState extends ConsumerState<AddStudentFeeScreen> {
             ),
           ),
           _Field(
-            label: 'Default payment method',
-            child: Row(
-              children: [
-                for (final (value, label) in const [
-                  ('CASH', 'Cash'),
-                  ('UPI', 'UPI'),
-                  ('GATEWAY', 'Gateway')
-                ]) ...[
-                  Expanded(
-                    child: _ModeButton(
-                      label: label,
-                      selected: _mode == value,
-                      onTap: () => setState(() => _mode = value),
-                    ),
-                  ),
-                  if (value != 'GATEWAY') const SizedBox(width: AppSpacing.xs),
-                ],
-              ],
-            ),
+            label: 'Payment method',
+            hint: 'Tap to select which methods are accepted for this fee - more than one is fine',
+            child: PaymentMethodsField(selected: _methods, onToggle: _toggleMethod),
           ),
           _Field(
             label: 'Note',
@@ -276,49 +268,6 @@ class _Field extends StatelessWidget {
             Text(hint!, style: TextStyle(fontSize: AppType.xs, color: palette.textFaint)),
           ],
         ],
-      ),
-    );
-  }
-}
-
-class _ModeButton extends StatelessWidget {
-  const _ModeButton({required this.label, required this.selected, required this.onTap});
-
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final palette = context.palette;
-    return Pressable(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: AppMotion.fade,
-        padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: selected ? palette.goldSoft : Colors.transparent,
-          borderRadius: AppRadii.all(AppRadii.md),
-          border: Border.all(color: selected ? palette.gold : palette.border),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (selected) ...[
-              Icon(Icons.check_rounded, size: 13, color: palette.gold),
-              const SizedBox(width: AppSpacing.xxs),
-            ],
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: AppType.md,
-                fontWeight: AppType.bold,
-                color: selected ? palette.gold : palette.textMuted,
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }

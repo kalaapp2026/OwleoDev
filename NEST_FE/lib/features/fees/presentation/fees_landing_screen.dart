@@ -12,7 +12,7 @@ import 'package:nest_fe/features/enrolment/data/enrolment_api.dart';
 import 'package:nest_fe/features/fees/data/fee_summary.dart';
 import 'package:nest_fe/features/fees/presentation/all_transactions_screen.dart';
 import 'package:nest_fe/features/fees/presentation/fee_format.dart';
-import 'package:nest_fe/features/fees/presentation/fees_screen.dart' show FeesScreen, feesApiProvider;
+import 'package:nest_fe/features/fees/presentation/fees_screen.dart' show feesApiProvider;
 import 'package:nest_fe/features/fees/presentation/other_fees_screen.dart';
 import 'package:nest_fe/features/fees/presentation/regular_fees_screen.dart';
 import 'package:nest_fe/features/fees/presentation/student_profile_screen.dart';
@@ -265,21 +265,6 @@ class _FeesLandingScreenState extends ConsumerState<FeesLandingScreen> {
               builder: (_) => const AllTransactionsScreen(),
             )),
           ),
-          const SizedBox(height: AppSpacing.md),
-          // The report download and fee slips still live on the old screen. Keeping a door to them
-          // means the redesign doesn't take working features away before they are ported.
-          Center(
-            child: Pressable(
-              onTap: () => Navigator.of(context).push(MaterialPageRoute(
-                builder: (_) => const _LegacyFeesPage(),
-              )),
-              child: Padding(
-                padding: const EdgeInsets.all(AppSpacing.xs),
-                child: Text('Reports & fee slips',
-                    style: TextStyle(fontSize: AppType.xs, color: palette.textMuted)),
-              ),
-            ),
-          ),
         ],
       ),
     );
@@ -295,18 +280,6 @@ class _RegularFeesPage extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(title: const Text('Regular Fees')),
       body: const RegularFeesScreen(),
-    );
-  }
-}
-
-class _LegacyFeesPage extends StatelessWidget {
-  const _LegacyFeesPage();
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Reports & fee slips')),
-      body: const FeesScreen(),
     );
   }
 }

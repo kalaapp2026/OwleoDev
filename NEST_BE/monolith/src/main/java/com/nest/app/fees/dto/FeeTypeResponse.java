@@ -20,7 +20,8 @@ public record FeeTypeResponse(
         LocalDate dueDate,
         FeeMode defaultMode,
         boolean active,
-        List<BatchBinding> batches
+        List<BatchBinding> batches,
+        List<FeeMode> paymentMethods
 ) {
     public record BatchBinding(UUID batchId, String batchName, UUID courseId, String courseName) {
     }

@@ -12,7 +12,9 @@ import 'package:nest_fe/features/curriculum/data/curriculum_api.dart';
 import 'package:nest_fe/features/enrolment/data/batch.dart';
 import 'package:nest_fe/features/enrolment/data/enrolment_api.dart';
 import 'package:nest_fe/features/fees/presentation/fee_format.dart';
+import 'package:nest_fe/features/fees/data/fee_type.dart';
 import 'package:nest_fe/features/fees/presentation/fees_screen.dart' show feesApiProvider;
+import 'package:nest_fe/features/fees/presentation/widgets/payment_methods_field.dart';
 
 /// A batch of one course, labelled so it reads unambiguously in a picker.
 ///
@@ -46,9 +48,18 @@ final _allBatchesProvider = FutureProvider.autoDispose<List<_BatchOption>>((ref)
   return options;
 });
 
-/// Create a shared "Other" fee - costume, exam, annual day.
+/// Create - or, given a [feeType], edit - a shared "Other" fee: costume, exam, annual day.
 class AddFeeTypeScreen extends ConsumerStatefulWidget {
-  const AddFeeTypeScreen({super.key});
+  const AddFeeTypeScreen({super.key, this.feeType, this.existingNames = const []});
+
+  /// The fee being edited. Null creates a new one.
+  final FeeType? feeType;
+
+  /// Lower-cased names of the OTHER fees, so a duplicate is flagged as it is typed rather than after
+  /// the server refuses it. Excludes the fee being edited - keeping its own name is not a clash.
+  final List<String> existingNames;
+
+  bool get isEdit => feeType != null;
 
   @override
   ConsumerState<AddFeeTypeScreen> createState() => _AddFeeTypeScreenState();
@@ -59,8 +70,30 @@ class _AddFeeTypeScreenState extends ConsumerState<AddFeeTypeScreen> {
   final _amountController = TextEditingController();
   final List<_BatchOption> _batches = [];
   DateTime? _dueDate;
-  String _mode = 'CASH';
+  // In the order they were switched on: the first is the fee's default method.
+  final List<String> _methods = ['CASH'];
   bool _busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final fee = widget.feeType;
+    if (fee == null) return;
+    _nameController.text = fee.name;
+    _amountController.text = fee.amount.round().toString();
+    _dueDate = fee.dueDate;
+    for (final b in fee.batches) {
+      _batches.add(_BatchOption(id: b.batchId, label: b.label));
+    }
+    final methods = fee.paymentMethods.isNotEmpty
+        ? fee.paymentMethods
+        : [if (fee.defaultMode != null) fee.defaultMode!];
+    if (methods.isNotEmpty) {
+      _methods
+        ..clear()
+        ..addAll(methods);
+    }
+  }
 
   @override
   void dispose() {
@@ -71,10 +104,19 @@ class _AddFeeTypeScreenState extends ConsumerState<AddFeeTypeScreen> {
 
   /// At least one batch is required: a fee type bound to nothing applies to nobody, so it would
   /// sit in the catalogue looking real while charging no one.
+  bool get _duplicate =>
+      widget.existingNames.contains(_nameController.text.trim().toLowerCase());
+
   bool get _valid =>
       _nameController.text.trim().length > 1 &&
       (num.tryParse(_amountController.text.trim()) ?? 0) > 0 &&
-      _batches.isNotEmpty;
+      _batches.isNotEmpty &&
+      !_duplicate &&
+      _methods.isNotEmpty;
+
+  void _toggleMethod(String method) => setState(() {
+        _methods.contains(method) ? _methods.remove(method) : _methods.add(method);
+      });
 
   Future<void> _pickBatches() async {
     final all = await ref.read(_allBatchesProvider.future);
@@ -102,13 +144,29 @@ class _AddFeeTypeScreenState extends ConsumerState<AddFeeTypeScreen> {
     if (!_valid || _busy) return;
     setState(() => _busy = true);
     try {
-      await ref.read(feesApiProvider).createFeeType(
-            name: _nameController.text.trim(),
-            amount: num.parse(_amountController.text.trim()),
-            batchIds: _batches.map((b) => b.id).toList(),
-            dueDate: _dueDate,
-            defaultMode: _mode,
-          );
+      final api = ref.read(feesApiProvider);
+      final name = _nameController.text.trim();
+      final amount = num.parse(_amountController.text.trim());
+      final batchIds = _batches.map((b) => b.id).toList();
+      if (widget.isEdit) {
+        await api.updateFeeType(
+          feeTypeId: widget.feeType!.id,
+          name: name,
+          amount: amount,
+          batchIds: batchIds,
+          dueDate: _dueDate,
+          paymentMethods: List.of(_methods),
+        );
+      } else {
+        await api.createFeeType(
+          name: name,
+          amount: amount,
+          batchIds: batchIds,
+          dueDate: _dueDate,
+          defaultMode: _methods.first,
+          paymentMethods: List.of(_methods),
+        );
+      }
       if (mounted) Navigator.of(context).pop(true);
     } catch (e) {
       if (mounted) {
@@ -129,17 +187,19 @@ class _AddFeeTypeScreenState extends ConsumerState<AddFeeTypeScreen> {
       backgroundColor: palette.bg,
       appBar: AppBar(
         backgroundColor: palette.bg,
-        title: const Text('Add Fee Type'),
+        title: Text(widget.isEdit ? 'Edit Fee Type' : 'Add Fee Type'),
       ),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(
             AppSpacing.xl, AppSpacing.md, AppSpacing.xl, AppSpacing.x5l),
         children: [
-          Text('Create a new other-fee category',
+          Text(widget.isEdit ? 'Changes apply to this fee type only' : 'Create a new other-fee category',
               style: TextStyle(fontSize: AppType.smd, color: palette.textMuted)),
           const SizedBox(height: AppSpacing.xl),
           _Field(
             label: 'Fee type name',
+            hint: _duplicate ? 'A fee type with this name already exists' : null,
+            hintColor: _duplicate ? palette.notPaid : null,
             child: TextField(
               controller: _nameController,
               onChanged: (_) => setState(() {}),
@@ -257,30 +317,13 @@ class _AddFeeTypeScreenState extends ConsumerState<AddFeeTypeScreen> {
             ),
           ),
           _Field(
-            label: 'Default payment method',
-            hint: 'Pre-selects the mode when collecting. Not a restriction.',
-            child: Row(
-              children: [
-                for (final (value, label) in const [
-                  ('CASH', 'Cash'),
-                  ('UPI', 'UPI'),
-                  ('GATEWAY', 'Gateway')
-                ]) ...[
-                  Expanded(
-                    child: _ModeButton(
-                      label: label,
-                      selected: _mode == value,
-                      onTap: () => setState(() => _mode = value),
-                    ),
-                  ),
-                  if (value != 'GATEWAY') const SizedBox(width: AppSpacing.xs),
-                ],
-              ],
-            ),
+            label: 'Payment method',
+            hint: 'Which methods are accepted for this fee type - more than one is fine',
+            child: PaymentMethodsField(selected: _methods, onToggle: _toggleMethod),
           ),
           const SizedBox(height: AppSpacing.lg),
           AppPrimaryButton(
-            label: 'Create fee type',
+            label: widget.isEdit ? 'Save changes' : 'Create fee type',
             icon: Icons.check,
             busy: _busy,
             onPressed: _valid ? _create : null,
@@ -321,11 +364,12 @@ class _AddFeeTypeScreenState extends ConsumerState<AddFeeTypeScreen> {
 }
 
 class _Field extends StatelessWidget {
-  const _Field({required this.label, required this.child, this.hint});
+  const _Field({required this.label, required this.child, this.hint, this.hintColor});
 
   final String label;
   final Widget child;
   final String? hint;
+  final Color? hintColor;
 
   @override
   Widget build(BuildContext context) {
@@ -340,7 +384,8 @@ class _Field extends StatelessWidget {
           child,
           if (hint != null) ...[
             const SizedBox(height: AppSpacing.xs),
-            Text(hint!, style: TextStyle(fontSize: AppType.xs, color: palette.textFaint)),
+            Text(hint!,
+                style: TextStyle(fontSize: AppType.xs, color: hintColor ?? palette.textFaint)),
           ],
         ],
       ),
@@ -378,49 +423,6 @@ class _RemovableChip extends StatelessWidget {
             child: Icon(Icons.close_rounded, size: 12, color: palette.primary),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _ModeButton extends StatelessWidget {
-  const _ModeButton({required this.label, required this.selected, required this.onTap});
-
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final palette = context.palette;
-    return Pressable(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: AppMotion.fade,
-        padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: selected ? palette.goldSoft : Colors.transparent,
-          borderRadius: AppRadii.all(AppRadii.md),
-          border: Border.all(color: selected ? palette.gold : palette.border),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (selected) ...[
-              Icon(Icons.check_rounded, size: 13, color: palette.gold),
-              const SizedBox(width: AppSpacing.xxs),
-            ],
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: AppType.md,
-                fontWeight: AppType.bold,
-                color: selected ? palette.gold : palette.textMuted,
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }

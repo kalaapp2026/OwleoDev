@@ -66,6 +66,10 @@ public class StudentFee {
     @Column(name = "default_mode", length = 20)
     private FeeMode defaultMode;
 
+    /** Every method this fee accepts, comma-separated ("CASH,UPI"); {@link #defaultMode} is the first. */
+    @Column(name = "payment_methods", length = 64)
+    private String paymentMethods;
+
     @Column(length = 500)
     private String note;
 

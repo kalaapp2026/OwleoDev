@@ -62,7 +62,8 @@ String _periodLabel(String raw) {
 }
 
 /// The student's own Fees tab: Regular / Other / Statement. Reads `/me/fees/*`, which can only ever
-/// return the caller's own rows. "Pay now" appears once the academy has online payments switched on.
+/// return the caller's own rows. "Pay now" is on every unpaid fee; whether the payment can actually go
+/// through depends on the academy having online payments switched on, which the pay sheet says plainly.
 class StudentFeesScreen extends ConsumerStatefulWidget {
   const StudentFeesScreen({super.key});
 
@@ -80,12 +81,17 @@ class _State extends ConsumerState<StudentFeesScreen> {
     ref.invalidate(_myOtherProvider);
   }
 
+  /// Whether the academy has online payments switched on. The Pay button is always there so the
+  /// student can see what paying looks like; this decides whether tapping it can go through.
+  bool get _payAvailable => ref.read(_payEnabledProvider).valueOrNull ?? false;
+
   Future<void> _payRegular(StatementRow r) async {
     final paid = await showPaySheet(
       context: context,
       title: r.context,
       subtitle: _periodLabel(r.label),
       amount: r.balance,
+      available: _payAvailable,
       onPay: (m) => ref.read(feesApiProvider).payMyFee(
           category: FeeCategory.regular, courseId: r.courseId, period: r.label, method: m),
     );
@@ -98,6 +104,7 @@ class _State extends ConsumerState<StudentFeesScreen> {
       title: f.name,
       subtitle: f.custom ? 'One-time' : 'Academy fee',
       amount: f.outstanding,
+      available: _payAvailable,
       onPay: (m) => ref.read(feesApiProvider).payMyFee(
           category: FeeCategory.other, feeTypeId: f.feeTypeId, studentFeeId: f.studentFeeId, method: m),
     );
@@ -171,7 +178,6 @@ class _State extends ConsumerState<StudentFeesScreen> {
   Widget build(BuildContext context) {
     final regular = ref.watch(_myRegularProvider);
     final other = ref.watch(_myOtherProvider);
-    final payEnabled = ref.watch(_payEnabledProvider).valueOrNull ?? false;
     final courses = ref.watch(_myCoursesProvider).valueOrNull ?? const <String, Course>{};
 
     int dueCount(Iterable<PaymentStatus> s) => s.where((x) => !x.isSettled).length;
@@ -232,7 +238,7 @@ class _State extends ConsumerState<StudentFeesScreen> {
                                 partial: r.status == PaymentStatus.partial,
                                 dueDate: _regularDue(r, courses),
                                 paidOn: r.paidOn,
-                                onPay: payEnabled && !r.status.isSettled && r.courseId != null ? () => _payRegular(r) : null,
+                                onPay: !r.status.isSettled && r.courseId != null ? () => _payRegular(r) : null,
                                 onReceipt: r.status.isSettled
                                     ? () => _showReceipt(r.context, _periodLabel(r.label), r.paid, r.paidOn, r.mode)
                                     : null,
@@ -262,7 +268,7 @@ class _State extends ConsumerState<StudentFeesScreen> {
                               partial: f.status == PaymentStatus.partial,
                               dueDate: f.dueDate,
                               paidOn: f.lastPaidOn,
-                              onPay: payEnabled && !f.status.isSettled ? () => _payOther(f) : null,
+                              onPay: !f.status.isSettled ? () => _payOther(f) : null,
                               onReceipt: f.status.isSettled
                                   ? () => _showReceipt(f.name, f.custom ? 'One-time' : 'Academy fee', f.paid, f.lastPaidOn, f.lastPaymentMode)
                                   : null,

@@ -9,6 +9,8 @@ import 'package:nest_fe/features/fees/data/fee_roster.dart';
 import 'package:nest_fe/features/fees/data/fee_type.dart';
 import 'package:nest_fe/features/fees/presentation/add_fee_type_screen.dart';
 import 'package:nest_fe/features/fees/presentation/fee_format.dart';
+import 'package:nest_fe/features/fees/presentation/fee_reports.dart';
+import 'package:nest_fe/features/fees/presentation/student_profile_screen.dart';
 import 'package:nest_fe/features/fees/presentation/fees_screen.dart' show feesApiProvider;
 import 'package:nest_fe/features/fees/presentation/widgets/student_list_body.dart';
 
@@ -104,14 +106,60 @@ class _OtherFeesScreenState extends ConsumerState<OtherFeesScreen> {
     }
   }
 
+  /// Lower-cased names of every fee type except [except], so the form can flag a duplicate as it is typed.
+  List<String> _otherNames({String? except}) =>
+      (ref.read(feeTypesProvider).valueOrNull ?? const <FeeType>[])
+          .where((t) => t.id != except)
+          .map((t) => t.name.toLowerCase())
+          .toList();
+
   Future<void> _createFeeType() async {
     final created = await Navigator.of(context).push<bool>(
-      MaterialPageRoute(builder: (_) => const AddFeeTypeScreen()),
+      MaterialPageRoute(builder: (_) => AddFeeTypeScreen(existingNames: _otherNames())),
     );
     if (created == true) {
       ref.invalidate(feeTypesProvider);
       if (mounted) showAppToast(context, 'Fee type created');
     }
+  }
+
+  /// Edits the selected fee in place. The roster is refetched afterwards because an amount, a
+  /// last date to pay or the batch list can all change what the list shows.
+  Future<void> _editFeeType() async {
+    final type = _feeType;
+    if (type == null) return;
+    final saved = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => AddFeeTypeScreen(feeType: type, existingNames: _otherNames(except: type.id)),
+      ),
+    );
+    if (saved != true || !mounted) return;
+    ref.invalidate(feeTypesProvider);
+    final fresh = await ref.read(feeTypesProvider.future);
+    if (!mounted) return;
+    final updated = fresh.where((t) => t.id == type.id).firstOrNull;
+    setState(() {
+      _feeType = updated ?? type;
+      // The batch may have been taken off the fee; keep it only if it is still bound.
+      final batch = _batch;
+      _batch = batch == null
+          ? updated?.onlyBatch
+          : updated?.batches.where((b) => b.batchId == batch.batchId).firstOrNull ?? updated?.onlyBatch;
+    });
+    _refresh();
+    showAppToast(context, '"${updated?.name ?? type.name}" fee type updated');
+  }
+
+  /// Opens the student's profile on its Other side - this is an Other fee they were tapped from.
+  Future<void> _openProfile(FeeRosterEntry entry) async {
+    await Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => StudentProfileScreen(
+        membershipId: entry.membershipId,
+        period: periodOf(DateTime.now()),
+        initialShowOther: true,
+      ),
+    ));
+    _refresh();
   }
 
   @override
@@ -200,6 +248,10 @@ class _OtherFeesScreenState extends ConsumerState<OtherFeesScreen> {
                             ),
                             const SizedBox(width: AppSpacing.sm),
                             _AddButton(onTap: _createFeeType),
+                            if (_feeType != null) ...[
+                              const SizedBox(width: AppSpacing.sm),
+                              _EditButton(onTap: _editFeeType),
+                            ],
                           ],
                         ),
                         const SizedBox(height: AppSpacing.sm),
@@ -260,14 +312,45 @@ class _OtherFeesScreenState extends ConsumerState<OtherFeesScreen> {
                       emptyText: 'No students in this batch yet.',
                       onMarkPaid: _markPaid,
                       onUndo: _undo,
-                      onOpenProfile: (entry) => showAppToast(
-                          context, "The Other side of a student's profile is still to come"),
+                      onOpenProfile: _openProfile,
+                      onDownloadReport: (entries) => shareRosterReport(
+                        context,
+                        title: '${_feeType!.name} · ${_batch!.label}',
+                        subtitle: 'Other Fees',
+                        entries: entries,
+                      ),
                       onScrolled: (scrolled) =>
                           setState(() => _selectorsVisible = !scrolled),
                     ),
                   ),
             ),
         ],
+      ),
+    );
+  }
+}
+
+/// The gold pencil beside the add button: edit the fee type that is selected.
+class _EditButton extends StatelessWidget {
+  const _EditButton({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.palette;
+    return Pressable(
+      onTap: onTap,
+      child: Container(
+        width: 48,
+        height: 44,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: palette.goldSoft,
+          borderRadius: AppRadii.all(AppRadii.lg),
+          border: Border.all(color: palette.gold),
+        ),
+        child: Icon(Icons.edit_outlined, size: 18, color: palette.gold),
       ),
     );
   }

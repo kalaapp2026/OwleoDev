@@ -21,6 +21,7 @@ Future<bool> showPaySheet({
   required String subtitle,
   required num amount,
   required Future<String> Function(String method) onPay,
+  bool available = true,
 }) async {
   final paid = await showModalBottomSheet<bool>(
     context: context,
@@ -28,7 +29,8 @@ Future<bool> showPaySheet({
     isDismissible: true,
     backgroundColor: context.palette.surface,
     shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(22))),
-    builder: (_) => _PaySheet(title: title, subtitle: subtitle, amount: amount, onPay: onPay),
+    builder: (_) =>
+        _PaySheet(title: title, subtitle: subtitle, amount: amount, onPay: onPay, available: available),
   );
   return paid ?? false;
 }
@@ -172,11 +174,21 @@ Future<void> showFeeReceipt({
 enum _Step { amount, method, processing, success }
 
 class _PaySheet extends StatefulWidget {
-  const _PaySheet({required this.title, required this.subtitle, required this.amount, required this.onPay});
+  const _PaySheet({
+    required this.title,
+    required this.subtitle,
+    required this.amount,
+    required this.onPay,
+    required this.available,
+  });
   final String title;
   final String subtitle;
   final num amount;
   final Future<String> Function(String method) onPay;
+
+  /// False when the academy has no online payments yet. The sheet still shows the whole flow, but
+  /// paying says so instead of starting a payment that cannot settle.
+  final bool available;
 
   @override
   State<_PaySheet> createState() => _PaySheetState();
@@ -189,6 +201,13 @@ class _PaySheetState extends State<_PaySheet> {
   String? _error;
 
   Future<void> _pay() async {
+    if (!widget.available) {
+      // Nothing is sent and nothing is marked paid: with no gateway behind it, a "payment" here would
+      // be a fee settled with no money having moved.
+      setState(() => _error = "Online payment isn't switched on for your academy yet. "
+          'Please pay the academy directly - it will show here once they record it.');
+      return;
+    }
     setState(() {
       _step = _Step.processing;
       _error = null;
@@ -323,6 +342,26 @@ class _PaySheetState extends State<_PaySheet> {
       ),
       const SizedBox(height: 16),
       _note(Icons.lock_outline, 'This fee is collected in full, in one payment'),
+      if (!widget.available)
+        Padding(
+          padding: const EdgeInsets.only(top: 10),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+            decoration: BoxDecoration(
+              color: palette.partialSoft,
+              borderRadius: AppRadii.all(AppRadii.lg),
+              border: Border.all(color: palette.partial),
+            ),
+            child: Row(children: [
+              Icon(Icons.info_outline, size: 14, color: palette.partial),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text('Online payment is coming soon for your academy',
+                    style: TextStyle(fontSize: 11, fontWeight: AppType.semi, color: palette.partial)),
+              ),
+            ]),
+          ),
+        ),
       const SizedBox(height: 16),
       _primaryButton('Pay ${money(widget.amount)}', () => setState(() => _step = _Step.method)),
     ]);

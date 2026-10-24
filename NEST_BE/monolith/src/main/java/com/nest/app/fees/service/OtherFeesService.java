@@ -12,15 +12,20 @@ import com.nest.app.fees.dto.FeeRosterResponse;
 import com.nest.app.fees.dto.FeeTypeResponse;
 import com.nest.app.fees.dto.PaymentStatus;
 import com.nest.app.fees.dto.RecordOtherFeeRequest;
+import com.nest.app.fees.dto.UpdateFeeTypeRequest;
+import com.nest.app.fees.dto.UpdateOtherAmountRequest;
 import com.nest.app.fees.entity.FeeCategory;
+import com.nest.app.fees.entity.FeeMode;
 import com.nest.app.fees.entity.FeeType;
 import com.nest.app.fees.entity.FeeTypeBatch;
 import com.nest.app.fees.entity.FeeTransaction;
 import com.nest.app.fees.entity.StudentFee;
+import com.nest.app.fees.entity.StudentFeeTypeAmount;
 import com.nest.app.fees.repository.FeeTransactionRepository;
 import com.nest.app.fees.repository.FeeTypeBatchRepository;
 import com.nest.app.fees.repository.FeeTypeRepository;
 import com.nest.app.fees.repository.StudentFeeRepository;
+import com.nest.app.fees.repository.StudentFeeTypeAmountRepository;
 import com.nest.app.identity.entity.AcademyMembership;
 import com.nest.app.identity.entity.MembershipStatus;
 import com.nest.app.identity.entity.User;
@@ -70,6 +75,7 @@ public class OtherFeesService {
     private final AcademyMembershipRepository membershipRepository;
     private final UserRepository userRepository;
     private final CourseFeatureGuard courseFeatureGuard;
+    private final StudentFeeTypeAmountRepository amountRepository;
 
     public OtherFeesService(FeeTypeRepository feeTypeRepository,
                             FeeTypeBatchRepository feeTypeBatchRepository,
@@ -80,7 +86,8 @@ public class OtherFeesService {
                             CourseRepository courseRepository,
                             AcademyMembershipRepository membershipRepository,
                             UserRepository userRepository,
-                            CourseFeatureGuard courseFeatureGuard) {
+                            CourseFeatureGuard courseFeatureGuard,
+                            StudentFeeTypeAmountRepository amountRepository) {
         this.feeTypeRepository = feeTypeRepository;
         this.feeTypeBatchRepository = feeTypeBatchRepository;
         this.studentFeeRepository = studentFeeRepository;
@@ -91,6 +98,7 @@ public class OtherFeesService {
         this.membershipRepository = membershipRepository;
         this.userRepository = userRepository;
         this.courseFeatureGuard = courseFeatureGuard;
+        this.amountRepository = amountRepository;
     }
 
     @Transactional(readOnly = true)
@@ -158,7 +166,8 @@ public class OtherFeesService {
                 .name(name)
                 .amount(request.amount())
                 .dueDate(request.dueDate())
-                .defaultMode(request.defaultMode())
+                .defaultMode(primaryMode(request.paymentMethods(), request.defaultMode()))
+                .paymentMethods(methodsCsv(request.paymentMethods(), request.defaultMode()))
                 .active(true)
                 .createdBy(TenantContext.currentUserId())
                 .build());
@@ -190,11 +199,99 @@ public class OtherFeesService {
                 .name(request.name().trim())
                 .amount(request.amount())
                 .dueDate(request.dueDate())
-                .defaultMode(request.defaultMode())
+                .defaultMode(primaryMode(request.paymentMethods(), request.defaultMode()))
+                .paymentMethods(methodsCsv(request.paymentMethods(), request.defaultMode()))
                 .note(request.note())
                 .createdBy(TenantContext.currentUserId())
                 .build());
         return fee.getId();
+    }
+
+    /**
+     * Edits a shared fee in place: its name, amount, last date to pay, accepted methods and the
+     * batches it applies to. Payments already taken stay against it - they point at the fee's id -
+     * and a student whose own amount was set separately keeps it.
+     */
+    @Transactional
+    @Auditable(action = "FEE_TYPE_UPDATED", entityType = "fee_type")
+    public FeeTypeResponse updateFeeType(UUID feeTypeId, UpdateFeeTypeRequest request) {
+        UUID academyId = TenantContext.currentAcademyId();
+        FeeType type = feeTypeRepository.findByIdAndAcademyId(feeTypeId, academyId)
+                .orElseThrow(() -> new ResourceNotFoundException("Fee type not found: " + feeTypeId));
+        assertCallerCanActOnFeeType(type.getId());
+
+        String name = request.name().trim();
+        if (!name.equalsIgnoreCase(type.getName())
+                && feeTypeRepository.existsByAcademyIdAndNameIgnoreCase(academyId, name)) {
+            throw new ConflictException("A fee type called \"" + name + "\" already exists.");
+        }
+
+        List<UUID> batchIds = request.batchIds().stream().distinct().toList();
+        List<Batch> batches = batchRepository.findAllById(batchIds);
+        assertBatchesBelongToAcademy(batches, batchIds, academyId);
+        batches.stream().map(Batch::getCourseId).distinct()
+                .forEach(cid -> courseFeatureGuard.assertCourseFeature(cid, FeatureKey.FEES_ENTRY));
+
+        type.setName(name);
+        type.setAmount(request.amount());
+        type.setDueDate(request.dueDate());
+        type.setDefaultMode(primaryMode(request.paymentMethods(), type.getDefaultMode()));
+        type.setPaymentMethods(methodsCsv(request.paymentMethods(), type.getDefaultMode()));
+        feeTypeRepository.save(type);
+
+        // Replace the bindings. The bulk delete flushes first, so re-adding an unchanged batch does
+        // not collide with the row being removed.
+        feeTypeBatchRepository.deleteAllForFeeType(type.getId());
+        for (UUID batchId : batchIds) {
+            feeTypeBatchRepository.save(FeeTypeBatch.builder().feeTypeId(type.getId()).batchId(batchId).build());
+        }
+
+        return listFeeTypes(true).stream()
+                .filter(t -> t.id().equals(type.getId()))
+                .findFirst()
+                .orElseThrow(() -> new IllegalStateException("Fee type vanished after update"));
+    }
+
+    /**
+     * Changes what ONE student owes for one Other fee. A shared fee keeps its own amount and only
+     * this student's moves (their discount, say); a one-off belongs to them, so the fee itself moves.
+     */
+    @Transactional
+    @Auditable(action = "OTHER_FEE_AMOUNT_UPDATED", entityType = "fee_type")
+    public void updateStudentAmount(UpdateOtherAmountRequest request) {
+        UUID academyId = TenantContext.currentAcademyId();
+        boolean hasType = request.feeTypeId() != null;
+        boolean hasStudentFee = request.studentFeeId() != null;
+        if (hasType == hasStudentFee) {
+            throw new ConflictException("Exactly one of a fee type or a student fee must be given.");
+        }
+        AcademyMembership membership = membershipRepository.findById(request.membershipId())
+                .orElseThrow(() -> new ResourceNotFoundException("Student not found: " + request.membershipId()));
+        if (!membership.getAcademyId().equals(academyId)) {
+            throw new ResourceNotFoundException("Student not found: " + request.membershipId());
+        }
+
+        if (hasStudentFee) {
+            StudentFee fee = studentFeeRepository.findByIdAndAcademyId(request.studentFeeId(), academyId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Student fee not found"));
+            if (!fee.getMembershipId().equals(request.membershipId())) {
+                throw new ConflictException("That fee belongs to a different student.");
+            }
+            fee.setAmount(request.amount());
+            studentFeeRepository.save(fee);
+            return;
+        }
+
+        FeeType type = feeTypeRepository.findByIdAndAcademyId(request.feeTypeId(), academyId)
+                .orElseThrow(() -> new ResourceNotFoundException("Fee type not found"));
+        assertCallerCanActOnFeeType(type.getId());
+        StudentFeeTypeAmount override = amountRepository
+                .findByMembershipIdAndFeeTypeId(request.membershipId(), type.getId())
+                .orElseGet(() -> StudentFeeTypeAmount.builder()
+                        .academyId(academyId).membershipId(request.membershipId()).feeTypeId(type.getId()).build());
+        override.setAmount(request.amount());
+        override.setUpdatedBy(TenantContext.currentUserId());
+        amountRepository.save(override);
     }
 
     /**
@@ -246,12 +343,15 @@ public class OtherFeesService {
                 .collect(Collectors.toSet());
 
         LocalDate today = LocalDate.now();
-        BigDecimal amount = type.getAmount();
+        // A student whose own amount was set separately (a discount) is billed that, not the type's.
+        Map<UUID, BigDecimal> overrides = amountRepository.findByFeeTypeId(feeTypeId).stream()
+                .collect(Collectors.toMap(StudentFeeTypeAmount::getMembershipId, StudentFeeTypeAmount::getAmount, (a, b) -> b));
         List<FeeRosterResponse.FeeRosterEntry> entries = new ArrayList<>();
         int paidCount = 0;
 
         for (AcademyMembership membership : students) {
             List<FeeTransaction> rows = txByMembership.getOrDefault(membership.getId(), List.of());
+            BigDecimal amount = overrides.getOrDefault(membership.getId(), type.getAmount());
             BigDecimal paid = rows.stream().map(FeeTransaction::getAmountPaid)
                     .reduce(BigDecimal.ZERO, BigDecimal::add);
             BigDecimal balance = amount.subtract(paid);
@@ -284,7 +384,8 @@ public class OtherFeesService {
 
         return new FeeRosterResponse(batch.getCourseId(), batchId, type.getName(),
                 entries.size(), paidCount,
-                amount.multiply(BigDecimal.valueOf(entries.size())),
+                entries.stream().map(FeeRosterResponse.FeeRosterEntry::agreedFee)
+                        .reduce(BigDecimal.ZERO, BigDecimal::add),
                 entries.stream().map(FeeRosterResponse.FeeRosterEntry::totalPaid)
                         .reduce(BigDecimal.ZERO, BigDecimal::add),
                 entries);
@@ -411,12 +512,15 @@ public class OtherFeesService {
         BigDecimal totalAmount = BigDecimal.ZERO;
         BigDecimal totalPaid = BigDecimal.ZERO;
 
+        Map<UUID, BigDecimal> overrides = amountRepository.findByMembershipId(membershipId).stream()
+                .collect(Collectors.toMap(StudentFeeTypeAmount::getFeeTypeId, StudentFeeTypeAmount::getAmount, (a, b) -> b));
         for (FeeType type : types) {
             List<FeeTransaction> rowTx = transactions.stream()
                     .filter(t -> type.getId().equals(t.getFeeTypeId())).toList();
-            rows.add(buildRow(type.getId(), null, type.getName(), type.getAmount(),
+            BigDecimal typeAmount = overrides.getOrDefault(type.getId(), type.getAmount());
+            rows.add(buildRow(type.getId(), null, type.getName(), typeAmount,
                     type.getDueDate(), rowTx, reversedIds, today, false));
-            totalAmount = totalAmount.add(type.getAmount());
+            totalAmount = totalAmount.add(typeAmount);
             totalPaid = totalPaid.add(sum(rowTx));
         }
 
@@ -611,6 +715,33 @@ public class OtherFeesService {
                         String.CASE_INSENSITIVE_ORDER))
                 .toList();
         return new FeeTypeResponse(type.getId(), type.getName(), type.getAmount(), type.getDueDate(),
-                type.getDefaultMode(), type.isActive(), batches);
+                type.getDefaultMode(), type.isActive(), batches, parseMethods(type.getPaymentMethods(), type.getDefaultMode()));
+    }
+
+    /** The first method chosen, which is also what pre-selects the recorder. */
+    private static FeeMode primaryMode(List<FeeMode> methods, FeeMode fallback) {
+        return methods != null && !methods.isEmpty() ? methods.get(0) : fallback;
+    }
+
+    /** "CASH,UPI" for storage; null when nothing was chosen. */
+    private static String methodsCsv(List<FeeMode> methods, FeeMode fallback) {
+        List<FeeMode> chosen = methods != null && !methods.isEmpty() ? methods.stream().distinct().toList()
+                : fallback != null ? List.of(fallback) : List.of();
+        return chosen.isEmpty() ? null : chosen.stream().map(Enum::name).collect(Collectors.joining(","));
+    }
+
+    private static List<FeeMode> parseMethods(String csv, FeeMode fallback) {
+        if (csv == null || csv.isBlank()) {
+            return fallback == null ? List.of() : List.of(fallback);
+        }
+        List<FeeMode> out = new ArrayList<>();
+        for (String part : csv.split(",")) {
+            try {
+                out.add(FeeMode.valueOf(part.trim()));
+            } catch (IllegalArgumentException ignored) {
+                // An unknown token is dropped rather than failing the whole fee list.
+            }
+        }
+        return out;
     }
 }

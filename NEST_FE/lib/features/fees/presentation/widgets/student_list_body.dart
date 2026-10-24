@@ -70,7 +70,8 @@ class StudentListBody extends StatefulWidget {
   final ValueChanged<FeeRosterEntry> onMarkPaid;
   final ValueChanged<FeeRosterEntry> onUndo;
   final ValueChanged<FeeRosterEntry> onOpenProfile;
-  final VoidCallback? onDownloadReport;
+  /// Called with the rows currently shown - the report is exactly what is on screen, filters and all.
+  final ValueChanged<List<FeeRosterEntry>>? onDownloadReport;
   final bool busy;
   final String? emptyText;
 
@@ -217,7 +218,7 @@ class _StudentListBodyState extends State<StudentListBody> {
                   // Revenue yellow, so it reads as an action rather than one more filter sitting
                   // in the same row.
                   accent: palette.revenue,
-                  onTap: widget.onDownloadReport,
+                  onTap: () => widget.onDownloadReport!(visible),
                 ),
             ],
           ),

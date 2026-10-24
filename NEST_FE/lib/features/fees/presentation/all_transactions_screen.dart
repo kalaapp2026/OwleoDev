@@ -7,6 +7,7 @@ import 'package:nest_fe/core/design/pressable.dart';
 import 'package:nest_fe/features/fees/data/student_statement.dart';
 import 'package:nest_fe/features/fees/data/transaction_ledger.dart';
 import 'package:nest_fe/features/fees/presentation/fee_format.dart';
+import 'package:nest_fe/features/fees/presentation/fee_reports.dart';
 import 'package:nest_fe/features/fees/presentation/fees_screen.dart' show feesApiProvider;
 import 'package:nest_fe/features/fees/presentation/student_profile_screen.dart';
 
@@ -53,6 +54,11 @@ class _AllTransactionsScreenState extends ConsumerState<AllTransactionsScreen> {
       ? DateTime(_month.year, _month.month + 1, 0)
       : DateTime(_month.year, _month.month, _day!);
 
+  /// "Oct 2026", or the one day it is narrowed to.
+  String get _periodLabel => _day == null
+      ? shortMonthLabel(_month)
+      : formatFeeDate(DateTime(_month.year, _month.month, _day!));
+
   _LedgerKey get _key =>
       (from: _from, to: _to, category: _category, query: _query);
 
@@ -97,9 +103,17 @@ class _AllTransactionsScreenState extends ConsumerState<AllTransactionsScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Text(
-                  'Regular + Other fees combined',
-                  style: TextStyle(fontSize: AppType.smd, color: palette.textMuted),
+                Text.rich(
+                  TextSpan(
+                    text: 'Showing: ',
+                    style: TextStyle(fontSize: AppType.smd, color: palette.textFaint),
+                    children: [
+                      TextSpan(
+                        text: _periodLabel,
+                        style: TextStyle(fontWeight: AppType.bold, color: palette.text),
+                      ),
+                    ],
+                  ),
                 ),
                 const SizedBox(height: AppSpacing.md),
                 async.when(
@@ -175,6 +189,17 @@ class _AllTransactionsScreenState extends ConsumerState<AllTransactionsScreen> {
                       ),
                       const SizedBox(width: AppSpacing.xs),
                     ],
+                  ],
+                ),
+                const SizedBox(height: AppSpacing.sm),
+                Row(
+                  children: [
+                    _ReportButton(
+                      onTap: async.valueOrNull == null
+                          ? null
+                          : () => shareLedgerReport(context,
+                              periodLabel: _periodLabel, ledger: async.value!),
+                    ),
                     const Spacer(),
                     _DateControl(
                       label: _day == null
@@ -242,6 +267,7 @@ class _AllTransactionsScreenState extends ConsumerState<AllTransactionsScreen> {
                           builder: (_) => StudentProfileScreen(
                             membershipId: ledger.entries[i].membershipId,
                             period: periodOf(_month),
+                            initialShowOther: ledger.entries[i].category == FeeCategory.other,
                           ),
                         )),
                       ),
@@ -421,6 +447,42 @@ class _TotalsPlaceholder extends StatelessWidget {
       decoration: BoxDecoration(
         color: palette.surfaceRaised,
         borderRadius: AppRadii.all(AppRadii.xl),
+      ),
+    );
+  }
+}
+
+/// The revenue-yellow "Report" action - the same control the student lists carry.
+class _ReportButton extends StatelessWidget {
+  const _ReportButton({required this.onTap});
+
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.palette;
+    return Pressable(
+      onTap: onTap,
+      child: Opacity(
+        opacity: onTap == null ? 0.5 : 1,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            color: palette.revenueSoft,
+            borderRadius: AppRadii.all(AppRadii.pill),
+            border: Border.all(color: palette.revenue),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.file_download_outlined, size: 11, color: palette.revenue),
+              const SizedBox(width: 4),
+              Text('Report',
+                  style: TextStyle(
+                      fontSize: AppType.xs, fontWeight: AppType.bold, color: palette.revenue)),
+            ],
+          ),
+        ),
       ),
     );
   }
