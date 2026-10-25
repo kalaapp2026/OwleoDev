@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:nest_fe/core/network/api_config.dart';
 import 'package:nest_fe/features/profile/data/self_profile_api.dart' show selfProfileProvider;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:nest_fe/app/data_sync/data_sync.dart';
 import 'package:nest_fe/app/theme/app_tokens.dart';
 import 'package:nest_fe/app/theme/app_typography.dart';
@@ -83,6 +84,23 @@ class AppShellState extends ConsumerState<AppShell> {
   /// academy - have nothing to show them. Their ERP side is the platform console instead.
   List<String> _superAdminErpTitles(AppLocalizations t) =>
       [t.navPlatform, t.navAcademies, '', t.navBilling, t.navProfile];
+
+  /// The avatar menu's "View profile". A student or trainer lands on their own Profile tab; an
+  /// Academy Admin's profile IS the academy, so they go to the Academy Profile page instead.
+  void _openProfile() {
+    final admin = ref.read(sessionControllerProvider).user?.isActiveAcademyAdmin ?? false;
+    if (admin && _mode == AppMode.erp) {
+      context.push('/erp/academy');
+      return;
+    }
+    setState(() {
+      if (_mode == AppMode.erp) {
+        _erpIndex = 4;
+      } else {
+        _socialIndex = 4;
+      }
+    });
+  }
 
   void goToErpTab(int index) => setState(() {
         _mode = AppMode.erp;
@@ -341,7 +359,7 @@ class AppShellState extends ConsumerState<AppShell> {
               padding: const EdgeInsets.only(right: AppSpacing.lg, left: AppSpacing.xs),
               child: InkWell(
                 borderRadius: AppRadii.all(AppRadii.pill),
-                onTap: () => showAccountMenu(context, onOpenProfile: () => setState(() => _erpIndex = 4)),
+                onTap: () => showAccountMenu(context, onOpenProfile: _openProfile),
                 child: Container(
                   padding: const EdgeInsets.all(2),
                   decoration: BoxDecoration(
@@ -364,16 +382,7 @@ class AppShellState extends ConsumerState<AppShell> {
             IconButton(
               icon: const Icon(Icons.person_outline),
               tooltip: t.navProfile,
-              onPressed: () => showAccountMenu(
-                context,
-                onOpenProfile: () => setState(() {
-                  if (_mode == AppMode.erp) {
-                    _erpIndex = 4;
-                  } else {
-                    _socialIndex = 4;
-                  }
-                }),
-              ),
+              onPressed: () => showAccountMenu(context, onOpenProfile: _openProfile),
             ),
           if (_mode == AppMode.erp && !isDashboardHero) ...[
             if (user != null && user.hasMultipleAcademies)

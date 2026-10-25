@@ -41,6 +41,11 @@ class SessionController extends Notifier<SessionState> {
     }
     try {
       final profile = await _authApi.fetchProfile();
+      if (profile.isSuperAdmin) {
+        // A session saved before this rule (or on a device that used to allow it): sign it out.
+        await _dropActiveAccount();
+        return;
+      }
       _applyActiveMembership(profile);
       state = SessionState.authenticated(profile);
     } on ApiException {
@@ -101,7 +106,24 @@ class SessionController extends Notifier<SessionState> {
     await _onLoginSuccess(result);
   }
 
+  /// The platform Super Admin works in the HQ Console, not in this app: refuse the sign-in and end the
+  /// session the server just opened, so nothing is left behind on this device.
+  Future<void> _refuseSuperAdmin(LoginResult result) async {
+    try {
+      await _authApi.logout(result.refreshToken);
+    } on ApiException {
+      // Best-effort: nothing was saved locally yet, so there is nothing else to undo.
+    }
+    throw ApiException(
+      status: 403,
+      error: 'Forbidden',
+      code: 'SUPER_ADMIN_USE_HQ_CONSOLE',
+      message: 'Super Admin accounts sign in to the HQ Console, not this app.',
+    );
+  }
+
   Future<void> _onLoginSuccess(LoginResult result) async {
+    if (result.user.isSuperAdmin) await _refuseSuperAdmin(result);
     final wasLoggedIn = state.isAuthenticated;
     await SecureTokenStorage.instance.saveTokens(accessToken: result.accessToken, refreshToken: result.refreshToken);
     await AccountStore.instance.upsertActive(SavedAccount(

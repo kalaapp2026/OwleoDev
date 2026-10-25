@@ -11,6 +11,7 @@ import 'package:nest_fe/core/design/confirm_dialog.dart';
 import 'package:nest_fe/core/design/pressable.dart';
 import 'package:nest_fe/core/error/api_exception.dart';
 import 'package:nest_fe/core/format/money.dart';
+import 'package:nest_fe/core/security/app_lock.dart';
 import 'package:nest_fe/core/widgets/app_notice.dart';
 import 'package:nest_fe/core/widgets/async_value_view.dart';
 import 'package:nest_fe/features/academy/data/academy_profile.dart';
@@ -46,6 +47,20 @@ class AcademySettingsScreen extends ConsumerWidget {
     } on ApiException catch (e) {
       if (context.mounted) AppNotice.error(context, e.message);
     }
+  }
+
+  Future<void> _logout(BuildContext context, WidgetRef ref) async {
+    final ok = await showAppConfirmDialog(
+      context: context,
+      title: 'Log out of Owleo?',
+      message: "You'll need to sign in again to manage this academy.",
+      confirmLabel: 'Log Out',
+    );
+    if (!ok) return;
+    // The PIN guards this device for this person - it must not outlive their session.
+    await ref.read(appLockProvider.notifier).clear();
+    await ref.read(sessionControllerProvider.notifier).logout();
+    if (context.mounted) Navigator.of(context).popUntil((r) => r.isFirst);
   }
 
   Future<void> _requestClosure(BuildContext context, WidgetRef ref) async {
@@ -369,6 +384,20 @@ class AcademySettingsScreen extends ConsumerWidget {
                         onTap: () => _open(context, const AboutOwleoScreen()),
                       ),
                     ]),
+
+                    // ---- Session ----
+                    const SettingsSectionLabel('Session'),
+                    SettingsCard(
+                      padding: const EdgeInsets.fromLTRB(10, 2, 10, 2),
+                      child: SettingsNavRow(
+                        icon: Icons.logout,
+                        color: palette.notPaid,
+                        soft: palette.notPaidSoft,
+                        title: 'Log Out',
+                        subtitle: 'Sign out of this account on this device',
+                        onTap: () => _logout(context, ref),
+                      ),
+                    ),
 
                     // ---- Danger zone ----
                     const SettingsSectionLabel('Danger Zone'),

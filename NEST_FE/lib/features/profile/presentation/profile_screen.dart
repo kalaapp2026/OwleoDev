@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:nest_fe/features/profile/presentation/account_switcher_sheet.dart';
 import 'package:nest_fe/features/profile/presentation/my_profile_screen.dart';
-import 'package:nest_fe/features/profile/presentation/role_switch_card.dart';
 import 'package:nest_fe/features/profile/presentation/user_settings_screen.dart';
 import 'package:nest_fe/l10n/app_localizations.dart';
 import 'package:nest_fe/core/auth/session_controller.dart';
@@ -18,11 +17,10 @@ class ProfileScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // The student/trainer switch is in the avatar menu ("Switch to ... view"), not on this page.
     return const Column(
       children: [
         AccountSwitcherBar(),
-        // Only appears for someone who is both a student and a trainer at this academy.
-        RoleSwitchCard(),
         Expanded(child: _ProfileBody()),
       ],
     );
@@ -40,9 +38,10 @@ class _ProfileBody extends ConsumerWidget {
 
     if (user == null) return const SizedBox.shrink();
 
-    // A student's Profile tab IS their rich profile (details, enrollment, performance log,
-    // achievements) - the generic list below is for the other roles.
-    if (user.activeMembership?.roleType == 'STUDENT') return const MyProfileScreen(embedded: true);
+    // A student's or trainer's Profile tab IS their rich profile (details, enrollment, performance
+    // log, achievements) - the generic list below is for the other roles.
+    final role = user.activeMembership?.roleType;
+    if (role == 'STUDENT' || role == 'TRAINER') return const MyProfileScreen(embedded: true);
 
     return ListView(
       padding: const EdgeInsets.all(20),
