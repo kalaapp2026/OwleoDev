@@ -46,7 +46,14 @@ public class HqAcademyController {
     public Map<String, Object> importStudents(@PathVariable UUID id, @RequestBody Map<String, Object> body) {
         access.requireModule("academies");
         access.requireWrite();
-        return importer.run(id, (java.util.List<Map<String, Object>>) body.get("rows"), Boolean.TRUE.equals(body.get("commit")));
+        return importer.run(id, (java.util.List<Map<String, Object>>) body.get("rows"), Boolean.TRUE.equals(body.get("commit")), String.valueOf(body.getOrDefault("template", "basic")));
+    }
+
+    /** The academy's courses and their batches, for filling the import file. */
+    @GetMapping("/{id}/import/reference")
+    public List<Map<String, Object>> importReference(@PathVariable UUID id) {
+        access.requireModule("academies");
+        return importer.reference(id);
     }
 
     @GetMapping
