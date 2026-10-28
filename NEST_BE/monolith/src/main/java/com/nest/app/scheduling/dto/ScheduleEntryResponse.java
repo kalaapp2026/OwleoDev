@@ -54,7 +54,9 @@ public record ScheduleEntryResponse(
         /** Roster size, so the attendance list can show "4 students" before opening the class. */
         int studentCount,
         /** The batch's online-class link, so a Join button can sit on the row. Null for in-person batches. */
-        String meetingLink
+        String meetingLink,
+        /** When someone last pressed Remind on this session, or null if nobody has. */
+        java.time.Instant lastRemindedAt
 ) {
     public record PersonRef(UUID membershipId, String name) {
     }

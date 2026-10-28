@@ -71,6 +71,40 @@ public class NotificationDispatcher {
         }
     }
 
+    /**
+     * For an action a person deliberately triggered (the Remind button): unlike {@link #fire}, a
+     * missing template does not mean silence - the person pressed a button and expects something
+     * to arrive, so the event's own default wording goes out on in-app and push. A template the
+     * Super Admin has saved is still honoured: its wording and channels win, and one they switched
+     * off stays off. Returns how many people it was addressed to.
+     */
+    public int fireOrDefault(NotificationEvent event, Collection<UUID> userIds, Map<String, String> params) {
+        if (userIds == null || userIds.isEmpty()) return 0;
+        try {
+            Optional<NotificationTemplate> saved = templateRepository.findByEventKey(event.name());
+            NotificationTemplate template;
+            if (saved.isPresent()) {
+                if (!saved.get().isEnabled()) return 0;
+                template = saved.get();
+            } else {
+                template = NotificationTemplate.builder()
+                        .eventKey(event.name())
+                        .titleTemplate(event.getDefaultTitle())
+                        .bodyTemplate(event.getDefaultBody())
+                        .inAppEnabled(true)
+                        .pushEnabled(true)
+                        .whatsappEnabled(false)
+                        .enabled(true)
+                        .build();
+            }
+            deliver(event, template, userIds, params);
+            return new LinkedHashSet<>(userIds).size();
+        } catch (RuntimeException e) {
+            log.error("Notification {} could not be dispatched", event, e);
+            return 0;
+        }
+    }
+
     /** Test send from the Super Admin console: ignores the template's enabled flag and the
      * recipient's preference switch, so "does this look right on my phone" always works. */
     public void fireTest(NotificationEvent event, NotificationTemplate template, UUID userId,

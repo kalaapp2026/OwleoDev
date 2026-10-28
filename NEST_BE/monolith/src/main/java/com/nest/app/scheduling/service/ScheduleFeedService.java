@@ -267,7 +267,8 @@ public class ScheduleFeedService {
                 batch.getId(), batch.getName(), batch.getBatchType(),
                 course.getId(), course.getName(), course.getCategory(), course.getIconKey(),
                 teaching, swapped ? regulars : List.of(),
-                reason, movedTo, movedFrom, attendanceMarked, studentCount, batch.getMeetingLink());
+                reason, movedTo, movedFrom, attendanceMarked, studentCount, batch.getMeetingLink(),
+                instance.getLastReminderAt());
     }
 
     /**

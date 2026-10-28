@@ -14,6 +14,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.UUID;
@@ -79,4 +80,8 @@ public class ClassInstance {
      * the moved session cancelled, and one shared column would lose the first explanation. */
     @Column(name = "cancellation_reason")
     private String cancellationReason;
+
+    /** When someone last sent the batch a reminder for this session from the Dashboard. */
+    @Column(name = "last_reminder_at")
+    private Instant lastReminderAt;
 }

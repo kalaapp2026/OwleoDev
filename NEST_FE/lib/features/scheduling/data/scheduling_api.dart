@@ -47,6 +47,28 @@ final batchScheduleProvider =
   return ref.watch(schedulingApiProvider).currentSchedule(batchId);
 });
 
+/// Who a class reminder reached.
+class ClassReminderResult {
+  const ClassReminderResult({required this.students, required this.trainers});
+
+  final int students;
+  final int trainers;
+
+  /// "12 students and 2 trainers" - the confirmation toast.
+  String get summary {
+    String part(int n, String noun) => '$n $noun${n == 1 ? '' : 's'}';
+    if (students > 0 && trainers > 0) {
+      return '${part(students, 'student')} and ${part(trainers, 'trainer')}';
+    }
+    return students > 0 ? part(students, 'student') : part(trainers, 'trainer');
+  }
+
+  factory ClassReminderResult.fromJson(Map<String, dynamic> json) => ClassReminderResult(
+        students: (json['students'] as num?)?.toInt() ?? 0,
+        trainers: (json['trainers'] as num?)?.toInt() ?? 0,
+      );
+}
+
 class ScheduleSlotResponse {
   final String id;
   final String batchId;
@@ -149,6 +171,15 @@ class SchedulingApi {
   Future<void> cancelClass({required String classInstanceId, required String reason}) {
     return _client.callVoid(
       (dio) => dio.post('/class-instances/$classInstanceId/cancel', data: {'reason': reason}),
+    );
+  }
+
+  /// Tells the batch's students and the teaching trainers that this class is coming up - an
+  /// in-app notification and a push. The server refuses a second reminder within a few minutes.
+  Future<ClassReminderResult> remindClass(String classInstanceId) {
+    return _client.call(
+      (dio) => dio.post('/class-instances/$classInstanceId/remind'),
+      (data) => ClassReminderResult.fromJson(data as Map<String, dynamic>),
     );
   }
 

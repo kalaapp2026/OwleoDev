@@ -2,11 +2,13 @@ package com.nest.app.scheduling.controller;
 
 import com.nest.app.scheduling.dto.CancelClassRequest;
 import com.nest.app.scheduling.dto.ClassInstanceResponse;
+import com.nest.app.scheduling.dto.ClassReminderResponse;
 import com.nest.app.scheduling.dto.RescheduleRequest;
 import com.nest.app.scheduling.dto.ScheduleEntryResponse;
 import com.nest.app.scheduling.dto.ScheduleResponse;
 import com.nest.app.scheduling.dto.SetScheduleRequest;
 import com.nest.app.scheduling.dto.SwapInstructorRequest;
+import com.nest.app.scheduling.service.ClassReminderService;
 import com.nest.app.scheduling.service.RescheduleService;
 import com.nest.app.scheduling.service.ScheduleFeedService;
 import com.nest.app.scheduling.service.SchedulingService;
@@ -33,12 +35,15 @@ public class SchedulingController {
     private final SchedulingService schedulingService;
     private final RescheduleService rescheduleService;
     private final ScheduleFeedService scheduleFeedService;
+    private final ClassReminderService classReminderService;
 
     public SchedulingController(SchedulingService schedulingService, RescheduleService rescheduleService,
-                                 ScheduleFeedService scheduleFeedService) {
+                                 ScheduleFeedService scheduleFeedService,
+                                 ClassReminderService classReminderService) {
         this.schedulingService = schedulingService;
         this.rescheduleService = rescheduleService;
         this.scheduleFeedService = scheduleFeedService;
+        this.classReminderService = classReminderService;
     }
 
     @PostMapping("/schedules")
@@ -72,6 +77,13 @@ public class SchedulingController {
         LocalDate start = from != null ? from : LocalDate.now();
         LocalDate end = to != null ? to : start.plusDays(30);
         return scheduleFeedService.feed(start, end, courseId, feature);
+    }
+
+    /** The Dashboard bell: tells the batch's students and the teaching trainers this class is coming up. */
+    @PostMapping("/class-instances/{id}/remind")
+    @RequiresFeature({FeatureKey.ATTENDANCE, FeatureKey.RESCHEDULE, FeatureKey.BATCH_SCHEDULING})
+    public ClassReminderResponse remind(@PathVariable UUID id) {
+        return classReminderService.remind(id);
     }
 
     @PostMapping("/class-instances/{id}/cancel")

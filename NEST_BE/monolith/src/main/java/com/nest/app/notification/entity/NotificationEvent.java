@@ -31,6 +31,12 @@ public enum NotificationEvent {
             "{{recipientName}} was marked absent from {{batchName}} on {{date}}.",
             "batchName", "date"),
 
+    CLASS_REMINDER(NotificationModule.ERP, "Class reminder",
+            "An admin or trainer pressed Remind on a class. Sent to the batch's students and the trainers teaching it.", null,
+            "Class reminder",
+            "Hi {{recipientName}}, reminder: this is your next class - {{batchName}} ({{courseName}}) on {{date}} at {{time}}.",
+            "batchName", "courseName", "date", "time"),
+
     FEE_PAYMENT_RECEIVED(NotificationModule.ERP, "Fee payment received",
             "A fee payment was recorded. Sent to the student it was recorded against.", null,
             "Payment received",

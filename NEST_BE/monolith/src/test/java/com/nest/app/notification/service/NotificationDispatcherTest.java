@@ -140,4 +140,49 @@ class NotificationDispatcherTest {
 
         assertFalse(false); // reaching here without an exception is the assertion
     }
+
+    @Test
+    void fireOrDefaultSendsWithBuiltInWordingWhenNoTemplateExists() {
+        when(templateRepository.findByEventKey("CLASS_REMINDER")).thenReturn(Optional.empty());
+        when(userRepository.findAllById(any())).thenReturn(List.of(user(true)));
+
+        int reached = dispatcher.fireOrDefault(NotificationEvent.CLASS_REMINDER, List.of(userId),
+                Map.of("batchName", "Kathak A", "courseName", "Kathak", "date", "12 Oct", "time", "5:30 PM"));
+
+        assertEquals(1, reached);
+        // The person pressed a button, so silence would look like a bug.
+        verify(notificationService).notify(eq(userId), eq(NotificationModule.ERP), eq(NotificationType.TEMPLATE_EVENT),
+                eq("Class reminder"),
+                eq("Hi Asha, reminder: this is your next class - Kathak A (Kathak) on 12 Oct at 5:30 PM."), eq(null));
+        // Push goes out too, as one deferred event.
+        verify(publisher).publishEvent(any(Object.class));
+    }
+
+    @Test
+    void fireOrDefaultHonoursATemplateTheSuperAdminSwitchedOff() {
+        NotificationTemplate off = template(true, true, false, false);
+        off.setEventKey(NotificationEvent.CLASS_REMINDER.name());
+        when(templateRepository.findByEventKey("CLASS_REMINDER")).thenReturn(Optional.of(off));
+
+        int reached = dispatcher.fireOrDefault(NotificationEvent.CLASS_REMINDER, List.of(userId), Map.of());
+
+        assertEquals(0, reached);
+        verify(notificationService, never()).notify(any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void fireOrDefaultUsesASavedTemplatesWording() {
+        NotificationTemplate custom = template(true, false, false, true);
+        custom.setEventKey(NotificationEvent.CLASS_REMINDER.name());
+        custom.setTitleTemplate("Heads up: {{batchName}}");
+        custom.setBodyTemplate("{{recipientName}}, class at {{time}}");
+        when(templateRepository.findByEventKey("CLASS_REMINDER")).thenReturn(Optional.of(custom));
+        when(userRepository.findAllById(any())).thenReturn(List.of(user(true)));
+
+        dispatcher.fireOrDefault(NotificationEvent.CLASS_REMINDER, List.of(userId),
+                Map.of("batchName", "Kathak A", "time", "5:30 PM"));
+
+        verify(notificationService).notify(eq(userId), eq(NotificationModule.ERP), eq(NotificationType.TEMPLATE_EVENT),
+                eq("Heads up: Kathak A"), eq("Asha, class at 5:30 PM"), eq(null));
+    }
 }

@@ -9,6 +9,7 @@ import 'package:nest_fe/core/auth/session_controller.dart';
 import 'package:nest_fe/features/attendance/data/attendance_api.dart';
 import 'package:nest_fe/features/curriculum/data/curriculum_api.dart';
 import 'package:nest_fe/features/dashboard/presentation/widgets/admin_welcome_header.dart';
+import 'package:nest_fe/features/dashboard/presentation/widgets/next_classes_card.dart';
 import 'package:nest_fe/features/dashboard/presentation/widgets/revenue_dues_card.dart';
 import 'package:nest_fe/features/dashboard/presentation/widgets/stats_row.dart';
 import 'package:nest_fe/features/dashboard/presentation/widgets/student_home_sections.dart';
@@ -121,7 +122,11 @@ class _AdminTrainerDashboardBody extends ConsumerWidget {
     ]);
 
     return RefreshIndicator(
-      onRefresh: () => ref.refresh(activeCoursesProvider.future),
+      onRefresh: () async {
+        ref.invalidate(dashboardFeedProvider);
+        ref.invalidate(activeCoursesProvider);
+        await ref.read(activeCoursesProvider.future);
+      },
       child: ListView(
         padding: EdgeInsets.zero,
         children: [
@@ -137,7 +142,12 @@ class _AdminTrainerDashboardBody extends ConsumerWidget {
                   const _GlobalSearchBar(),
                   const SizedBox(height: AppSpacing.xxl),
                 ],
-                if (canSeeSchedule) const TodaysScheduleCard(),
+                if (canSeeSchedule) ...[
+                  // Each batch's next class, with a bell to remind its students and trainers.
+                  const NextClassesCard(),
+                  const SizedBox(height: AppSpacing.xxl),
+                  const TodaysScheduleCard(),
+                ],
                 if (canSeeFees) ...[
                   const SizedBox(height: AppSpacing.xxl),
                   const RevenueDuesCard(),

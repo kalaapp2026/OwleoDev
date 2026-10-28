@@ -132,6 +132,9 @@ class ScheduleEntry {
   /// The batch's online-class link; null for an in-person batch.
   final String? meetingLink;
 
+  /// When someone last pressed Remind on this class, or null if nobody has.
+  final DateTime? lastRemindedAt;
+
   const ScheduleEntry({
     required this.classInstanceId,
     required this.date,
@@ -153,6 +156,7 @@ class ScheduleEntry {
     this.attendanceMarked = false,
     this.studentCount = 0,
     this.meetingLink,
+    this.lastRemindedAt,
   });
 
   bool get isTemporary => batchType == BatchType.temporary;
@@ -247,6 +251,8 @@ class ScheduleEntry {
         attendanceMarked: json['attendanceMarked'] as bool? ?? false,
         studentCount: json['studentCount'] as int? ?? 0,
         meetingLink: json['meetingLink'] as String?,
+        // An instant in UTC; shown to the reader in their own clock.
+        lastRemindedAt: _date(json['lastRemindedAt'] as String?)?.toLocal(),
       );
 
   static DateTime? _date(String? iso) =>

@@ -6,6 +6,7 @@ import com.nest.app.enrolment.entity.Batch;
 import com.nest.app.enrolment.entity.BatchMember;
 import com.nest.app.enrolment.repository.BatchMemberRepository;
 import com.nest.app.enrolment.repository.BatchRepository;
+import com.nest.app.enrolment.repository.BatchTrainerRepository;
 import com.nest.app.identity.entity.AcademyMembership;
 import com.nest.app.identity.repository.AcademyMembershipRepository;
 import com.nest.app.notification.entity.NotificationEvent;
@@ -47,17 +48,20 @@ public class NotificationTriggers {
     private final AcademyMembershipRepository membershipRepository;
     private final CourseRepository courseRepository;
     private final ClassInstanceRepository classInstanceRepository;
+    private final BatchTrainerRepository batchTrainerRepository;
 
     public NotificationTriggers(NotificationDispatcher dispatcher, BatchRepository batchRepository,
                                 BatchMemberRepository batchMemberRepository,
                                 AcademyMembershipRepository membershipRepository,
-                                CourseRepository courseRepository, ClassInstanceRepository classInstanceRepository) {
+                                CourseRepository courseRepository, ClassInstanceRepository classInstanceRepository,
+                                BatchTrainerRepository batchTrainerRepository) {
         this.dispatcher = dispatcher;
         this.batchRepository = batchRepository;
         this.batchMemberRepository = batchMemberRepository;
         this.membershipRepository = membershipRepository;
         this.courseRepository = courseRepository;
         this.classInstanceRepository = classInstanceRepository;
+        this.batchTrainerRepository = batchTrainerRepository;
     }
 
     public void classRescheduled(UUID batchId, LocalDate oldDate, LocalDate newDate, LocalTime newStart, String reason) {
@@ -81,6 +85,43 @@ public class NotificationTriggers {
         params.put("time", format(start));
         params.put("reason", reason == null ? "" : reason);
         dispatcher.fire(NotificationEvent.CLASS_CANCELLED, batchStudentUserIds(batchId), params);
+    }
+
+    /** How many people a class reminder reached, split so the confirmation can say who. */
+    public record ReminderReach(int students, int trainers) {
+        public int total() { return students + trainers; }
+    }
+
+    /**
+     * "This is your next class", to the batch's students and whoever is teaching this session -
+     * the substitute when there is one, the batch's own trainers otherwise. Sent even without a
+     * Super Admin template: the person pressed a button and expects it to arrive.
+     */
+    public ReminderReach classReminder(ClassInstance instance) {
+        Batch batch = batchRepository.findById(instance.getBatchId()).orElse(null);
+        if (batch == null) return new ReminderReach(0, 0);
+        String courseName = courseRepository.findById(batch.getCourseId()).map(Course::getName).orElse("your course");
+
+        Set<UUID> studentUserIds = new java.util.HashSet<>(batchStudentUserIds(batch.getId()));
+        Collection<UUID> trainerMembershipIds = instance.getSubstituteTrainerMembershipId() != null
+                ? List.of(instance.getSubstituteTrainerMembershipId())
+                : batchTrainerRepository.findByBatchId(batch.getId()).stream()
+                        .map(t -> t.getTrainerMembershipId()).toList();
+        Set<UUID> trainerUserIds = membershipRepository.findAllById(trainerMembershipIds).stream()
+                .map(AcademyMembership::getUserId).collect(Collectors.toSet());
+        // Somebody who is both (a trainer who also attends another batch) is told once.
+        studentUserIds.removeAll(trainerUserIds);
+
+        Map<String, String> params = new HashMap<>();
+        params.put("batchName", batch.getName());
+        params.put("courseName", courseName);
+        params.put("date", format(instance.getDate()));
+        params.put("time", format(instance.getStartTime()));
+
+        Set<UUID> everyone = new java.util.LinkedHashSet<>(trainerUserIds);
+        everyone.addAll(studentUserIds);
+        dispatcher.fireOrDefault(NotificationEvent.CLASS_REMINDER, everyone, params);
+        return new ReminderReach(studentUserIds.size(), trainerUserIds.size());
     }
 
     /** One absence, told to that student only. */
