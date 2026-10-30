@@ -11,7 +11,7 @@ import 'nav.dart';
 
 /// Revenue, collections and invoicing live in their own workspace. Business operations and Finance are
 /// never open together: opening one hides the other.
-const Set<String> financeModules = {'finance', 'collections', 'invoicing'};
+const Set<String> financeModules = {'finance', 'collections', 'invoicing', 'payments'};
 
 /// Whether [module] may be shown in the current workspace. `welcome` is always allowed.
 bool workspaceAllows(String module, {required bool finance}) {

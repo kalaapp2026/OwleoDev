@@ -105,6 +105,7 @@ Operations, Finance.
 | Growth, Finance (revenue only) | `growth/`, `finance/` | `HqInsightsController` | V50 |
 | Invoicing (monthly bill run) | `invoicing/` | `HqInvoicingController`, `HqInvoicing`, `HqBilling` | V62 |
 | Notification templates | `notifications/` | `HqNotificationsController`, `HqNotifications`, `HqNotificationCatalogue`, `HqChannels` | V62 |
+| Payments (transactions + account mapping) | `payments/` | `HqPaymentsController`, `HqPayments` | V68 `invoice_payment_orders`, `invoice_payments.source` |
 | Finance workspace gate | `shell/workspace.dart` | `HqTeamController` `/workspace`, `HqWorkspace`, `HqAccess.requireFinanceWorkspace` | V61 |
 | Approvals | `approvals/` | `HqApprovalsController`, `HqApprovals` | V53 |
 | Academy transfer | `transfers/` | `HqTransfers` (real OTPs via `OtpService`) | V58 |
@@ -138,6 +139,17 @@ Behaviour worth knowing:
   (no owner, plan or banks; `AcademyFormData.issues(preLead: true)`). "Make lead" opens the lead form with those
   filled in; "Drop" retires either stage. A dropped row keeps whatever it had, so V65 lets DROPPED rows be
   incomplete while the table still forces LEAD, DEMO and LIVE rows to be.
+- **Academies pay their bill online.** Academy admin > Billing & Subscription (`NEST_FE`, `GET /academies/me/billing`) shows every
+  plan with the academy's own highlighted, every add-on on sale with the ones it has marked ACTIVE, and each bill with GST, lines and
+  receipts. **Pay** opens Razorpay (UPI, card, net banking) for the whole balance: `POST .../pay/order` prices it on the server,
+  the browser's signed result goes to `POST .../pay/verify`, and the same webhook as student fees (`/payments/razorpay/webhook`)
+  settles it if the browser closes. Settling is row-locked and idempotent (`SubscriptionPaymentService`); the money lands in
+  **Owleo's own** Razorpay account. It is a normal `invoice_payments` row with `source = ONLINE`, so Collections, Finance and the
+  academy's receipt all see it. With no gateway keys the Pay button says to pay Owleo directly and have HQ record it.
+- **Payments (HQ, Finance workspace)**: Transactions = every subscription payment (online or by hand), checkouts that were started
+  but not paid or failed, and student-fee payments through Owleo's gateway, filterable and exportable. Account mapping = Owleo's
+  receiving account status plus, per academy, its bank account and the gateway merchant id it is mapped to (the same mapping the
+  academy drawer edits). Student fees are collected into Owleo's account, so that mapping is what settlement to the academy needs.
 - **Demo length is in days** (`hq_leads.demo_days`, 15 to 90; the form offers 15 days, 1 month, 45 days,
   2 months, 3 months or custom).
 - **Invoicing** makes real `academy_invoices` rows (so they appear in Collections). One schedule row
@@ -186,6 +198,11 @@ Behaviour worth knowing:
 - **Notification templates do not drive sending yet** (except the Monthly bill message). Wiring a moment
   such as "Fee overdue" means calling the dispatcher where it happens; the page says so. Email sends have no
   row in the delivery log (it has no email channel). Push and WhatsApp tests are logged as skipped.
+- **Online bill payment** needs `RAZORPAY_KEY_ID` / `RAZORPAY_KEY_SECRET` (and `RAZORPAY_WEBHOOK_SECRET`) on the backend. Nothing
+  has been paid through real Razorpay yet; the order call, signature check and webhook are tested with test keys and
+  hand-made signed requests, not against Razorpay's servers. Only the full balance can be paid online. Asking for an add-on is a
+  support request to HQ; HQ still assigns it in Collections. **Per-academy settlement** of student fees (moving money from
+  Owleo's account to each academy's) is NOT built: the mapping is recorded, nothing is transferred (needs Razorpay Route).
 - **Invoicing**: event commission is not on these bills (no ticketing). WhatsApp bills are not sent (the
   option is saved and reported as not set up). The Finance code is emailed through the existing OTP sender.
 - **Transfers**: codes go through the existing `OtpService`, which uses the fixed code **123456** in
@@ -221,5 +238,5 @@ Behaviour worth knowing:
 A second static site, same pattern as `owleo-web` (see `render.yaml` / `DEPLOY.md`): build with
 `flutter build web --release --dart-define=API_BASE_URL=<backend>` from `NEST_ADMIN`, and add the
 site's origin to `NEST_CORS_ALLOWED_ORIGINS` on the backend or every call fails. Flyway migrations
-V48-V62 run on backend start. (V60 is the academy app's `payment_orders`; HQ jumped to V61/V62 because
+V48-V62 and V68 run on backend start (V60 to V67 are the academy app's). (V60 is the academy app's `payment_orders`; HQ jumped to V61/V62 because
 it landed first on the user's database.)

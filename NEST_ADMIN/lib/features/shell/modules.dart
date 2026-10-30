@@ -33,6 +33,7 @@ const Map<String, HqModule> hqModules = {
   'exits': HqModule('exits', 'Exits', 'Offboarding and access removal', 'exit', Tone.coral),
   'support': HqModule('support', 'Support', 'Tickets, enquiries and feedback', 'msg', Tone.blue),
   'finance': HqModule('finance', 'Finance', 'Where Owleo revenue comes from, month by month', 'rupee', Tone.gold, label: 'Revenue'),
+  'payments': HqModule('payments', 'Payments', 'Every payment received, and the account each academy is mapped to', 'bank', Tone.blue),
   'invoicing': HqModule('invoicing', 'Invoicing', 'Monthly bills to academies, sent to their admins', 'file', Tone.gold),
   'notifs': HqModule('notifs', 'Notification templates', 'Design what people are told, and link it to a module', 'bell', Tone.violet),
   'growth': HqModule('growth', 'Growth tracker', 'Users, academies and revenue against our targets', 'trend', Tone.primary, label: 'Growth'),
@@ -50,7 +51,7 @@ const Map<String, HqModule> hqModules = {
 /// course and batch monitor with no way in.
 const List<(String, List<String>)> moreGroups = [
   ('Operations', ['onboarding', 'courses', 'providers', 'events', 'artists', 'approvals', 'transfers', 'exits', 'support']),
-  ('Business', ['finance', 'collections', 'growth', 'plans', 'invoicing']),
+  ('Business', ['finance', 'collections', 'payments', 'growth', 'plans', 'invoicing']),
   ('Market analysis', ['users', 'marketing', 'reports']),
   ('Platform', ['master', 'settings', 'notifs', 'alerts']),
 ];

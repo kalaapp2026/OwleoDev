@@ -104,7 +104,7 @@ void main() {
     });
 
     test('business operations and finance never show together', () {
-      for (final m in ['finance', 'collections', 'invoicing']) {
+      for (final m in ['finance', 'collections', 'invoicing', 'payments']) {
         expect(workspaceAllows(m, finance: true), isTrue);
         expect(workspaceAllows(m, finance: false), isFalse);
       }

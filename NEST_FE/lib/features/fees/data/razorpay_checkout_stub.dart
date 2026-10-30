@@ -8,6 +8,7 @@ Future<CheckoutResult> openRazorpayCheckout({
   required int amountPaise,
   required String name,
   required String description,
+  bool allMethods = false,
 }) {
   throw const CheckoutFailed('Online payment is not supported on this platform.');
 }

@@ -51,6 +51,7 @@ Future<CheckoutResult> openRazorpayCheckout({
   required int amountPaise,
   required String name,
   required String description,
+  bool allMethods = false,
 }) async {
   final done = Completer<CheckoutResult>();
 
@@ -65,7 +66,7 @@ Future<CheckoutResult> openRazorpayCheckout({
     currency: 'INR',
     name: name,
     description: description,
-    method: _Method(upi: true, card: false, netbanking: false, wallet: false, emi: false, paylater: false),
+    method: _Method(upi: true, card: allMethods, netbanking: allMethods, wallet: false, emi: false, paylater: false),
     modal: _Modal(
       ondismiss: (() {
         if (!done.isCompleted) done.completeError(const CheckoutCancelled());

@@ -221,7 +221,7 @@ class _Profile extends ConsumerWidget {
                     const Spacer(),
                     if (canWrite || canPlan)
                       HqButton(b.strOrNull('gateway') == null ? 'Map gateway' : 'Change gateway', small: true, onPressed: () async {
-                        final done = await showHqModal<bool>(context, builder: (_) => _GatewayModal(academyId: a.str('id'), bank: b));
+                        final done = await showHqModal<bool>(context, builder: (_) => GatewayModal(academyId: a.str('id'), bank: b));
                         if (done == true) {
                           onChanged();
                           if (context.mounted) showToast(context, 'Gateway mapped');
@@ -653,16 +653,16 @@ class _ChangePlanModalState extends ConsumerState<_ChangePlanModal> {
   }
 }
 
-class _GatewayModal extends ConsumerStatefulWidget {
-  const _GatewayModal({required this.academyId, required this.bank});
+class GatewayModal extends ConsumerStatefulWidget {
+  const GatewayModal({super.key, required this.academyId, required this.bank});
   final String academyId;
   final Map<String, dynamic> bank;
 
   @override
-  ConsumerState<_GatewayModal> createState() => _GatewayModalState();
+  ConsumerState<GatewayModal> createState() => GatewayModalState();
 }
 
-class _GatewayModalState extends ConsumerState<_GatewayModal> {
+class GatewayModalState extends ConsumerState<GatewayModal> {
   late String _provider = widget.bank.strOrNull('gateway') ?? 'Razorpay';
   late final _merchant = TextEditingController(text: widget.bank.str('merchantId'));
   String? _error;

@@ -13,6 +13,7 @@ Future<CheckoutResult> openRazorpayCheckout({
   required int amountPaise,
   required String name,
   required String description,
+  bool allMethods = false,
 }) {
   final done = Completer<CheckoutResult>();
   final razorpay = Razorpay();
@@ -47,10 +48,11 @@ Future<CheckoutResult> openRazorpayCheckout({
     'currency': 'INR',
     'name': name,
     'description': description,
+    // A student's fee is UPI only. Owleo's own bill is paid by a business, which may use a card or net banking too.
     'method': {
       'upi': true,
-      'card': false,
-      'netbanking': false,
+      'card': allMethods,
+      'netbanking': allMethods,
       'wallet': false,
       'emi': false,
       'paylater': false,

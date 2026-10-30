@@ -63,6 +63,14 @@ public class OnlinePaymentService {
         this.mapper = mapper;
     }
 
+    /** Set by Spring. Optional so this class stays constructible on its own: a webhook for one of Owleo's own bills is handed on. */
+    private com.nest.app.billing.service.SubscriptionPaymentService subscriptionPayments;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    public void setSubscriptionPayments(com.nest.app.billing.service.SubscriptionPaymentService subscriptionPayments) {
+        this.subscriptionPayments = subscriptionPayments;
+    }
+
     public boolean enabled() {
         return gateway.configured();
     }
@@ -148,6 +156,9 @@ public class OnlinePaymentService {
         }
         PaymentOrder order = orderRepository.lockByProviderOrderId(RazorpayGateway.PROVIDER, orderId).orElse(null);
         if (order == null) {
+            if (subscriptionPayments != null && subscriptionPayments.handleWebhook(event, orderId, paymentId, payment.path("amount").asLong(-1))) {
+                return true;   // one of Owleo's own bills, not a student fee
+            }
             log.info("Razorpay webhook {} for an order we don't know: {}", event, orderId);
             return true;
         }

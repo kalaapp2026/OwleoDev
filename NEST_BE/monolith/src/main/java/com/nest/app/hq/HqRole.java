@@ -16,7 +16,7 @@ public enum HqRole {
     OPS("Operations admin", Set.of("artists", "events", "support", "overview", "users", "academies",
             "onboarding", "approvals", "courses", "exits", "reports", "alerts", "students", "notifs")),
     FINANCE("Finance admin", Set.of("support", "overview", "finance", "plans", "growth", "approvals",
-            "reports", "academies", "marketing", "collections", "invoicing")),
+            "reports", "academies", "marketing", "collections", "invoicing", "payments")),
     SUPPORT("Support admin", Set.of("artists", "events", "support", "overview", "users", "exits",
             "alerts", "students", "courses"));
 

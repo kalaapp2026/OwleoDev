@@ -238,8 +238,18 @@ public class HqBilling {
 
     // ---- things a person does to a bill ----
 
+    /** A payment typed in by HQ staff. */
     @Transactional
     public void recordPayment(UUID invoiceId, BigDecimal amount, String mode, String reference, LocalDate paidOn) {
+        recordPayment(invoiceId, amount, mode, reference, paidOn, "MANUAL", TenantContext.currentUserIdOrNull());
+    }
+
+    /**
+     * Records money received against a bill. [source] is MANUAL (typed in) or ONLINE (the academy paid through the
+     * gateway); [recordedBy] is who did it, or the payer for an online payment. Returns the new payment's id.
+     */
+    @Transactional
+    public UUID recordPayment(UUID invoiceId, BigDecimal amount, String mode, String reference, LocalDate paidOn, String source, UUID recordedBy) {
         var bill = bill(invoiceId);
         if ("WAIVED".equals(bill.get("status"))) throw new BadRequestException("This bill was waived.");
         if (amount == null || amount.signum() <= 0) throw new BadRequestException("Enter the amount received.");
@@ -251,13 +261,15 @@ public class HqBilling {
         if (day.isAfter(LocalDate.now())) throw new BadRequestException("The payment date cannot be in the future.");
         if (day.isBefore(issued)) throw new BadRequestException("The payment date is before the bill was issued.");
         if (mode == null || mode.isBlank()) throw new BadRequestException("Say how it was paid.");
-        jdbc.update("""
-                INSERT INTO invoice_payments (invoice_id, paid_on, amount, mode, reference, recorded_by)
-                VALUES (?, ?, ?, ?, ?, ?)""", invoiceId, day, amount, mode, blankNull(reference), TenantContext.currentUserIdOrNull());
+        UUID paymentId = jdbc.queryForObject("""
+                INSERT INTO invoice_payments (invoice_id, paid_on, amount, mode, reference, recorded_by, source)
+                VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id""", UUID.class, invoiceId, day, amount, mode, blankNull(reference), recordedBy, source);
         jdbc.update("UPDATE academy_invoices SET payment_method = ?, payment_ref = ?, recorded_by = ? WHERE id = ?",
-                mode, blankNull(reference), TenantContext.currentUserIdOrNull(), invoiceId);
+                mode, blankNull(reference), recordedBy, invoiceId);
         syncStatus(invoiceId);
-        audit.log("collections", (UUID) bill.get("academy_id"), "Recorded " + inr(amount) + " (" + mode + ") on " + bill.get("number"));
+        audit.log("collections", (UUID) bill.get("academy_id"),
+                ("ONLINE".equals(source) ? "Received " : "Recorded ") + inr(amount) + " (" + mode + ") on " + bill.get("number"));
+        return paymentId;
     }
 
     /**
