@@ -104,7 +104,9 @@ public class DashboardService {
         // A trainer limited to some batches of a course counts only those.
         long activeBatches = batchRepository.findByCourseIdIn(courseIds).stream()
                 .filter(b -> b.getStatus() == BatchStatus.ACTIVE)
-                .filter(b -> CourseFeatureGuard.inScope(courseFeatureGuard.batchScope(b.getCourseId()), b.getId()))
+                // Counted once, through any of its courses the person holds that has it in scope.
+                .filter(b -> b.allCourseIds().stream().filter(courseIds::contains)
+                        .anyMatch(c -> CourseFeatureGuard.inScope(courseFeatureGuard.batchScope(c), b.getId())))
                 .count();
 
         Set<UUID> memberIds = courseMapRepository.findByCourseIdIn(courseIds).stream()

@@ -16,10 +16,22 @@ final materialBatchesProvider = FutureProvider.autoDispose((ref) {
   return ref.watch(studyMaterialApiProvider).batchSummaries();
 });
 
+/// Courses whose files this caller can browse as a whole, with file counts - the home screen.
+final materialCoursesProvider = FutureProvider.autoDispose((ref) {
+  ref.watch(activeMembershipIdProvider);
+  return ref.watch(studyMaterialApiProvider).courseSummaries();
+});
+
 /// One batch's files.
 final batchMaterialsProvider =
     FutureProvider.autoDispose.family<List<StudyMaterial>, String>((ref, batchId) {
   return ref.watch(studyMaterialApiProvider).listForBatch(batchId);
+});
+
+/// One course's files: those shared with the whole course and those shared with a batch that covers it.
+final courseMaterialsProvider =
+    FutureProvider.autoDispose.family<List<StudyMaterial>, String>((ref, courseId) {
+  return ref.watch(studyMaterialApiProvider).listForCourse(courseId);
 });
 
 /// Every file of one type across every batch this caller can see - the Song, Document and
@@ -60,6 +72,24 @@ class StudyMaterialApi {
     );
   }
 
+  Future<List<CourseMaterialSummary>> courseSummaries() {
+    return _client.call(
+      (dio) => dio.get('/study-materials/courses'),
+      (data) => (data as List)
+          .map((e) => CourseMaterialSummary.fromJson(e as Map<String, dynamic>))
+          .toList(),
+    );
+  }
+
+  Future<List<StudyMaterial>> listForCourse(String courseId) {
+    return _client.call(
+      (dio) => dio.get('/courses/$courseId/study-materials'),
+      (data) => (data as List)
+          .map((e) => StudyMaterial.fromJson(e as Map<String, dynamic>))
+          .toList(),
+    );
+  }
+
   Future<List<StudyMaterial>> listForBatch(String batchId) {
     return _client.call(
       (dio) => dio.get('/batches/$batchId/study-materials'),
@@ -70,8 +100,12 @@ class StudyMaterialApi {
   }
 
   /// Reads bytes rather than a file path so the same call works on web and on Android/iOS.
+  ///
+  /// [courseIds] share the file with every student enrolled in those courses; [batchIds] with the students
+  /// in those batches. At least one of the two is needed.
   Future<StudyMaterial> upload({
-    required String batchId,
+    Set<String> courseIds = const {},
+    Set<String> batchIds = const {},
     required Uint8List bytes,
     required String fileName,
     required String title,
@@ -85,12 +119,14 @@ class StudyMaterialApi {
     });
     return _client.call(
       (dio) => dio.post(
-        '/batches/$batchId/study-materials',
+        '/study-materials',
         data: form,
         // Title and permission ride as query params rather than form fields: mixing text parts
         // into a multipart body means the server has to decode them per-part, and Spring binds
         // query params to @RequestParam on a multipart request without any of that.
         queryParameters: {
+          if (courseIds.isNotEmpty) 'courseIds': courseIds.toList(),
+          if (batchIds.isNotEmpty) 'batchIds': batchIds.toList(),
           'title': title,
           'description': ?description,
           'permission': permission.wire,
@@ -112,6 +148,11 @@ class StudyMaterialApi {
     required StudyMaterialPermission permission,
     StudyMaterialVisibility visibility = StudyMaterialVisibility.all,
     Set<String> studentIds = const {},
+
+    /// Who it is for. Both null leaves the audience as it is - what a caller that is not changing it
+    /// (flipping the download permission, say) sends.
+    Set<String>? courseIds,
+    Set<String>? batchIds,
   }) {
     return _client.call(
       (dio) => dio.put('/study-materials/$materialId', data: {
@@ -120,6 +161,10 @@ class StudyMaterialApi {
         'permission': permission.wire,
         'visibility': visibility.wire,
         'studentIds': studentIds.toList(),
+        if (courseIds != null || batchIds != null) ...{
+          'courseIds': (courseIds ?? const <String>{}).toList(),
+          'batchIds': (batchIds ?? const <String>{}).toList(),
+        },
       }),
       (data) => StudyMaterial.fromJson(data as Map<String, dynamic>),
     );

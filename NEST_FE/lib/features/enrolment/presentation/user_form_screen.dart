@@ -28,6 +28,7 @@ import 'package:nest_fe/features/enrolment/data/person_details.dart';
 import 'package:nest_fe/features/enrolment/data/user_tab.dart';
 import 'package:nest_fe/features/enrolment/presentation/widgets/existing_account_dialog.dart';
 import 'package:nest_fe/features/enrolment/presentation/widgets/feature_catalog.dart';
+import 'package:nest_fe/features/enrolment/presentation/widgets/course_change_section.dart';
 import 'package:nest_fe/features/enrolment/presentation/widgets/form_fields.dart';
 import 'package:nest_fe/features/enrolment/presentation/widgets/user_dialogs.dart';
 
@@ -644,7 +645,7 @@ class _UserFormScreenState extends ConsumerState<UserFormScreen> {
         }
         final own = group.batchIds
             .where((id) =>
-                allBatches.any((b) => b.id == id && b.courseId == courseId))
+                allBatches.any((b) => b.id == id && b.coversCourse(courseId)))
             .toSet();
         if (own.isNotEmpty) batches[courseId] = own;
       }
@@ -1473,6 +1474,18 @@ class _UserFormScreenState extends ConsumerState<UserFormScreen> {
           ],
         ),
       if (!_isTrainer) _studentCoursesSection(palette, accent, courses, batches),
+      // Promoting a student (Basic to Advanced) from next month - only for someone who already exists.
+      if (!_isTrainer && _isEditing && widget.editingMembershipId != null)
+        CourseChangeSection(
+          membershipId: widget.editingMembershipId!,
+          studentName: '${_firstNameController.text} ${_lastNameController.text}'.trim().isEmpty
+              ? 'this student'
+              : '${_firstNameController.text} ${_lastNameController.text}'.trim(),
+          courses: courses,
+          batches: batches,
+          enrolledCourseIds: _studentCourseIds,
+          accent: accent,
+        ),
       FormSection(
         title: 'Membership',
         subtitle: 'Joining date and status',
@@ -1613,7 +1626,7 @@ class _UserFormScreenState extends ConsumerState<UserFormScreen> {
   Widget _studentCoursesSection(
       AppPalette palette, Color accent, List<Course> courses, List<Batch> batches) {
     final relevant =
-        batches.where((b) => _studentCourseIds.contains(b.courseId)).toList();
+        batches.where((b) => b.courseIds.any(_studentCourseIds.contains)).toList();
     final selectedCourses =
         courses.where((c) => _studentCourseIds.contains(c.id)).toList();
     final selectedBatches =
@@ -1658,7 +1671,7 @@ class _UserFormScreenState extends ConsumerState<UserFormScreen> {
                 // A batch belongs to exactly one course, so dropping a course must drop the
                 // batches under it or the student ends up in a batch they cannot attend.
                 _studentBatchIds.removeWhere((id) => !batches.any(
-                    (b) => b.id == id && _studentCourseIds.contains(b.courseId)));
+                    (b) => b.id == id && b.courseIds.any(_studentCourseIds.contains)));
               });
             },
           ),
@@ -1807,7 +1820,7 @@ class _UserFormScreenState extends ConsumerState<UserFormScreen> {
               .valueOrNull
               ?.where((b) => b.id == batchId)
               .firstOrNull;
-          return batch != null && !group.courseIds.contains(batch.courseId);
+          return batch != null && !batch.courseIds.any(group.courseIds.contains);
         });
       }
     });
@@ -1844,7 +1857,7 @@ class _AccessGroupTile extends StatelessWidget {
       allCourses.where((c) => group.courseIds.contains(c.id)).toList();
 
   List<Batch> get _relevantBatches =>
-      allBatches.where((b) => group.courseIds.contains(b.courseId)).toList();
+      allBatches.where((b) => b.courseIds.any(group.courseIds.contains)).toList();
 
   @override
   Widget build(BuildContext context) {

@@ -203,10 +203,13 @@ public class SelfProfileService {
                 if (batch.getTrainerMembershipId() != null) trainerMemberships.add(batch.getTrainerMembershipId());
                 trainersByBatch.getOrDefault(batch.getId(), List.of())
                         .forEach(t -> trainerMemberships.add(t.getTrainerMembershipId()));
-                Set<String> names = trainerNamesByCourse.computeIfAbsent(batch.getCourseId(), k -> new TreeSet<>());
-                for (UUID tm : trainerMemberships) {
-                    String name = nameByUser.get(userByTrainerMembership.get(tm));
-                    if (name != null) names.add(name);
+                // A batch spanning several courses teaches each of them, so its trainers count for all.
+                for (UUID batchCourseId : batch.allCourseIds()) {
+                    Set<String> names = trainerNamesByCourse.computeIfAbsent(batchCourseId, k -> new TreeSet<>());
+                    for (UUID tm : trainerMemberships) {
+                        String name = nameByUser.get(userByTrainerMembership.get(tm));
+                        if (name != null) names.add(name);
+                    }
                 }
             }
             List<SelfProfileResponse.Course> courses = enrolmentsByMembership.get(m.getId()).stream()

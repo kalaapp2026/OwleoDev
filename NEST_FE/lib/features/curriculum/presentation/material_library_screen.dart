@@ -103,6 +103,7 @@ class _MaterialLibraryScreenState extends ConsumerState<MaterialLibraryScreen> {
     final async = ref.watch(materialLibraryProvider(widget.fileType));
     final batches = ref.watch(materialBatchesProvider).valueOrNull ?? const [];
     final byBatch = {for (final b in batches) b.batchId: b};
+    final courses = ref.watch(materialCoursesProvider).valueOrNull ?? const <CourseMaterialSummary>[];
 
     return Scaffold(
       backgroundColor: palette.bg,
@@ -118,7 +119,7 @@ class _MaterialLibraryScreenState extends ConsumerState<MaterialLibraryScreen> {
                 children: [
                   _searchRow(palette),
                   const SizedBox(height: 10),
-                  _filterRow(palette, batches),
+                  _filterRow(palette, batches, courses),
                   const SizedBox(height: 10),
                   Text(
                     async.when(
@@ -188,13 +189,10 @@ class _MaterialLibraryScreenState extends ConsumerState<MaterialLibraryScreen> {
   ) {
     final q = _query.trim().toLowerCase();
     final filtered = all.where((m) {
-      final batch = byBatch[m.batchId];
-      if (_courseId != null && batch?.courseId != _courseId) return false;
-      if (_batchId != null && m.batchId != _batchId) return false;
+      if (_courseId != null && !_reachesCourse(m, byBatch, _courseId!)) return false;
+      if (_batchId != null && !_reachesBatch(m, byBatch, _batchId!)) return false;
       if (q.isEmpty) return true;
-      return m.title.toLowerCase().contains(q) ||
-          (batch?.batchName ?? '').toLowerCase().contains(q) ||
-          (batch?.courseName ?? '').toLowerCase().contains(q);
+      return m.title.toLowerCase().contains(q) || m.audienceLabel.toLowerCase().contains(q);
     }).toList();
 
     filtered.sort(
@@ -208,9 +206,20 @@ class _MaterialLibraryScreenState extends ConsumerState<MaterialLibraryScreen> {
     return filtered;
   }
 
-  String _origin(BatchMaterialSummary? batch) => batch == null
-      ? 'Unlinked batch'
-      : '${batch.batchName} · ${batch.courseName ?? 'Unlinked course'}';
+  /// A file reaches a course when it was shared with that whole course, or with a batch that covers it.
+  bool _reachesCourse(StudyMaterial m, Map<String, BatchMaterialSummary> byBatch, String courseId) =>
+      m.courseTargetIds.contains(courseId) ||
+      m.batchTargetIds.any((b) => byBatch[b]?.coversCourse(courseId) ?? false);
+
+  /// ...and a batch when it was shared with that batch, or with a whole course the batch covers.
+  bool _reachesBatch(StudyMaterial m, Map<String, BatchMaterialSummary> byBatch, String batchId) {
+    if (m.batchTargetIds.contains(batchId)) return true;
+    final batch = byBatch[batchId];
+    return batch != null && m.courseTargetIds.any(batch.coversCourse);
+  }
+
+  /// Who it was shared with - "Guitar Advanced · Saturday" - or a plain word when the server named no one.
+  String _origin(StudyMaterial m) => m.audienceLabel.isEmpty ? 'Shared' : m.audienceLabel;
 
   // ---- list / grid -------------------------------------------------------------------------
 
@@ -230,7 +239,7 @@ class _MaterialLibraryScreenState extends ConsumerState<MaterialLibraryScreen> {
             onTap: () => _open(m),
             highlighted: active,
             highlightColor: palette.primary,
-            originLine: _origin(batch),
+            originLine: _origin(m),
             originColor: batch?.courseCategory.meta(palette).color,
             trailing: active
                 ? Text(
@@ -569,13 +578,29 @@ class _MaterialLibraryScreenState extends ConsumerState<MaterialLibraryScreen> {
     );
   }
 
-  Widget _filterRow(AppPalette palette, List<BatchMaterialSummary> batches) {
-    // Courses and batches come from the batches the caller can see - the same set the files do.
+  Widget _filterRow(
+      AppPalette palette, List<BatchMaterialSummary> batches, List<CourseMaterialSummary> courseSummaries) {
+    // Courses and batches come from what the caller can see - the same set the files do. A batch can span
+    // several courses, so it is offered under each of them.
     final courses = <_CourseOption>[
       (id: null, label: 'All courses', category: null),
     ];
     final seen = <String>{};
+    for (final c in courseSummaries) {
+      if (seen.add(c.courseId)) {
+        courses.add((id: c.courseId, label: c.courseName, category: c.courseCategory));
+      }
+    }
     for (final b in batches) {
+      for (var i = 0; i < b.courseIds.length; i++) {
+        if (seen.add(b.courseIds[i])) {
+          courses.add((
+            id: b.courseIds[i],
+            label: i < b.courseNames.length ? b.courseNames[i] : 'Course',
+            category: b.courseIds[i] == b.courseId ? b.courseCategory : null,
+          ));
+        }
+      }
       if (b.courseId != null && seen.add(b.courseId!)) {
         courses.add((id: b.courseId, label: b.courseName ?? 'Course', category: b.courseCategory));
       }
@@ -583,8 +608,8 @@ class _MaterialLibraryScreenState extends ConsumerState<MaterialLibraryScreen> {
     final batchOptions = <_BatchOption>[
       (id: null, label: 'All batches'),
       for (final b in batches)
-        if (_courseId == null || b.courseId == _courseId)
-          (id: b.batchId, label: '${b.batchName} · ${b.courseName ?? ''}'),
+        if (_courseId == null || b.coversCourse(_courseId))
+          (id: b.batchId, label: '${b.batchName} · ${b.coursesLabel}'),
     ];
 
     final course = courses.firstWhere((c) => c.id == _courseId, orElse: () => courses.first);

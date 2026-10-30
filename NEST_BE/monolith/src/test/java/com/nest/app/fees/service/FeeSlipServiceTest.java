@@ -171,6 +171,23 @@ class FeeSlipServiceTest {
         assertThat(result.get(0).getAmountDue()).isEqualByComparingTo("1000.00");
     }
 
+    @Test
+    void aStudentMovedOffTheCourseIsNotBilledForIt() {
+        feeSlipService = service();
+        Course course = Course.builder().id(courseId).feeCycle(FeeCycle.MONTHLY).feeModel(FeeModel.FIXED)
+                .defaultFee(new BigDecimal("1000.00")).createdAt(Instant.now()).build();
+
+        // The enrolment was switched off - by an admin, or by a scheduled move to a higher course.
+        when(courseMapRepository.findByCourseId(courseId)).thenReturn(List.of(
+                CourseMap.builder().membershipId(membershipId).courseId(courseId).agreedFee(new BigDecimal("1000.00"))
+                        .active(false).build()));
+
+        List<FeeSlip> result = invokeGenerate(course, LocalDate.of(2026, 7, 5));
+
+        assertThat(result).isEmpty();
+        verify(feeSlipRepository, never()).save(any());
+    }
+
     /** generateSlipsForCourse is protected, not private - same-package access from this test
      * needs no reflection. */
     private List<FeeSlip> invokeGenerate(Course course, LocalDate billingDate) {

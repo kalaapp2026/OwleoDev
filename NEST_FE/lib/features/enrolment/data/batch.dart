@@ -28,6 +28,17 @@ class BatchTrainer {
       );
 }
 
+/// One course a batch covers.
+class BatchCourse {
+  const BatchCourse({required this.id, required this.name});
+
+  final String id;
+  final String name;
+
+  factory BatchCourse.fromJson(Map<String, dynamic> json) =>
+      BatchCourse(id: json['id'] as String, name: json['name'] as String? ?? '');
+}
+
 /// The days a batch meets. Wire values are `java.time.DayOfWeek` names.
 enum Weekday {
   monday('MONDAY', 'Mon', 'M'),
@@ -77,6 +88,9 @@ String formatTimeOfDay(String? time) {
 
 class Batch {
   final String id;
+
+  /// The batch's primary course - the first one it was created with. A batch can cover several
+  /// ([courses]); anything that asks "is this batch on course X" should use [coversCourse].
   final String courseId;
   final String name;
   final String? description;
@@ -98,6 +112,10 @@ class Batch {
   /// The Meet / Zoom / Teams link of an online class; null for an in-person batch.
   final String? meetingLink;
 
+  /// Every course the batch covers, primary first. A batch of Basic + Intermediate + Advanced
+  /// learners lists all three; an ordinary batch lists just its one.
+  final List<BatchCourse> courses;
+
   const Batch({
     required this.id,
     required this.courseId,
@@ -115,7 +133,19 @@ class Batch {
     this.endTime,
     this.days = const [],
     this.meetingLink,
+    this.courses = const [],
   });
+
+  /// Ids of every course the batch covers - the primary alone when the server sent no list.
+  List<String> get courseIds => courses.isEmpty ? [courseId] : [for (final c in courses) c.id];
+
+  /// Whether this batch belongs under [id] in a course filter or picker.
+  bool coversCourse(String? id) => id != null && courseIds.contains(id);
+
+  bool get isMultiCourse => courses.length > 1;
+
+  /// "Guitar Basic, Guitar Advanced" for a multi-course batch; null for an ordinary one.
+  String? get courseNamesSummary => isMultiCourse ? courses.map((c) => c.name).join(', ') : null;
 
   /// "4:00 PM - 5:00 PM", or null while no time is set.
   String? get timeRange => (startTime == null || endTime == null)
@@ -156,6 +186,9 @@ class Batch {
         endTime: json['endTime'] as String?,
         days: ((json['days'] as List?) ?? const []).map((d) => Weekday.fromWire(d as String)).toList(),
         meetingLink: json['meetingLink'] as String?,
+        courses: ((json['courses'] as List?) ?? const [])
+            .map((c) => BatchCourse.fromJson(c as Map<String, dynamic>))
+            .toList(),
       );
 
   static DateTime? _parseDate(String? iso) =>

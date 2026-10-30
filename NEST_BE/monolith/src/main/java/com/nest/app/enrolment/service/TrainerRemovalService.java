@@ -75,7 +75,14 @@ public class TrainerRemovalService {
                 .filter(g -> g.getCourseId().equals(courseId)).toList());
         trainerCourseBatchRepository.deleteAll(trainerCourseBatchRepository.findByMembershipIdAndCourseId(membershipId, courseId));
 
-        List<Batch> batches = batchRepository.findByCourseId(courseId);
+        // A batch spanning several courses keeps the trainer's seat while they still hold another of its
+        // courses - dropping Advanced must not pull them out of a Basic + Advanced class they still teach.
+        java.util.Set<UUID> stillHeld = courseMapRepository.findByMembershipId(membershipId).stream()
+                .map(CourseMap::getCourseId).filter(id -> !id.equals(courseId))
+                .collect(java.util.stream.Collectors.toSet());
+        List<Batch> batches = batchRepository.findByCourseId(courseId).stream()
+                .filter(b -> b.allCourseIds().stream().noneMatch(stillHeld::contains))
+                .toList();
         for (Batch batch : batches) {
             if (membershipId.equals(batch.getTrainerMembershipId())) {
                 batch.setTrainerMembershipId(null);

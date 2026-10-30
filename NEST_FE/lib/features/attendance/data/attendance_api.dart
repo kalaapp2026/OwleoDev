@@ -8,8 +8,8 @@ final attendanceApiProvider = Provider((ref) => AttendanceApi(ref.watch(dioClien
 
 /// The roster for one class, with names - the marking screen's source.
 final batchRosterProvider =
-    FutureProvider.autoDispose.family<List<BatchMemberSummary>, String>((ref, batchId) {
-  return ref.watch(attendanceApiProvider).memberSummariesForBatch(batchId);
+    FutureProvider.autoDispose.family<BatchRoster, String>((ref, batchId) {
+  return ref.watch(attendanceApiProvider).rosterForBatch(batchId);
 });
 
 /// Whatever has already been marked for a class, so reopening it shows the existing answers
@@ -40,10 +40,11 @@ class AttendanceApi {
   final DioClient _client;
 
   /// A real name and photo per student, not a bare membership UUID - the marking screen's roster source.
-  Future<List<BatchMemberSummary>> memberSummariesForBatch(String batchId) {
+  /// Only the students the caller may see; [BatchRoster.hiddenCount] says how many others the batch has.
+  Future<BatchRoster> rosterForBatch(String batchId) {
     return _client.call(
-      (dio) => dio.get('/batches/$batchId/members/summary'),
-      (data) => (data as List).map((e) => BatchMemberSummary.fromJson(e as Map<String, dynamic>)).toList(),
+      (dio) => dio.get('/batches/$batchId/roster'),
+      (data) => BatchRoster.fromJson(data as Map<String, dynamic>),
     );
   }
 

@@ -57,9 +57,8 @@ public class ClassReminderService {
         Batch batch = batchRepository.findById(instance.getBatchId())
                 .orElseThrow(() -> new ResourceNotFoundException("Batch not found: " + instance.getBatchId()));
 
-        courseFeatureGuard.assertAnyCourseFeature(batch.getCourseId(),
+        courseFeatureGuard.assertBatchAccess(batch.allCourseIds(), batch.getId(),
                 FeatureKey.ATTENDANCE, FeatureKey.RESCHEDULE, FeatureKey.BATCH_SCHEDULING);
-        courseFeatureGuard.assertBatchInScope(batch.getCourseId(), batch.getId());
 
         if (instance.getStatus() != ClassInstanceStatus.SCHEDULED) {
             throw new BadRequestException("Only a class that is going ahead can be reminded about");

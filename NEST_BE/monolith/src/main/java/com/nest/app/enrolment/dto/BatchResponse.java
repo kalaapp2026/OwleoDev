@@ -34,8 +34,14 @@ public record BatchResponse(
         /** The weekdays the batch meets, Monday first. Empty until a schedule is set. */
         List<DayOfWeek> days,
         /** Where an online class is held; null for an in-person batch. */
-        String meetingLink
+        String meetingLink,
+        /** Every course the batch spans, the primary ({@link #courseId}) first. A single-course batch
+         * lists just that one. */
+        List<CourseSummary> courses
 ) {
+    public record CourseSummary(UUID id, String name) {
+    }
+
     public record TrainerSummary(UUID membershipId, String name) {
     }
 }

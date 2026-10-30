@@ -140,7 +140,10 @@ public class FeeSlipService {
         LocalDate periodStart = billingDate.minusMonths(intervalMonths);
         String period = billingDate.toString().substring(0, 7);
 
+        // Only people ACTIVELY enrolled are billed: a student moved off this course (a scheduled promotion,
+        // or an admin switching the enrolment off) must not be sent next month's slip for it.
         Set<java.util.UUID> mappedMembershipIds = courseMapRepository.findByCourseId(course.getId()).stream()
+                .filter(CourseMap::isActive)
                 .map(CourseMap::getMembershipId).collect(Collectors.toSet());
         if (mappedMembershipIds.isEmpty()) {
             return List.of();

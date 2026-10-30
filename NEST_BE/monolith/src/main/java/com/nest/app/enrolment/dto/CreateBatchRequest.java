@@ -11,7 +11,12 @@ import java.util.List;
 import java.util.UUID;
 
 public record CreateBatchRequest(
-        @NotNull UUID courseId,
+        /** The batch's course for older clients that send one. When {@link #courseIds} is present it wins
+         * and this is ignored. One of the two is required - BatchService enforces that. */
+        UUID courseId,
+        /** Every course the batch spans, the first being its primary. A batch of Basic + Intermediate +
+         * Advanced learners lists all three. */
+        List<UUID> courseIds,
         @NotBlank String name,
         String description,
         @NotNull BatchType batchType,

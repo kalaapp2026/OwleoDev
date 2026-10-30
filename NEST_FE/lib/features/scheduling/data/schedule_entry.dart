@@ -135,6 +135,10 @@ class ScheduleEntry {
   /// When someone last pressed Remind on this class, or null if nobody has.
   final DateTime? lastRemindedAt;
 
+  /// Every course the batch spans (a batch can cover Basic + Intermediate + Advanced); just the one
+  /// for an ordinary batch.
+  final List<String> batchCourseNames;
+
   const ScheduleEntry({
     required this.classInstanceId,
     required this.date,
@@ -157,6 +161,7 @@ class ScheduleEntry {
     this.studentCount = 0,
     this.meetingLink,
     this.lastRemindedAt,
+    this.batchCourseNames = const [],
   });
 
   bool get isTemporary => batchType == BatchType.temporary;
@@ -253,6 +258,7 @@ class ScheduleEntry {
         meetingLink: json['meetingLink'] as String?,
         // An instant in UTC; shown to the reader in their own clock.
         lastRemindedAt: _date(json['lastRemindedAt'] as String?)?.toLocal(),
+        batchCourseNames: ((json['batchCourseNames'] as List?) ?? const []).map((e) => e as String).toList(),
       );
 
   static DateTime? _date(String? iso) =>

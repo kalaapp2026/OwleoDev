@@ -2,9 +2,10 @@ package com.nest.app.enrolment.service;
 
 import com.nest.app.curriculum.entity.Course;
 import com.nest.app.curriculum.repository.CourseRepository;
-import com.nest.app.curriculum.repository.StudyMaterialRepository;
+import com.nest.app.curriculum.service.StudyMaterialService;
 import com.nest.app.enrolment.dto.BatchMemberSummaryResponse;
 import com.nest.app.enrolment.dto.BatchResponse;
+import com.nest.app.enrolment.dto.BatchRosterResponse;
 import com.nest.app.enrolment.dto.CreateBatchRequest;
 import com.nest.app.enrolment.dto.UpdateBatchRequest;
 import com.nest.app.enrolment.entity.Batch;
@@ -54,16 +55,18 @@ public class BatchService {
     private final CourseRepository courseRepository;
     private final ScheduleRepository scheduleRepository;
     private final ClassInstanceRepository classInstanceRepository;
-    private final StudyMaterialRepository studyMaterialRepository;
+    private final StudyMaterialService studyMaterialService;
     private final CourseFeatureGuard courseFeatureGuard;
+    private final StudentBatchCourses studentCourses;
 
     public BatchService(BatchRepository batchRepository, BatchMemberRepository batchMemberRepository,
                          BatchTrainerRepository batchTrainerRepository,
                          AcademyMembershipRepository membershipRepository, UserRepository userRepository,
                          CourseRepository courseRepository,
                          ScheduleRepository scheduleRepository, ClassInstanceRepository classInstanceRepository,
-                         StudyMaterialRepository studyMaterialRepository,
-                         CourseFeatureGuard courseFeatureGuard) {
+                         StudyMaterialService studyMaterialService,
+                         CourseFeatureGuard courseFeatureGuard, StudentBatchCourses studentCourses) {
+        this.studentCourses = studentCourses;
         this.batchRepository = batchRepository;
         this.batchMemberRepository = batchMemberRepository;
         this.batchTrainerRepository = batchTrainerRepository;
@@ -72,21 +75,25 @@ public class BatchService {
         this.courseRepository = courseRepository;
         this.scheduleRepository = scheduleRepository;
         this.classInstanceRepository = classInstanceRepository;
-        this.studyMaterialRepository = studyMaterialRepository;
+        this.studyMaterialService = studyMaterialService;
         this.courseFeatureGuard = courseFeatureGuard;
     }
 
     @Transactional
     @Auditable(action = "BATCH_CREATED", entityType = "batch")
     public BatchResponse create(CreateBatchRequest request) {
-        // Per-course enforcement: a Trainer must hold BATCH_CREATION on THIS course (Admins bypass).
-        courseFeatureGuard.assertCourseFeature(request.courseId(), FeatureKey.BATCH_CREATION);
+        List<UUID> courseIds = resolveCourseIds(request.courseIds(), request.courseId());
+        assertCoursesInActiveAcademy(courseIds);
+        // Per-course enforcement: a Trainer must hold BATCH_CREATION on EVERY course the batch spans
+        // (Admins bypass) - a trainer cannot build a class that contains a course they were never given.
+        courseFeatureGuard.assertAllCourses(courseIds, FeatureKey.BATCH_CREATION);
 
         List<UUID> trainerIds = resolveTrainerIds(request.trainerMembershipIds(), request.trainerMembershipId());
         validateDates(request.batchType(), request.startDate(), request.endDate());
 
         Batch saved = batchRepository.save(Batch.builder()
-                .courseId(request.courseId())
+                .courseId(courseIds.get(0))
+                .courseIds(new java.util.LinkedHashSet<>(courseIds))
                 .name(request.name())
                 .description(request.description())
                 .batchType(request.batchType())
@@ -118,7 +125,9 @@ public class BatchService {
     @Auditable(action = "BATCH_UPDATED", entityType = "batch")
     public BatchResponse update(UUID batchId, UpdateBatchRequest request) {
         Batch batch = findOrThrow(batchId);
-        courseFeatureGuard.assertCourseFeature(batch.getCourseId(), FeatureKey.BATCH_CREATION);
+        // Working inside a multi-course batch needs the permission on at least one of its courses;
+        // anything that changes WHICH courses it spans is checked course by course below.
+        courseFeatureGuard.assertAnyOfCourses(batch.allCourseIds(), FeatureKey.BATCH_CREATION);
 
         List<UUID> trainerIds = resolveTrainerIds(request.trainerMembershipIds(), null);
         validateDates(batch.getBatchType(), request.startDate(), request.endDate());
@@ -129,11 +138,74 @@ public class BatchService {
         batch.setStartDate(request.startDate());
         batch.setEndDate(batch.getBatchType() == BatchType.TEMPORARY ? request.endDate() : null);
         batch.setMeetingLink(cleanLink(request.meetingLink()));
+
+        Set<UUID> removedCourses = applyCourseChange(batch, request.courseIds());
         batchRepository.save(batch);
 
         replaceTrainers(batchId, trainerIds);
-        syncRoster(batchId, nullSafe(request.studentMembershipIds()));
+        syncRoster(batch, nullSafe(request.studentMembershipIds()));
+        assertNoStudentLeftWithoutACourse(batch, removedCourses);
         return buildResponse(batch);
+    }
+
+    /**
+     * Applies the requested set of courses to the batch and returns the ones that were dropped. A null
+     * request leaves the courses alone (a client that predates multi-course batches). The old primary stays
+     * primary while it is still covered, so adding Advanced never reshuffles which course the batch
+     * "belongs" to. Adding or dropping a course needs Batch creation on THAT course.
+     */
+    private Set<UUID> applyCourseChange(Batch batch, List<UUID> requested) {
+        if (requested == null) {
+            return Set.of();
+        }
+        List<UUID> wanted = resolveCourseIds(requested, null);
+        Set<UUID> current = batch.allCourseIds();
+        Set<UUID> added = new java.util.LinkedHashSet<>(wanted);
+        added.removeAll(current);
+        Set<UUID> removed = new java.util.LinkedHashSet<>(current);
+        removed.removeAll(wanted);
+        if (added.isEmpty() && removed.isEmpty()) {
+            return Set.of();
+        }
+
+        assertCoursesInActiveAcademy(List.copyOf(added));
+        for (UUID courseId : added) {
+            courseFeatureGuard.assertCourseFeature(courseId, FeatureKey.BATCH_CREATION);
+        }
+        for (UUID courseId : removed) {
+            courseFeatureGuard.assertCourseFeature(courseId, FeatureKey.BATCH_CREATION);
+        }
+
+        List<UUID> ordered = new java.util.ArrayList<>(wanted);
+        if (wanted.contains(batch.getCourseId())) {
+            ordered.remove(batch.getCourseId());
+            ordered.add(0, batch.getCourseId());
+        }
+        batch.setCourses(ordered);
+        return removed;
+    }
+
+    /**
+     * Dropping a course from a batch must not strand its students in a class that no longer teaches their
+     * course. Checked AFTER the roster was synced, so removing the students in the same save is fine.
+     */
+    private void assertNoStudentLeftWithoutACourse(Batch batch, Set<UUID> removedCourses) {
+        if (removedCourses.isEmpty()) {
+            return;
+        }
+        Set<UUID> remaining = batch.allCourseIds();
+        List<UUID> memberIds = batchMemberRepository.findByBatchId(batch.getId()).stream()
+                .map(BatchMember::getMembershipId).toList();
+        Map<UUID, Set<UUID>> enrolled = activeEnrolments(memberIds);
+        for (UUID memberId : memberIds) {
+            Set<UUID> theirs = enrolled.getOrDefault(memberId, Set.of());
+            boolean hadARemovedCourse = theirs.stream().anyMatch(removedCourses::contains);
+            boolean stillHasOne = theirs.stream().anyMatch(remaining::contains);
+            if (hadARemovedCourse && !stillHasOne) {
+                throw new ConflictException("Some students of a course you removed are still in this batch - "
+                        + "move them out of the batch first, or keep the course.");
+            }
+        }
     }
 
     /** Deactivating is the reversible alternative to {@link #delete}: history stays intact, the
@@ -142,7 +214,7 @@ public class BatchService {
     @Auditable(action = "BATCH_STATUS_CHANGED", entityType = "batch")
     public BatchResponse setStatus(UUID batchId, BatchStatus status) {
         Batch batch = findOrThrow(batchId);
-        courseFeatureGuard.assertCourseFeature(batch.getCourseId(), FeatureKey.BATCH_CREATION);
+        courseFeatureGuard.assertAllCourses(batch.allCourseIds(), FeatureKey.BATCH_CREATION);
         batch.setStatus(status);
         return buildResponse(batchRepository.save(batch));
     }
@@ -181,9 +253,13 @@ public class BatchService {
             return List.of();
         }
         Map<UUID, java.util.Optional<Set<UUID>>> scopeByCourse = new java.util.HashMap<>();
+        // A multi-course batch is listed once, when the caller has it through ANY course they can see
+        // and it is within the batches they were given for that course.
         return buildResponses(batchRepository.findByCourseIdIn(courseIds).stream()
-                .filter(b -> CourseFeatureGuard.inScope(
-                        scopeByCourse.computeIfAbsent(b.getCourseId(), courseFeatureGuard::batchScope), b.getId()))
+                .filter(b -> b.allCourseIds().stream()
+                        .filter(courseIds::contains)
+                        .anyMatch(c -> CourseFeatureGuard.inScope(
+                                scopeByCourse.computeIfAbsent(c, courseFeatureGuard::batchScope), b.getId())))
                 .toList());
     }
 
@@ -220,8 +296,10 @@ public class BatchService {
         // all courses - without this, a Trainer granted BATCH_CREATION on Guitar could enrol
         // students into a Bharatanatyam batch.
         // Placing a student in a batch is part of registering them, so Student registration is enough
-        // on this course too - not only Batch creation.
-        courseFeatureGuard.assertAnyCourseFeature(batch.getCourseId(), FeatureKey.BATCH_CREATION, FeatureKey.STUDENT_REGISTRATION);
+        // on this course too - not only Batch creation. In a batch spanning several courses the caller
+        // needs it on the student's OWN course: a Basic trainer cannot place an Advanced student.
+        courseFeatureGuard.assertAnyOfCourses(coursesOfStudentInBatch(batch, membershipId),
+                FeatureKey.BATCH_CREATION, FeatureKey.STUDENT_REGISTRATION);
 
         if (batch.getBatchType() == BatchType.REGULAR && isAlreadyInAnotherRegularBatchForCourse(membershipId, batch)) {
             throw new ConflictException(
@@ -237,32 +315,66 @@ public class BatchService {
 
     @Transactional(readOnly = true)
     public List<UUID> listMemberIds(UUID batchId) {
-        assertCanSeeRoster(findOrThrow(batchId));
-        return batchMemberRepository.findByBatchId(batchId).stream().map(BatchMember::getMembershipId).collect(Collectors.toList());
+        return rosterFor(findOrThrow(batchId)).students().stream()
+                .map(BatchMemberSummaryResponse::membershipId).collect(Collectors.toList());
     }
 
     /** Attendance marking's roster source - a real name and photo per student instead of a bare
      * membership UUID (mirrors StudentRegistrationService.listStudentsForCourse's shape). */
     @Transactional(readOnly = true)
     public List<BatchMemberSummaryResponse> listMemberSummaries(UUID batchId) {
-        assertCanSeeRoster(findOrThrow(batchId));
-        List<UUID> membershipIds = batchMemberRepository.findByBatchId(batchId).stream()
+        return rosterFor(findOrThrow(batchId)).students();
+    }
+
+    /** The same roster plus how many students the caller is NOT shown (see {@link #rosterFor}). */
+    @Transactional(readOnly = true)
+    public BatchRosterResponse getRoster(UUID batchId) {
+        return rosterFor(findOrThrow(batchId));
+    }
+
+    /**
+     * The batch's students as the CALLER may see them. A batch can span Basic, Intermediate and Advanced;
+     * a trainer mapped to two of those sees the students of those two and only a count of the rest. A
+     * student in the batch, an admin, and a trainer who teaches the batch but holds none of its courses
+     * (the old behaviour) still see everyone.
+     */
+    private BatchRosterResponse rosterFor(Batch batch) {
+        Set<UUID> visibleCourses = visibleCoursesForRoster(batch);
+        List<UUID> membershipIds = batchMemberRepository.findByBatchId(batch.getId()).stream()
                 .map(BatchMember::getMembershipId).toList();
         if (membershipIds.isEmpty()) {
-            return List.of();
+            return new BatchRosterResponse(List.of(), 0);
         }
+
+        Map<UUID, Set<UUID>> enrolled = activeEnrolments(membershipIds);
+        Set<UUID> inBatch = batch.allCourseIds();
+        Map<UUID, String> courseNames = courseRepository.findAllById(inBatch).stream()
+                .collect(Collectors.toMap(Course::getId, Course::getName, (a, b) -> a));
 
         List<AcademyMembership> memberships = membershipRepository.findAllById(membershipIds);
         Map<UUID, User> usersById = userRepository.findAllById(
                 memberships.stream().map(AcademyMembership::getUserId).collect(Collectors.toSet())
         ).stream().collect(Collectors.toMap(User::getId, u -> u));
 
-        return memberships.stream()
-                .map(m -> {
-                    User u = usersById.get(m.getUserId());
-                    return new BatchMemberSummaryResponse(m.getId(), u.getId(), u.getUsername(), u.getFullName(), u.getProfileImageUrl());
-                })
-                .collect(Collectors.toList());
+        List<BatchMemberSummaryResponse> shown = new java.util.ArrayList<>();
+        for (AcademyMembership m : memberships) {
+            Set<UUID> theirs = studentCourses.inBatch(batch, m.getId(), enrolled);
+            // Batch order, so a student in two of the batch's courses is tagged with the first.
+            UUID tag = null;
+            for (UUID courseId : inBatch) {
+                if (theirs.contains(courseId) && (visibleCourses == null || visibleCourses.contains(courseId))) {
+                    tag = courseId;
+                    break;
+                }
+            }
+            if (tag == null) {
+                continue; // none of their courses is one the caller holds
+            }
+            User u = usersById.get(m.getUserId());
+            shown.add(new BatchMemberSummaryResponse(m.getId(), u.getId(), u.getUsername(), u.getFullName(),
+                    u.getProfileImageUrl(), tag, courseNames.get(tag)));
+        }
+        return new BatchRosterResponse(shown, memberships.size() - shown.size());
     }
 
     /** Unmapping is idempotent, same as addMember being idempotent - removing someone who was
@@ -271,7 +383,8 @@ public class BatchService {
     @Auditable(action = "BATCH_MEMBER_REMOVED", entityType = "batch_member")
     public void removeMember(UUID batchId, UUID membershipId) {
         Batch batch = findOrThrow(batchId);
-        courseFeatureGuard.assertCourseFeature(batch.getCourseId(), FeatureKey.BATCH_CREATION);
+        // The student's own course, not just any of the batch's: a Basic trainer cannot remove an Advanced student.
+        courseFeatureGuard.assertAnyOfCourses(coursesOfStudentInBatch(batch, membershipId), FeatureKey.BATCH_CREATION);
         batchMemberRepository.deleteByBatchIdAndMembershipId(batchId, membershipId);
     }
 
@@ -289,7 +402,7 @@ public class BatchService {
     public void delete(UUID batchId) {
         Batch batch = batchRepository.findById(batchId)
                 .orElseThrow(() -> new ResourceNotFoundException("Batch not found: " + batchId));
-        courseFeatureGuard.assertCourseFeature(batch.getCourseId(), FeatureKey.BATCH_CREATION);
+        courseFeatureGuard.assertAllCourses(batch.allCourseIds(), FeatureKey.BATCH_CREATION);
 
         boolean hasAttendanceHistory = classInstanceRepository.findByBatchId(batchId).stream()
                 .anyMatch(ci -> ci.getStatus() == ClassInstanceStatus.HELD);
@@ -301,9 +414,9 @@ public class BatchService {
         classInstanceRepository.deleteByBatchId(batchId);
         batchTrainerRepository.deleteByBatchId(batchId);
         batchMemberRepository.deleteByBatchId(batchId);
-        // Material shared with a batch has no meaning without it - leaving these behind would
-        // orphan rows nothing can ever reach or clean up.
-        studyMaterialRepository.deleteByBatchId(batchId);
+        // Material aimed at this batch stops going to it; a file whose ONLY audience was this batch goes too -
+        // leaving it would orphan a row nothing can ever reach or clean up.
+        studyMaterialService.detachBatch(batchId);
         batchRepository.delete(batch);
     }
 
@@ -313,17 +426,28 @@ public class BatchService {
      * they were given. Previously any signed-in trainer could list any batch's students, including those
      * of courses they have nothing to do with.
      */
-    private void assertCanSeeRoster(Batch batch) {
+    private Set<UUID> visibleCoursesForRoster(Batch batch) {
         UUID me = TenantContext.currentMembershipId();
         if (batchMemberRepository.existsByBatchIdAndMembershipId(batch.getId(), me)) {
-            return;
+            return null; // a classmate sees the class
         }
-        if (batchTrainerRepository.findByBatchId(batch.getId()).stream()
-                .anyMatch(t -> me.equals(t.getTrainerMembershipId()))) {
-            return;
+        String[] anyFeature = FeatureKey.ALL_DELEGABLE.toArray(String[]::new);
+        var visible = courseFeatureGuard.visibleCourseIdsAny(anyFeature);
+        if (visible.isEmpty()) {
+            return null; // an admin: no restriction
         }
-        courseFeatureGuard.assertAnyCourseFeature(batch.getCourseId(), FeatureKey.ALL_DELEGABLE.toArray(String[]::new));
-        courseFeatureGuard.assertBatchInScope(batch.getCourseId(), batch.getId());
+        Set<UUID> mine = batch.allCourseIds().stream()
+                .filter(visible.get()::contains)
+                .collect(Collectors.toCollection(java.util.LinkedHashSet::new));
+        boolean teachesIt = batchTrainerRepository.findByBatchId(batch.getId()).stream()
+                .anyMatch(t -> me.equals(t.getTrainerMembershipId()));
+        if (teachesIt) {
+            // The batch's own trainer. If they hold some of its courses they see those students; if they
+            // hold none of them (they were put on the batch directly) they keep seeing the whole class.
+            return mine.isEmpty() ? null : mine;
+        }
+        courseFeatureGuard.assertBatchAccess(batch.allCourseIds(), batch.getId(), anyFeature);
+        return mine;
     }
 
     private Batch findOrThrow(UUID batchId) {
@@ -386,14 +510,21 @@ public class BatchService {
      * of the same course in one save would otherwise trip the one-batch-per-course rule against
      * the membership we are in the middle of removing them from.
      */
-    private void syncRoster(UUID batchId, List<UUID> desired) {
+    private void syncRoster(Batch batch, List<UUID> desired) {
+        UUID batchId = batch.getId();
         Set<UUID> target = new java.util.LinkedHashSet<>(desired);
         Set<UUID> current = batchMemberRepository.findByBatchId(batchId).stream()
                 .map(BatchMember::getMembershipId).collect(Collectors.toSet());
+        // The editor only ever received the students the caller may see, so a student missing from the
+        // list is "not shown to them", not "taken out". Only those whose course the caller can manage
+        // are actually removed; the rest stay exactly as they were.
+        Map<UUID, Set<UUID>> enrolled = activeEnrolments(current);
 
         for (UUID existing : current) {
             if (!target.contains(existing)) {
-                batchMemberRepository.deleteByBatchIdAndMembershipId(batchId, existing);
+                if (callerManages(batch, existing, enrolled)) {
+                    batchMemberRepository.deleteByBatchIdAndMembershipId(batchId, existing);
+                }
             }
         }
         for (UUID wanted : target) {
@@ -403,16 +534,69 @@ public class BatchService {
         }
     }
 
+    /**
+     * One Regular batch per COURSE per student. With batches that span several courses the course that
+     * counts is the student's own: a Basic student in a Basic + Intermediate + Advanced batch holds Basic
+     * there, so a second Regular batch that also covers Basic is refused, while one covering only
+     * Intermediate and Advanced is not - they are not enrolled in those.
+     */
     private boolean isAlreadyInAnotherRegularBatchForCourse(UUID membershipId, Batch targetBatch) {
         List<BatchMember> existingMemberships = batchMemberRepository.findByMembershipId(membershipId);
         if (existingMemberships.isEmpty()) {
             return false;
         }
         Set<UUID> existingBatchIds = existingMemberships.stream().map(BatchMember::getBatchId).collect(Collectors.toSet());
+        Set<UUID> inTarget = coursesOfStudentInBatch(targetBatch, membershipId);
         return batchRepository.findAllById(existingBatchIds).stream()
-                .anyMatch(b -> b.getBatchType() == BatchType.REGULAR
-                        && b.getCourseId().equals(targetBatch.getCourseId())
-                        && !b.getId().equals(targetBatch.getId()));
+                .filter(b -> b.getBatchType() == BatchType.REGULAR && !b.getId().equals(targetBatch.getId()))
+                .anyMatch(b -> coursesOfStudentInBatch(b, membershipId).stream().anyMatch(inTarget::contains));
+    }
+
+    /**
+     * The courses a student holds WITHIN a batch: the batch's courses they are actively enrolled in. A
+     * student with no enrolment in any of them (a legacy roster, or a data slip) is treated as belonging
+     * to all of the batch's courses, so the rules fail safe rather than letting them through unchecked.
+     */
+    private Set<UUID> coursesOfStudentInBatch(Batch batch, UUID membershipId) {
+        return studentCourses.inBatch(batch, membershipId);
+    }
+
+    private Map<UUID, Set<UUID>> activeEnrolments(java.util.Collection<UUID> membershipIds) {
+        return studentCourses.activeEnrolments(membershipIds);
+    }
+
+    /** Distinct, non-null course ids in the order given (the first is the primary). */
+    private List<UUID> resolveCourseIds(List<UUID> plural, UUID singular) {
+        List<UUID> source = plural != null && !plural.isEmpty()
+                ? plural
+                : (singular == null ? List.of() : List.of(singular));
+        List<UUID> ids = source.stream().filter(Objects::nonNull).distinct().collect(Collectors.toList());
+        if (ids.isEmpty()) {
+            throw new BadRequestException("Pick at least one course for the batch.");
+        }
+        return ids;
+    }
+
+    /** Every course must exist in the caller's academy - a course id from another academy is "not found". */
+    private void assertCoursesInActiveAcademy(List<UUID> courseIds) {
+        if (courseIds.isEmpty()) {
+            return;
+        }
+        UUID academyId = TenantContext.currentAcademyId();
+        Map<UUID, Course> found = courseRepository.findAllById(courseIds).stream()
+                .collect(Collectors.toMap(Course::getId, c -> c));
+        for (UUID id : courseIds) {
+            Course course = found.get(id);
+            if (course == null || !academyId.equals(course.getAcademyId())) {
+                throw new ResourceNotFoundException("Course not found: " + id);
+            }
+        }
+    }
+
+    /** Whether the caller holds Batch creation on at least one of this student's courses in the batch. */
+    private boolean callerManages(Batch batch, UUID membershipId, Map<UUID, Set<UUID>> enrolled) {
+        return !courseFeatureGuard.heldCourses(studentCourses.inBatch(batch, membershipId, enrolled),
+                FeatureKey.BATCH_CREATION).isEmpty();
     }
 
     /** Resolves a set of trainer memberships to display names in a single pair of findAllById
@@ -473,6 +657,11 @@ public class BatchService {
             slotsByBatch.computeIfAbsent(slot.getBatchId(), k -> new java.util.ArrayList<>()).add(slot);
         }
 
+        Set<UUID> everyCourseId = batches.stream().flatMap(b -> b.allCourseIds().stream())
+                .collect(Collectors.toCollection(java.util.LinkedHashSet::new));
+        Map<UUID, String> courseNames = courseRepository.findAllById(everyCourseId).stream()
+                .collect(Collectors.toMap(Course::getId, Course::getName, (a, c) -> a));
+
         List<BatchResponse> result = new java.util.ArrayList<>();
         for (Batch b : batches) {
             List<com.nest.app.scheduling.entity.Schedule> slots = slotsByBatch.getOrDefault(b.getId(), List.of());
@@ -497,7 +686,10 @@ public class BatchService {
                     slots.isEmpty() ? null : slots.get(0).getStartTime().toString(),
                     slots.isEmpty() ? null : slots.get(0).getEndTime().toString(),
                     slots.stream().map(com.nest.app.scheduling.entity.Schedule::getDayOfWeek).distinct().sorted().toList(),
-                    b.getMeetingLink()));
+                    b.getMeetingLink(),
+                    b.allCourseIds().stream()
+                            .map(id -> new BatchResponse.CourseSummary(id, courseNames.getOrDefault(id, "Course")))
+                            .toList()));
         }
         return result;
     }

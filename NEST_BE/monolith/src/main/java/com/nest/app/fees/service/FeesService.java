@@ -270,9 +270,12 @@ public class FeesService {
         // Which batch they sit in, per course - context for the row, never part of the fee key.
         Set<UUID> batchIds = batchMemberRepository.findByMembershipId(membershipId).stream()
                 .map(BatchMember::getBatchId).collect(Collectors.toSet());
-        Map<UUID, String> batchNameByCourse = batchRepository.findAllById(batchIds).stream()
-                .filter(b -> b.getStatus() == BatchStatus.ACTIVE)
-                .collect(Collectors.toMap(Batch::getCourseId, Batch::getName, (a, b) -> a));
+        Map<UUID, String> batchNameByCourse = new java.util.HashMap<>();
+        for (Batch b : batchRepository.findAllById(batchIds)) {
+            if (b.getStatus() == BatchStatus.ACTIVE) {
+                b.allCourseIds().forEach(cid -> batchNameByCourse.putIfAbsent(cid, b.getName()));
+            }
+        }
 
         Map<UUID, FeeSlip> slipByCourse = feeSlipRepository
                 .findByMembershipIdOrderByGeneratedAtDesc(membershipId).stream()

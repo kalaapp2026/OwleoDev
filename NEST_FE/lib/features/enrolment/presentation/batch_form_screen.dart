@@ -4,16 +4,15 @@ import 'package:nest_fe/app/theme/app_tokens.dart';
 import 'package:nest_fe/app/theme/app_typography.dart';
 import 'package:nest_fe/core/auth/feature_keys.dart';
 import 'package:nest_fe/core/design/app_text_field.dart';
-import 'package:nest_fe/core/design/attached_select.dart';
 import 'package:nest_fe/core/design/avatar.dart';
 import 'package:nest_fe/core/design/buttons.dart';
 import 'package:nest_fe/core/design/calendar_modal.dart';
 import 'package:nest_fe/core/design/category_meta.dart';
-import 'package:nest_fe/core/design/course_icons.dart';
 import 'package:nest_fe/core/design/people_picker_sheet.dart';
 import 'package:nest_fe/core/design/app_top_bar.dart' show AppBarBackTile;
 import 'package:nest_fe/core/design/pressable.dart';
 import 'package:nest_fe/core/design/segmented_control.dart';
+import 'package:nest_fe/core/design/sheets.dart';
 import 'package:nest_fe/core/design/time_picker_sheet.dart';
 import 'package:nest_fe/core/format/money.dart';
 import 'package:nest_fe/core/validation/validators.dart';
@@ -48,7 +47,10 @@ class _BatchFormScreenState extends ConsumerState<BatchFormScreen> {
   late final BatchType _batchType =
       widget.existing?.batchType ?? widget.initialType ?? BatchType.regular;
 
-  late String? _courseId = widget.existing?.courseId;
+  /// Every course the batch covers; the first is its primary. A batch can span several - Basic,
+  /// Intermediate and Advanced learners in one class.
+  late List<String> _courseIds = [...?widget.existing?.courseIds];
+  String? get _courseId => _courseIds.isEmpty ? null : _courseIds.first;
   late Set<Weekday> _days = {};
   ClockTime? _startTime;
   ClockTime? _endTime;
@@ -147,7 +149,7 @@ class _BatchFormScreenState extends ConsumerState<BatchFormScreen> {
   String _missingRequirement() {
     if (_nameController.text.trim().length <= 1) return 'Enter a batch name to continue.';
     if (!_linkValid) return 'The meeting link does not look like a web address.';
-    if (_courseId == null) return 'Pick the course this batch belongs to.';
+    if (_courseId == null) return 'Pick at least one course.';
     if (_days.isEmpty) return 'Select at least one day.';
     if (_startTime == null || _endTime == null) return 'Set the class start and end time.';
     if (!_timeValid) return 'The end time must be after the start time.';
@@ -210,15 +212,34 @@ class _BatchFormScreenState extends ConsumerState<BatchFormScreen> {
     });
   }
 
-  Future<void> _pickTrainers(Course course) async {
-    final trainers = await ref.read(trainersForCourseProvider(course.id).future);
+  /// Trainers mapped to ANY of the selected courses, de-duplicated. A trainer of one course can take a
+  /// class that also holds another course's students.
+  Future<List<TrainerSummary>> _trainersForSelected(List<Course> courses) async {
+    final lists = await Future.wait([
+      for (final c in courses) ref.read(trainersForCourseProvider(c.id).future),
+    ]);
+    final byId = <String, TrainerSummary>{};
+    for (final list in lists) {
+      for (final t in list) {
+        byId.putIfAbsent(t.membershipId, () => t);
+      }
+    }
+    return byId.values.toList();
+  }
+
+  Future<void> _pickTrainers() async {
+    final courses = _selectedCourses();
+    if (courses.isEmpty) return;
+    final trainers = await _trainersForSelected(courses);
     if (!mounted) return;
     final chosen = await showPeoplePickerSheet(
       context: context,
       title: 'Select instructors',
-      accentColor: course.category.meta(context.palette).color,
+      accentColor: courses.first.category.meta(context.palette).color,
       searchHint: 'Search instructor',
-      emptyLabel: 'No trainers are mapped to ${course.name} yet.',
+      emptyLabel: courses.length == 1
+          ? 'No trainers are mapped to ${courses.first.name} yet.'
+          : 'No trainers are mapped to these courses yet.',
       people: [
         for (final t in trainers)
           PickablePerson(id: t.membershipId, name: t.fullName, subtitle: t.username)
@@ -228,33 +249,139 @@ class _BatchFormScreenState extends ConsumerState<BatchFormScreen> {
     if (chosen != null && mounted) setState(() => _trainerIds = chosen);
   }
 
-  Future<void> _pickStudents(Course course) async {
-    final students = await ref.read(studentsForCourseProvider(course.id).future);
+  /// The students of every selected course, each tagged with the course(s) they are enrolled in so a
+  /// mixed batch reads at a glance.
+  Future<({List<StudentSummary> students, Map<String, List<String>> coursesOf})> _studentsForSelected(
+      List<Course> courses) async {
+    final lists = await Future.wait([
+      for (final c in courses) ref.read(studentsForCourseProvider(c.id).future),
+    ]);
+    final byId = <String, StudentSummary>{};
+    final coursesOf = <String, List<String>>{};
+    for (var i = 0; i < courses.length; i++) {
+      for (final s in lists[i]) {
+        byId.putIfAbsent(s.membershipId, () => s);
+        coursesOf.putIfAbsent(s.membershipId, () => []).add(courses[i].name);
+      }
+    }
+    return (students: byId.values.toList(), coursesOf: coursesOf);
+  }
+
+  Future<void> _pickStudents() async {
+    final courses = _selectedCourses();
+    if (courses.isEmpty) return;
+    final found = await _studentsForSelected(courses);
     if (!mounted) return;
+    final multi = courses.length > 1;
     final chosen = await showPeoplePickerSheet(
       context: context,
       title: 'Select students',
-      accentColor: course.category.meta(context.palette).color,
+      accentColor: courses.first.category.meta(context.palette).color,
       searchHint: 'Search student',
-      emptyLabel: 'No students are enrolled in ${course.name} yet.',
+      emptyLabel: multi
+          ? 'No students are enrolled in these courses yet.'
+          : 'No students are enrolled in ${courses.first.name} yet.',
       people: [
-        for (final s in students)
-          PickablePerson(id: s.membershipId, name: s.fullName, subtitle: s.username)
+        for (final s in found.students)
+          PickablePerson(
+            id: s.membershipId,
+            name: s.fullName,
+            subtitle: multi
+                ? '${s.username} · ${found.coursesOf[s.membershipId]?.join(', ') ?? ''}'
+                : s.username,
+          )
       ],
       initiallySelected: _studentIds,
     );
     if (chosen != null && mounted) setState(() => _studentIds = chosen);
   }
 
-  Course? _selectedCourse() {
-    final courses =
-        ref.read(coursesForFeatureProvider(FeatureKeys.batchCreation)).valueOrNull ??
-            const <Course>[];
-    for (final c in courses) {
-      if (c.id == _courseId) return c;
-    }
-    return null;
+  /// The selected courses the editor can list people for, in selection order. A course they hold no
+  /// Batch creation on is not in their picker list, so it contributes no people here.
+  List<Course> _selectedCourses() {
+    final all = ref.read(coursesForFeatureProvider(FeatureKeys.batchCreation)).valueOrNull ??
+        const <Course>[];
+    return [
+      for (final id in _courseIds)
+        for (final c in all)
+          if (c.id == id) c
+    ];
   }
+
+  Course? _selectedCourse() {
+    final selected = _selectedCourses();
+    return selected.isNotEmpty && selected.first.id == _courseId ? selected.first : null;
+  }
+
+  String _courseNameOf(String id, List<Course> courses) {
+    for (final c in courses) {
+      if (c.id == id) return c.name;
+    }
+    for (final c in widget.existing?.courses ?? const <BatchCourse>[]) {
+      if (c.id == id) return c.name;
+    }
+    return 'Course';
+  }
+
+  Color _courseColorOf(String id, List<Course> courses, AppPalette palette) {
+    for (final c in courses) {
+      if (c.id == id) return c.category.meta(palette).color;
+    }
+    return palette.textMuted;
+  }
+
+  Future<void> _pickCourses(List<Course> selectable) async {
+    final picked = await showAppMultiSelectSheet<Course>(
+      context: context,
+      title: 'Courses in this batch',
+      options: selectable,
+      labelOf: (c) => c.name,
+      initialSelection: selectable.where((c) => _courseIds.contains(c.id)).toList(),
+    );
+    if (picked == null || !mounted) return;
+    final pickedIds = picked.map((c) => c.id).toSet();
+    final selectableIds = selectable.map((c) => c.id).toSet();
+    setState(() {
+      // Courses already on the batch keep their place, so the primary does not shuffle; courses the
+      // editor cannot manage stay put; newly picked ones follow in the order they were picked.
+      _courseIds = [
+        for (final id in _courseIds)
+          if (pickedIds.contains(id) || !selectableIds.contains(id)) id,
+        for (final c in picked)
+          if (!_courseIds.contains(c.id)) c.id,
+      ];
+    });
+    await _pruneToSelectedCourses();
+  }
+
+  /// People are course-scoped, so changing the courses drops the instructors and students who are not
+  /// on any of the selected ones rather than carrying them across.
+  Future<void> _pruneToSelectedCourses() async {
+    final courses = _selectedCourses();
+    if (courses.isEmpty) {
+      setState(() {
+        _trainerIds = {};
+        _studentIds = {};
+      });
+      return;
+    }
+    try {
+      final trainers = await _trainersForSelected(courses);
+      final found = await _studentsForSelected(courses);
+      if (!mounted) return;
+      final trainerIds = trainers.map((t) => t.membershipId).toSet();
+      final studentIds = found.students.map((s) => s.membershipId).toSet();
+      setState(() {
+        _trainerIds = _trainerIds.where(trainerIds.contains).toSet();
+        _studentIds = _studentIds.where(studentIds.contains).toSet();
+      });
+    } catch (e) {
+      _showError(e);
+    }
+  }
+
+  String _courseNamesLabel(List<Course> courses) =>
+      _courseIds.map((id) => _courseNameOf(id, courses)).join(', ');
 
   Future<void> _save() async {
     if (!_valid || _busy) return;
@@ -269,6 +396,7 @@ class _BatchFormScreenState extends ConsumerState<BatchFormScreen> {
         await api.updateBatch(
           widget.existing!.id,
           name: _nameController.text.trim(),
+          courseIds: _courseIds,
           description: widget.existing!.description,
           trainerMembershipIds: _trainerIds.toList(),
           startDate: _startDate,
@@ -282,7 +410,7 @@ class _BatchFormScreenState extends ConsumerState<BatchFormScreen> {
         }
       } else {
         final created = await api.createBatch(
-          courseId: _courseId!,
+          courseIds: _courseIds,
           name: _nameController.text.trim(),
           batchType: _batchType,
           trainerMembershipIds: _trainerIds.toList(),
@@ -345,7 +473,7 @@ class _BatchFormScreenState extends ConsumerState<BatchFormScreen> {
                     fontSize: 17, fontWeight: AppType.bold, color: palette.text)),
             Text(
               _isEditing
-                  ? '${widget.existing!.name} · ${course?.name ?? ''}'
+                  ? '${widget.existing!.name} · ${_courseNamesLabel(ref.watch(coursesForFeatureProvider(FeatureKeys.batchCreation)).valueOrNull ?? const <Course>[])}'
                   : 'Create a new ${_batchType.label.toLowerCase()} batch',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
@@ -395,7 +523,7 @@ class _BatchFormScreenState extends ConsumerState<BatchFormScreen> {
           // A deactivated course can't take a new batch, but the one this batch is already on
           // must stay listed or editing would silently blank the course field.
           final selectable = courses
-              .where((c) => c.isActive || c.id == _courseId)
+              .where((c) => c.isActive || _courseIds.contains(c.id))
               .toList();
 
           return ListView(
@@ -424,117 +552,22 @@ class _BatchFormScreenState extends ConsumerState<BatchFormScreen> {
                 ),
               ),
               _Field(
-                label: 'Course',
+                label: 'Courses',
                 hint: _isEditing
-                    ? 'A batch stays on the course it was created for - its fees and history '
-                        'are already scoped to it.'
-                    : 'Only active courses can take on a new batch.',
-                child: AttachedSelect<Course>(
-                  label: 'Course',
-                  options: selectable,
-                  labelOf: (c) => c.name,
-                  value: course,
-                  placeholder: 'Select a course',
-                  searchable: true,
-                  searchHint: 'Search course',
-                  // Changing it after the fact would re-scope fees and attendance already
-                  // recorded against the original course.
-                  locked: _isEditing,
-                  onSelected: (c) => setState(() {
-                    _courseId = c.id;
-                    // Trainers and students are course-scoped, so a course change invalidates
-                    // both selections rather than carrying across people who aren't on it.
-                    _trainerIds = {};
-                    _studentIds = {};
-                  }),
-                  optionBuilder: (context, option, _) {
-                    final m = option.category.meta(palette);
-                    final selected = option.id == _courseId;
-                    return Row(
-                      children: [
-                        CourseIcon.forCourse(
-                          iconKey: option.iconKey,
-                          category: option.category,
-                          color: m.color,
-                          size: 15,
-                        ),
-                        const SizedBox(width: AppSpacing.md),
-                        Expanded(
-                          child: Text(
-                            option.name,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontSize: AppType.xl,
-                              fontWeight: selected ? AppType.bold : AppType.regular,
-                              color: selected ? m.color : palette.text,
-                            ),
-                          ),
-                        ),
-                      ],
-                    );
-                  },
-                  // The default trigger (a plain "Select a course" row) doesn't carry the
-                  // course's own icon/category the way the reference's does - built by hand here
-                  // rather than via valueColor/dotColor so the icon and the two-line
-                  // "COURSE" caption + value can sit together on the leading edge, matching it.
-                  triggerBuilder: (context, isOpen, toggle) => Pressable(
-                    onTap: _isEditing ? null : toggle,
-                    child: AnimatedContainer(
-                      duration: AppMotion.fade,
-                      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: AppSpacing.md),
-                      decoration: BoxDecoration(
-                        color: palette.surfaceRaised,
-                        borderRadius: AppRadii.all(AppRadii.lg),
-                        border: Border.all(color: isOpen ? palette.primary : palette.border),
+                    ? 'Add a course to take its students in, or remove one once none of its students are in '
+                        'the batch. A course you have no Batch creation on stays as it is.'
+                    : 'Pick every course whose students learn together in this batch. Each student keeps their '
+                        "own course's fee.",
+                child: _CoursesTile(
+                  chips: [
+                    for (final id in _courseIds)
+                      _CourseChip(
+                        name: _courseNameOf(id, courses),
+                        color: _courseColorOf(id, courses, palette),
+                        locked: !selectable.any((c) => c.id == id),
                       ),
-                      child: Row(
-                        children: [
-                          course == null
-                              ? Icon(Icons.menu_book_outlined, size: 16, color: palette.textMuted)
-                              : CourseIcon.forCourse(
-                                  iconKey: course.iconKey,
-                                  category: course.category,
-                                  color: meta.color,
-                                  size: 16,
-                                ),
-                          const SizedBox(width: AppSpacing.md),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text(
-                                  'COURSE',
-                                  style: AppType.sectionLabel(course == null ? palette.textMuted : meta.color),
-                                ),
-                                Text(
-                                  course?.name ?? 'Select a course',
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                    fontSize: AppType.lg,
-                                    fontWeight: course == null ? AppType.regular : AppType.semi,
-                                    color: course == null ? palette.textMuted : palette.text,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(width: AppSpacing.sm),
-                          if (_isEditing)
-                            Icon(Icons.lock_outline, size: 14, color: palette.textMuted)
-                          else
-                            AnimatedRotation(
-                              turns: isOpen ? 0.5 : 0,
-                              duration: AppMotion.chevron,
-                              curve: AppMotion.enter,
-                              child: Icon(Icons.keyboard_arrow_down_rounded, size: 18, color: palette.textMuted),
-                            ),
-                        ],
-                      ),
-                    ),
-                  ),
+                  ],
+                  onTap: () => _pickCourses(selectable),
                 ),
               ),
               _Field(
@@ -674,7 +707,7 @@ class _BatchFormScreenState extends ConsumerState<BatchFormScreen> {
                       const [],
                   count: _trainerIds.length,
                   seeds: _trainerIds.toList(),
-                  onTap: course == null ? null : () => _pickTrainers(course),
+                  onTap: _selectedCourses().isEmpty ? null : _pickTrainers,
                 ),
               ),
               _Field(
@@ -688,7 +721,7 @@ class _BatchFormScreenState extends ConsumerState<BatchFormScreen> {
                   count: _studentIds.length,
                   seeds: _studentIds.toList(),
                   countNoun: 'student',
-                  onTap: course == null ? null : () => _pickStudents(course),
+                  onTap: _selectedCourses().isEmpty ? null : _pickStudents,
                 ),
               ),
               _Field(
@@ -1047,6 +1080,94 @@ class _PeopleTile extends StatelessWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// One course on the batch. [locked] marks a course the editor cannot change - they hold no Batch
+/// creation on it - so it stays on the batch whatever they do here.
+class _CourseChip {
+  const _CourseChip({required this.name, required this.color, required this.locked});
+
+  final String name;
+  final Color color;
+  final bool locked;
+}
+
+/// The batch's courses as chips, tapping which opens the multi-select.
+class _CoursesTile extends StatelessWidget {
+  const _CoursesTile({required this.chips, required this.onTap});
+
+  final List<_CourseChip> chips;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.palette;
+    return Pressable(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: AppSpacing.md),
+        decoration: BoxDecoration(
+          color: palette.surfaceRaised,
+          borderRadius: AppRadii.all(AppRadii.lg),
+          border: Border.all(color: palette.border),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.menu_book_outlined,
+                size: 16, color: chips.isEmpty ? palette.textMuted : palette.primary),
+            const SizedBox(width: AppSpacing.md),
+            Expanded(
+              child: chips.isEmpty
+                  ? Text('Select course(s)',
+                      style: TextStyle(fontSize: AppType.lg, color: palette.textMuted))
+                  : Wrap(
+                      spacing: AppSpacing.sm,
+                      runSpacing: AppSpacing.sm,
+                      children: [for (final chip in chips) _chip(palette, chip)],
+                    ),
+            ),
+            const SizedBox(width: AppSpacing.sm),
+            Text(
+              chips.isEmpty ? 'Select' : 'Edit',
+              style: TextStyle(
+                fontSize: AppType.base,
+                fontWeight: AppType.bold,
+                color: palette.primary,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _chip(AppPalette palette, _CourseChip chip) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: 5),
+      decoration: BoxDecoration(
+        color: chip.color.withValues(alpha: 0.14),
+        borderRadius: AppRadii.all(AppRadii.pill),
+        border: Border.all(color: chip.color.withValues(alpha: 0.4)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (chip.locked) ...[
+            Icon(Icons.lock_outline, size: 11, color: chip.color),
+            const SizedBox(width: 4),
+          ],
+          Text(
+            chip.name,
+            style: TextStyle(
+              fontSize: AppType.smd,
+              fontWeight: AppType.semi,
+              color: chip.color,
+            ),
+          ),
+        ],
       ),
     );
   }

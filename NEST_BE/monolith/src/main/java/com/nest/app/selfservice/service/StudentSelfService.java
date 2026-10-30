@@ -87,7 +87,8 @@ public class StudentSelfService {
         Map<UUID, Batch> batchByCourse = new HashMap<>();
         for (Batch b : batchRepository.findByCourseIdIn(offered.stream().map(Course::getId).toList())) {
             if (b.getStatus() == BatchStatus.ACTIVE) {
-                batchByCourse.putIfAbsent(b.getCourseId(), b);
+                // A batch spanning several courses stands for each of them.
+                b.allCourseIds().forEach(cid -> batchByCourse.putIfAbsent(cid, b));
             }
         }
         Map<UUID, List<Schedule>> slotsByBatch = new HashMap<>();

@@ -80,7 +80,7 @@ public class CalendarService {
         List<Batch> batches = batchRepository.findAllById(batchIds);
         Map<UUID, Batch> batchesById = batches.stream().collect(Collectors.toMap(Batch::getId, b -> b));
         Map<UUID, Course> coursesById = courseRepository.findAllById(
-                batches.stream().map(Batch::getCourseId).collect(Collectors.toSet())
+                batches.stream().flatMap(b -> b.allCourseIds().stream()).collect(Collectors.toSet())
         ).stream().collect(Collectors.toMap(Course::getId, c -> c));
 
         List<ClassInstance> instances = classInstanceRepository.findByBatchIdInAndDateBetween(batchIds, from, to);
@@ -92,10 +92,15 @@ public class CalendarService {
                 continue;
             }
             Course course = coursesById.get(batch.getCourseId());
+            // A batch spanning several courses is labelled with all of them ("Guitar Basic, Guitar Advanced").
+            String courseLabel = batch.allCourseIds().size() > 1
+                    ? batch.allCourseIds().stream().map(coursesById::get).filter(java.util.Objects::nonNull)
+                            .map(Course::getName).collect(Collectors.joining(", "))
+                    : (course != null ? course.getName() : null);
             result.add(new CalendarClassResponse(
                     ci.getId(), ci.getDate(), ci.getStartTime(), ci.getEndTime(), ci.getStatus(),
                     batch.getId(), batch.getName(),
-                    course != null ? course.getId() : null, course != null ? course.getName() : null,
+                    course != null ? course.getId() : null, courseLabel,
                     membership.getAcademyId(), membership.getAcademyName(),
                     membership.getId(),
                     batch.getMeetingLink()

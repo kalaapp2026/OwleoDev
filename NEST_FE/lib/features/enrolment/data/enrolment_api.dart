@@ -44,6 +44,50 @@ final batchMembersProvider =
   return ref.watch(enrolmentApiProvider).members(batchId);
 });
 
+/// A student's scheduled moves between courses (Basic to Advanced from next month) that are still waiting.
+final studentCourseChangesProvider =
+    FutureProvider.autoDispose.family<List<CourseChange>, String>((ref, membershipId) {
+  return ref.watch(enrolmentApiProvider).courseChanges(membershipId);
+});
+
+/// A student's move from one course to another on a future date. Nothing changes for them until that
+/// day: this month's fee slip stays as it was issued, and from the day the new course is billed and the
+/// old one is not.
+class CourseChange {
+  const CourseChange({
+    required this.id,
+    required this.membershipId,
+    required this.fromCourseId,
+    required this.fromCourseName,
+    required this.toCourseId,
+    required this.toCourseName,
+    required this.effectiveOn,
+    required this.toBatchNames,
+  });
+
+  final String id;
+  final String membershipId;
+  final String fromCourseId;
+  final String fromCourseName;
+  final String toCourseId;
+  final String toCourseName;
+  final DateTime effectiveOn;
+
+  /// The batches of the new course they will be placed in on that day, if any were chosen.
+  final List<String> toBatchNames;
+
+  factory CourseChange.fromJson(Map<String, dynamic> json) => CourseChange(
+        id: json['id'] as String,
+        membershipId: json['membershipId'] as String,
+        fromCourseId: json['fromCourseId'] as String,
+        fromCourseName: json['fromCourseName'] as String? ?? '',
+        toCourseId: json['toCourseId'] as String,
+        toCourseName: json['toCourseName'] as String? ?? '',
+        effectiveOn: DateTime.parse(json['effectiveOn'] as String),
+        toBatchNames: ((json['toBatchNames'] as List?) ?? const []).map((e) => e as String).toList(),
+      );
+}
+
 /// The Student Profile module's identity header.
 final studentCardProvider =
     FutureProvider.autoDispose.family<StudentCard, String>((ref, membershipId) {
@@ -683,7 +727,8 @@ class EnrolmentApi {
   /// Creates the batch and enrols its roster in one call, so a dropped request can't leave a
   /// batch that exists but has none of the students the admin just picked.
   Future<Batch> createBatch({
-    required String courseId,
+    /// Every course the batch covers, the first being its primary.
+    required List<String> courseIds,
     required String name,
     String? description,
     required BatchType batchType,
@@ -695,7 +740,7 @@ class EnrolmentApi {
   }) {
     return _client.call(
       (dio) => dio.post('/batches', data: {
-        'courseId': courseId,
+        'courseIds': courseIds,
         'name': name,
         'description': description,
         'batchType': batchType.wire,
@@ -713,6 +758,10 @@ class EnrolmentApi {
   Future<Batch> updateBatch(
     String batchId, {
     required String name,
+
+    /// The courses the batch covers. Null leaves them as they are - what a caller that is not
+    /// editing them sends.
+    List<String>? courseIds,
     String? description,
     required List<String> trainerMembershipIds,
     DateTime? startDate,
@@ -726,6 +775,7 @@ class EnrolmentApi {
     return _client.call(
       (dio) => dio.put('/batches/$batchId', data: {
         'name': name,
+        'courseIds': ?courseIds,
         'description': description,
         'trainerMembershipIds': trainerMembershipIds,
         'startDate': _isoDate(startDate),
@@ -735,6 +785,37 @@ class EnrolmentApi {
       }),
       (data) => Batch.fromJson(data as Map<String, dynamic>),
     );
+  }
+
+  Future<List<CourseChange>> courseChanges(String membershipId) {
+    return _client.call(
+      (dio) => dio.get('/students/$membershipId/course-changes'),
+      (data) => (data as List).map((e) => CourseChange.fromJson(e as Map<String, dynamic>)).toList(),
+    );
+  }
+
+  /// Schedules the move. A null [effectiveOn] means the 1st of next month, so the new course's fee starts
+  /// from next month's slip.
+  Future<CourseChange> scheduleCourseChange(
+    String membershipId, {
+    required String fromCourseId,
+    required String toCourseId,
+    DateTime? effectiveOn,
+    List<String> toBatchIds = const [],
+  }) {
+    return _client.call(
+      (dio) => dio.post('/students/$membershipId/course-changes', data: {
+        'fromCourseId': fromCourseId,
+        'toCourseId': toCourseId,
+        'effectiveOn': ?_isoDate(effectiveOn),
+        'toBatchIds': toBatchIds,
+      }),
+      (data) => CourseChange.fromJson(data as Map<String, dynamic>),
+    );
+  }
+
+  Future<void> cancelCourseChange(String changeId) {
+    return _client.callVoid((dio) => dio.delete('/course-changes/$changeId'));
   }
 
   Future<Batch> setBatchStatus(String batchId, String status) {

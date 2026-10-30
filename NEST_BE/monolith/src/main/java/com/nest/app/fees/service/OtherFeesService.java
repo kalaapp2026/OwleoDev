@@ -76,6 +76,7 @@ public class OtherFeesService {
     private final UserRepository userRepository;
     private final CourseFeatureGuard courseFeatureGuard;
     private final StudentFeeTypeAmountRepository amountRepository;
+    private final com.nest.app.enrolment.service.StudentBatchCourses studentCourses;
 
     public OtherFeesService(FeeTypeRepository feeTypeRepository,
                             FeeTypeBatchRepository feeTypeBatchRepository,
@@ -87,7 +88,9 @@ public class OtherFeesService {
                             AcademyMembershipRepository membershipRepository,
                             UserRepository userRepository,
                             CourseFeatureGuard courseFeatureGuard,
-                            StudentFeeTypeAmountRepository amountRepository) {
+                            StudentFeeTypeAmountRepository amountRepository,
+                            com.nest.app.enrolment.service.StudentBatchCourses studentCourses) {
+        this.studentCourses = studentCourses;
         this.feeTypeRepository = feeTypeRepository;
         this.feeTypeBatchRepository = feeTypeBatchRepository;
         this.studentFeeRepository = studentFeeRepository;
@@ -120,7 +123,7 @@ public class OtherFeesService {
         Map<UUID, Batch> batchesById = batchRepository.findAllById(batchIds).stream()
                 .collect(Collectors.toMap(Batch::getId, b -> b));
         Map<UUID, String> courseNames = courseRepository.findAllById(
-                batchesById.values().stream().map(Batch::getCourseId).collect(Collectors.toSet())
+                batchesById.values().stream().flatMap(b -> b.allCourseIds().stream()).collect(Collectors.toSet())
         ).stream().collect(Collectors.toMap(Course::getId, Course::getName));
 
         // A Trainer only manages the fee types that touch a course they hold FEES_ENTRY on - a
@@ -132,7 +135,7 @@ public class OtherFeesService {
                                 .map(FeeTypeBatch::getBatchId)
                                 .map(batchesById::get)
                                 .filter(Objects::nonNull)
-                                .anyMatch(b -> visibleCourseIds.get().contains(b.getCourseId())))
+                                .anyMatch(b -> b.allCourseIds().stream().anyMatch(visibleCourseIds.get()::contains)))
                         .toList();
 
         return visibleTypes.stream().map(type -> toResponse(type, bindingsByType.getOrDefault(type.getId(), List.of()),
@@ -158,7 +161,7 @@ public class OtherFeesService {
         // A Trainer must hold FEES_ENTRY on every course these batches belong to - otherwise
         // binding a fee type to a batch is a way to start charging students on a course they
         // don't manage. Admins bypass inside the guard.
-        batches.stream().map(Batch::getCourseId).distinct()
+        batches.stream().flatMap(b -> b.allCourseIds().stream()).distinct()
                 .forEach(cid -> courseFeatureGuard.assertCourseFeature(cid, FeatureKey.FEES_ENTRY));
 
         FeeType type = feeTypeRepository.save(FeeType.builder()
@@ -229,7 +232,7 @@ public class OtherFeesService {
         List<UUID> batchIds = request.batchIds().stream().distinct().toList();
         List<Batch> batches = batchRepository.findAllById(batchIds);
         assertBatchesBelongToAcademy(batches, batchIds, academyId);
-        batches.stream().map(Batch::getCourseId).distinct()
+        batches.stream().flatMap(b -> b.allCourseIds().stream()).distinct()
                 .forEach(cid -> courseFeatureGuard.assertCourseFeature(cid, FeatureKey.FEES_ENTRY));
 
         type.setName(name);
@@ -309,7 +312,7 @@ public class OtherFeesService {
         Batch batch = batchRepository.findById(batchId)
                 .orElseThrow(() -> new ResourceNotFoundException("Batch not found: " + batchId));
         assertBatchesBelongToAcademy(List.of(batch), List.of(batchId), academyId);
-        courseFeatureGuard.assertCourseFeature(batch.getCourseId(), FeatureKey.FEES_ENTRY);
+        courseFeatureGuard.assertAnyOfCourses(batch.allCourseIds(), FeatureKey.FEES_ENTRY);
 
         // The fee only applies to batches it is bound to. Showing a roster for an unbound batch
         // would invite collecting a charge those students were never billed.
@@ -330,6 +333,7 @@ public class OtherFeesService {
                 .filter(m -> m.getRoleType() == Role.STUDENT && m.getStatus() == MembershipStatus.ACTIVE)
                 .filter(m -> m.getAcademyId().equals(academyId))
                 .toList();
+        students = onlyTheCallersCourses(batch, students);
         Map<UUID, User> usersById = userRepository.findAllById(
                 students.stream().map(AcademyMembership::getUserId).collect(Collectors.toSet())
         ).stream().collect(Collectors.toMap(User::getId, u -> u));
@@ -492,7 +496,7 @@ public class OtherFeesService {
                     .filter(t -> studentBatchIdsByType.getOrDefault(t.getId(), List.of()).stream()
                             .map(studentBatchesById::get)
                             .filter(Objects::nonNull)
-                            .anyMatch(b -> visibleSet.contains(b.getCourseId())))
+                            .anyMatch(b -> b.allCourseIds().stream().anyMatch(visibleSet::contains)))
                     .toList();
         }
 
@@ -670,6 +674,20 @@ public class OtherFeesService {
         return dueDate != null && dueDate.isBefore(today) ? PaymentStatus.DUE : PaymentStatus.NOT_PAID;
     }
 
+    /** In a batch spanning several courses a trainer sees the fee standing of only the students of the
+     * courses they hold FEES_ENTRY on; a single-course batch is unchanged. */
+    private List<AcademyMembership> onlyTheCallersCourses(Batch batch, List<AcademyMembership> students) {
+        if (batch.allCourseIds().size() < 2 || students.isEmpty()) {
+            return students;
+        }
+        Set<UUID> held = courseFeatureGuard.heldCourses(batch.allCourseIds(), FeatureKey.FEES_ENTRY);
+        Map<UUID, Set<UUID>> enrolled = studentCourses.activeEnrolments(
+                students.stream().map(AcademyMembership::getId).toList());
+        return students.stream()
+                .filter(m -> studentCourses.inBatch(batch, m.getId(), enrolled).stream().anyMatch(held::contains))
+                .toList();
+    }
+
     /** A Trainer may record payment against a shared fee type only if they hold FEES_ENTRY on at
      * least one course it is actually bound to - the same requirement {@link #createFeeType} puts
      * on binding the type in the first place, applied again here since a type once created can be
@@ -680,7 +698,7 @@ public class OtherFeesService {
         Set<UUID> boundBatchIds = feeTypeBatchRepository.findByFeeTypeId(feeTypeId).stream()
                 .map(FeeTypeBatch::getBatchId).collect(Collectors.toSet());
         Set<UUID> courseIds = batchRepository.findAllById(boundBatchIds).stream()
-                .map(Batch::getCourseId).collect(Collectors.toSet());
+                .flatMap(b -> b.allCourseIds().stream()).collect(Collectors.toSet());
         if (courseIds.isEmpty()) {
             return;
         }
@@ -695,7 +713,7 @@ public class OtherFeesService {
         if (batches.size() != requestedIds.stream().distinct().count()) {
             throw new ResourceNotFoundException("One or more batches do not exist");
         }
-        Set<UUID> courseIds = batches.stream().map(Batch::getCourseId).collect(Collectors.toSet());
+        Set<UUID> courseIds = batches.stream().flatMap(b -> b.allCourseIds().stream()).collect(Collectors.toSet());
         List<Course> courses = courseRepository.findAllById(courseIds);
         if (courses.size() != courseIds.size()
                 || courses.stream().anyMatch(c -> !academyId.equals(c.getAcademyId()))) {
@@ -710,7 +728,8 @@ public class OtherFeesService {
                 .filter(Objects::nonNull)
                 .map(b -> new FeeTypeResponse.BatchBinding(
                         b.getId(), b.getName(), b.getCourseId(),
-                        courseNames.getOrDefault(b.getCourseId(), "Unknown course")))
+                        b.allCourseIds().stream().map(id -> courseNames.getOrDefault(id, "Unknown course"))
+                                .collect(Collectors.joining(", "))))
                 .sorted(Comparator.comparing(FeeTypeResponse.BatchBinding::courseName,
                         String.CASE_INSENSITIVE_ORDER))
                 .toList();

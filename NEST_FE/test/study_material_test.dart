@@ -27,6 +27,7 @@ Map<String, dynamic> materialJson({
     };
 
 void main() {
+  audienceTests();
   group('file type', () {
     test('round-trips every wire value', () {
       for (final type in StudyMaterialType.values) {
@@ -156,5 +157,83 @@ void main() {
       expect(s.batchName, '');
       expect(s.isActive, isTrue);
     });
+  });
+}
+
+void audienceTests() {
+  group('a material shared with an audience', () {
+    test('reads the courses and batches it goes to, and whether the caller may change it', () {
+      final m = StudyMaterial.fromJson({
+        ...materialJson(),
+        'batchId': null,
+        'canManage': false,
+        'targets': [
+          {'type': 'COURSE', 'id': 'adv', 'name': 'Guitar Advanced'},
+          {'type': 'BATCH', 'id': 'sat', 'name': 'Saturday'},
+        ],
+      });
+
+      expect(m.batchId, isNull);
+      expect(m.courseTargetIds, ['adv']);
+      expect(m.batchTargetIds, ['sat']);
+      expect(m.audienceLabel, 'Guitar Advanced · Saturday');
+      expect(m.canManage, isFalse);
+    });
+
+    test('an older server that sends no audience still reads as a plain batch file', () {
+      final m = StudyMaterial.fromJson(materialJson());
+
+      expect(m.batchId, 'b1');
+      expect(m.targets, isEmpty);
+      expect(m.audienceLabel, '');
+      expect(m.canManage, isTrue);
+    });
+  });
+
+  group('a batch summary that spans courses', () {
+    final summary = BatchMaterialSummary.fromJson({
+      'batchId': 'sat',
+      'batchName': 'Saturday',
+      'courseId': 'basic',
+      'courseName': 'Guitar Basic',
+      'courseCategory': 'MUSIC',
+      'batchStatus': 'ACTIVE',
+      'fileCount': 3,
+      'courseIds': ['basic', 'adv'],
+      'courseNames': ['Guitar Basic', 'Guitar Advanced'],
+    });
+
+    test('is under each of its courses', () {
+      expect(summary.isMultiCourse, isTrue);
+      expect(summary.coversCourse('basic'), isTrue);
+      expect(summary.coversCourse('adv'), isTrue);
+      expect(summary.coversCourse('vocals'), isFalse);
+      expect(summary.coursesLabel, 'Guitar Basic, Guitar Advanced');
+    });
+
+    test('an older server with no course list still covers its one course', () {
+      final single = BatchMaterialSummary.fromJson({
+        'batchId': 'b',
+        'batchName': 'A',
+        'courseId': 'c1',
+        'courseName': 'Guitar',
+        'courseCategory': 'MUSIC',
+      });
+      expect(single.coversCourse('c1'), isTrue);
+      expect(single.coursesLabel, 'Guitar');
+    });
+  });
+
+  test('a course summary reads its name, count and last upload', () {
+    final c = CourseMaterialSummary.fromJson({
+      'courseId': 'adv',
+      'courseName': 'Guitar Advanced',
+      'courseCategory': 'MUSIC',
+      'fileCount': 2,
+      'lastUploadedAt': '2026-10-01T08:00:00Z',
+    });
+    expect(c.courseName, 'Guitar Advanced');
+    expect(c.fileCount, 2);
+    expect(c.lastUploadedAt, isNotNull);
   });
 }

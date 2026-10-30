@@ -7,6 +7,7 @@ import 'package:nest_fe/core/design/attached_select.dart';
 import 'package:nest_fe/core/design/category_meta.dart';
 import 'package:nest_fe/core/design/course_icons.dart';
 import 'package:nest_fe/core/design/pressable.dart';
+import 'package:nest_fe/core/design/segmented_control.dart';
 import 'package:nest_fe/core/format/money.dart';
 import 'package:nest_fe/features/curriculum/data/study_material.dart';
 import 'package:nest_fe/features/curriculum/data/study_material_api.dart';
@@ -29,10 +30,10 @@ enum MaterialBatchSort {
   final String label;
 }
 
-/// Study Material's landing screen: every batch, with how much has been shared with it.
+/// Study Material's landing screen: every batch - and every course - with how much has been shared with it.
 ///
-/// Organised by batch rather than by course because that is the unit material is actually shared
-/// with - a chord chart goes to Batch A, not to everyone taking Guitar.
+/// Files are shared with an audience of batches and/or whole courses, so both are browsable here: a
+/// chord chart for Batch A sits under that batch, one for everyone taking Guitar under the Guitar course.
 class StudyMaterialHomeScreen extends ConsumerStatefulWidget {
   const StudyMaterialHomeScreen({super.key});
 
@@ -46,6 +47,9 @@ class _StudyMaterialHomeScreenState extends ConsumerState<StudyMaterialHomeScree
   String _query = '';
   MaterialBatchSort _sort = MaterialBatchSort.recent;
   CourseCategory? _categoryFilter;
+
+  /// Whether the list below shows courses rather than batches.
+  bool _showCourses = false;
 
   @override
   void dispose() {
@@ -82,10 +86,27 @@ class _StudyMaterialHomeScreenState extends ConsumerState<StudyMaterialHomeScree
     return filtered;
   }
 
+  List<CourseMaterialSummary> _visibleCourses(List<CourseMaterialSummary> all) {
+    final q = _query.trim().toLowerCase();
+    final filtered = all.where((c) {
+      if (_categoryFilter != null && c.courseCategory != _categoryFilter) return false;
+      return q.isEmpty || c.courseName.toLowerCase().contains(q);
+    }).toList();
+    filtered.sort((a, b) => switch (_sort) {
+          MaterialBatchSort.az => a.courseName.toLowerCase().compareTo(b.courseName.toLowerCase()),
+          MaterialBatchSort.za => b.courseName.toLowerCase().compareTo(a.courseName.toLowerCase()),
+          MaterialBatchSort.mostFiles => b.fileCount.compareTo(a.fileCount),
+          MaterialBatchSort.recent => (b.lastUploadedAt ?? DateTime(1970))
+              .compareTo(a.lastUploadedAt ?? DateTime(1970)),
+        });
+    return filtered;
+  }
+
   @override
   Widget build(BuildContext context) {
     final palette = context.palette;
     final async = ref.watch(materialBatchesProvider);
+    final courses = ref.watch(materialCoursesProvider).valueOrNull ?? const <CourseMaterialSummary>[];
     final membership = ref.watch(sessionControllerProvider).user?.activeMembership;
     final isStudent = membership?.roleType == 'STUDENT';
 
@@ -104,6 +125,7 @@ class _StudyMaterialHomeScreenState extends ConsumerState<StudyMaterialHomeScree
           ),
           data: (batches) {
             final visible = _visible(batches);
+            final visibleCourses = _visibleCourses(courses);
             final totalFiles =
                 batches.fold<int>(0, (sum, b) => sum + b.fileCount);
 
@@ -118,6 +140,15 @@ class _StudyMaterialHomeScreenState extends ConsumerState<StudyMaterialHomeScree
                   child: Column(
                     children: [
                       _searchAndSort(palette, isStudent),
+                      const SizedBox(height: AppSpacing.lg),
+                      AppSegmentedControl<bool>(
+                        options: const [false, true],
+                        labelOf: (showCourses) => showCourses ? 'Courses' : 'Batches',
+                        isSelected: (showCourses) => showCourses == _showCourses,
+                        activeColorOf: (context, _) => context.palette.primary,
+                        activeTextColorOf: (context, _) => context.palette.onPrimary,
+                        onTap: (showCourses) => setState(() => _showCourses = showCourses),
+                      ),
                       // A student has no sorting or category filter: one search box, and the three
                       // libraries beside it, as in the reference.
                       if (!isStudent) ...[
@@ -138,7 +169,9 @@ class _StudyMaterialHomeScreenState extends ConsumerState<StudyMaterialHomeScree
                   ),
                 ),
                 Expanded(
-                  child: visible.isEmpty
+                  child: _showCourses
+                      ? _courseList(palette, visibleCourses, courses.isEmpty)
+                      : visible.isEmpty
                       ? Center(
                           child: Padding(
                             padding: const EdgeInsets.all(AppSpacing.x4l),
@@ -173,6 +206,39 @@ class _StudyMaterialHomeScreenState extends ConsumerState<StudyMaterialHomeScree
                 ),
               ],
             );
+          },
+        ),
+      ),
+    );
+  }
+
+  Widget _courseList(AppPalette palette, List<CourseMaterialSummary> visible, bool noneAtAll) {
+    if (visible.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.x4l),
+          child: Text(
+            noneAtAll ? 'No courses to show yet.' : 'No courses match this search.',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: AppType.lg, color: palette.textFaint),
+          ),
+        ),
+      );
+    }
+    return ListView.builder(
+      padding: const EdgeInsets.fromLTRB(
+          AppSpacing.xl, AppSpacing.md, AppSpacing.xl, AppSpacing.listBottom),
+      itemCount: visible.length,
+      itemBuilder: (context, i) => Padding(
+        padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+        child: _CourseRow(
+          summary: visible[i],
+          onTap: () async {
+            await Navigator.of(context).push(MaterialPageRoute(
+              builder: (_) => BatchMaterialScreen(course: visible[i]),
+            ));
+            ref.invalidate(materialBatchesProvider);
+            ref.invalidate(materialCoursesProvider);
           },
         ),
       ),
@@ -444,6 +510,76 @@ class _StudyMaterialHomeScreenState extends ConsumerState<StudyMaterialHomeScree
   }
 }
 
+/// One course: its name, and how much has been shared with all of it.
+class _CourseRow extends StatelessWidget {
+  const _CourseRow({required this.summary, required this.onTap});
+
+  final CourseMaterialSummary summary;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.palette;
+    final meta = summary.courseCategory.meta(palette);
+    return Pressable(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(AppSpacing.lg),
+        decoration: BoxDecoration(
+          color: palette.surfaceRaised,
+          borderRadius: AppRadii.all(AppRadii.xxl),
+          border: Border.all(color: palette.borderSoft),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(color: meta.soft, borderRadius: AppRadii.all(AppRadii.lg)),
+              child: CourseIcon.forCourse(
+                iconKey: summary.courseIconKey,
+                category: summary.courseCategory,
+                color: meta.color,
+                size: 18,
+              ),
+            ),
+            const SizedBox(width: AppSpacing.lg),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(summary.courseName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                          fontSize: AppType.xxl, fontWeight: AppType.semi, color: palette.text)),
+                  const SizedBox(height: 3),
+                  Text('Whole course',
+                      style: TextStyle(
+                          fontSize: AppType.smd, fontWeight: AppType.medium, color: meta.color)),
+                  const SizedBox(height: 2),
+                  Text(
+                    summary.fileCount == 0
+                        ? 'No files yet'
+                        : '${summary.fileCount} file${summary.fileCount == 1 ? '' : 's'}'
+                            '${summary.lastUploadedAt == null ? '' : ' · Updated ${formatFeeDate(summary.lastUploadedAt!)}'}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontSize: AppType.xs, color: palette.textFaint),
+                  ),
+                ],
+              ),
+            ),
+            Icon(Icons.chevron_right, size: 16, color: palette.textFaint),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _BatchRow extends StatelessWidget {
   const _BatchRow({required this.summary, required this.onTap});
 
@@ -525,7 +661,7 @@ class _BatchRow extends StatelessWidget {
                       ],
                     ),
                     const SizedBox(height: 3),
-                    Text(summary.courseName ?? 'Unlinked course',
+                    Text(summary.coursesLabel,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(

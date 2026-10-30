@@ -1,25 +1,34 @@
 package com.nest.app.curriculum.entity;
 
+import jakarta.persistence.CollectionTable;
 import jakarta.persistence.Column;
+import jakarta.persistence.ElementCollection;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
+import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.Id;
 import jakarta.persistence.Index;
+import jakarta.persistence.JoinColumn;
 import jakarta.persistence.Table;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import org.hibernate.annotations.BatchSize;
 import org.hibernate.annotations.CreationTimestamp;
 
 import java.time.Instant;
+import java.util.LinkedHashSet;
+import java.util.Set;
 import java.util.UUID;
 
 /**
- * A file shared with one batch - this week's chord chart, a backing track, a photo of the board.
+ * A file shared with an audience - this week's chord chart, a backing track, a photo of the board. The
+ * audience is a set of courses (every enrolled student) and/or batches (the students in them), kept in
+ * {@code study_material_targets}.
  *
  * <p>This replaced the old per-course syllabus units (V29): material hangs off a batch, not off an
  * ordered curriculum structure. The old {@code syllabus_*} tables are kept in the database but
@@ -41,8 +50,17 @@ public class StudyMaterial {
     @GeneratedValue
     private UUID id;
 
-    @Column(name = "batch_id", nullable = false)
+    /** The material's "home batch": the first batch it was aimed at, or null for a file aimed only at
+     * courses. Kept for older readers; the audience itself is {@link #targets}. */
+    @Column(name = "batch_id")
     private UUID batchId;
+
+    /** Who it is for: courses and/or batches. Never empty for a stored material. */
+    @ElementCollection(fetch = FetchType.EAGER)
+    @CollectionTable(name = "study_material_targets", joinColumns = @JoinColumn(name = "material_id"))
+    @BatchSize(size = 100)
+    @Builder.Default
+    private Set<MaterialTarget> targets = new LinkedHashSet<>();
 
     @Column(nullable = false)
     private String title;

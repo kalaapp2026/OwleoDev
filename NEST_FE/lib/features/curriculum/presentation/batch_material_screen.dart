@@ -27,15 +27,20 @@ enum MaterialSort {
   final String label;
 }
 
-/// One batch's shared files.
+/// One batch's - or one whole course's - shared files.
 ///
 /// [studentPreview] renders it the way a student sees it - no kebab, no permission toggles, just
 /// the list. Borrowed from Google Forms' preview: the only reliable way to know what you've
 /// actually shared is to look at it as the person receiving it.
 class BatchMaterialScreen extends ConsumerStatefulWidget {
-  const BatchMaterialScreen({super.key, required this.summary, this.studentPreview = false});
+  const BatchMaterialScreen({super.key, this.summary, this.course, this.studentPreview = false})
+      : assert(summary != null || course != null, 'Give it a batch or a course');
 
-  final BatchMaterialSummary summary;
+  /// The batch whose files to show - or null when showing a whole [course] instead.
+  final BatchMaterialSummary? summary;
+
+  /// The course whose files to show: those shared with all of it and those shared with a batch of it.
+  final CourseMaterialSummary? course;
 
   /// Renders it the way a student sees it while the caller is still an editor - the deliberate
   /// 'preview as student' action.
@@ -52,7 +57,23 @@ class _BatchMaterialScreenState extends ConsumerState<BatchMaterialScreen> {
   StudyMaterialType? _typeFilter;
   String? _kebabFor;
 
-  BatchMaterialSummary get summary => widget.summary;
+  bool get _isCourse => widget.course != null;
+
+  /// What the page is called: the batch, or the course.
+  String get _title => _isCourse ? widget.course!.courseName : widget.summary!.batchName;
+
+  String get _subtitle => _isCourse
+      ? 'Everything shared with this course'
+      : widget.summary!.coursesLabel;
+
+  CourseCategory get _category =>
+      _isCourse ? widget.course!.courseCategory : widget.summary!.courseCategory;
+
+  String get _scopeWord => _isCourse ? 'course' : 'batch';
+
+  ProviderBase<AsyncValue<List<StudyMaterial>>> get _filesProvider => _isCourse
+      ? courseMaterialsProvider(widget.course!.courseId)
+      : batchMaterialsProvider(widget.summary!.batchId);
 
   /// True when this render must hide every editing affordance - either because the caller asked
   /// to preview it as a student, or because they genuinely cannot edit.
@@ -82,7 +103,12 @@ class _BatchMaterialScreenState extends ConsumerState<BatchMaterialScreen> {
     super.dispose();
   }
 
-  void _refresh() => ref.invalidate(batchMaterialsProvider(summary.batchId));
+  void _refresh() {
+    ref.invalidate(_filesProvider);
+    // The home screen's counts and the libraries move with it.
+    ref.invalidate(materialBatchesProvider);
+    ref.invalidate(materialCoursesProvider);
+  }
 
   void _showError(Object error) {
     if (!mounted) return;
@@ -94,7 +120,9 @@ class _BatchMaterialScreenState extends ConsumerState<BatchMaterialScreen> {
   /// Opens a file: the player for audio, a preview for documents and images.
   void _open(StudyMaterial material) {
     setState(() => _kebabFor = null);
-    final editable = !_readOnlyNow();
+    // The server says whether THIS caller may change THIS file: a trainer holding only some of the courses
+    // it reaches can open it but not edit it.
+    final editable = !_readOnlyNow() && material.canManage;
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (viewerContext) => FileViewerScreen(
@@ -123,7 +151,8 @@ class _BatchMaterialScreenState extends ConsumerState<BatchMaterialScreen> {
     setState(() => _kebabFor = null);
     final saved = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
-        builder: (_) => UploadMaterialScreen(summary: summary, existing: existing),
+        builder: (_) =>
+            UploadMaterialScreen(batch: widget.summary, course: widget.course, existing: existing),
       ),
     );
     if (saved == true) {
@@ -147,6 +176,10 @@ class _BatchMaterialScreenState extends ConsumerState<BatchMaterialScreen> {
             title: material.title,
             description: material.description,
             permission: next,
+            // Sent back as they are: leaving them out would reset a file narrowed to chosen students
+            // to everyone the moment its download permission was flipped.
+            visibility: material.visibility,
+            studentIds: material.studentIds,
           );
       _refresh();
       if (mounted) showAppToast(context, 'Marked as ${next.label.toLowerCase()}');
@@ -161,8 +194,8 @@ class _BatchMaterialScreenState extends ConsumerState<BatchMaterialScreen> {
       context: context,
       title: 'Delete this file?',
       message:
-          '"${material.title}" will be permanently removed for students in this '
-          "batch. This can't be undone.",
+          '"${material.title}" will be permanently removed for everyone it is shared with. '
+          "This can't be undone.",
       confirmLabel: 'Delete',
     );
     if (!confirmed) return;
@@ -197,8 +230,8 @@ class _BatchMaterialScreenState extends ConsumerState<BatchMaterialScreen> {
   @override
   Widget build(BuildContext context) {
     final palette = context.palette;
-    final meta = summary.courseCategory.meta(palette);
-    final async = ref.watch(batchMaterialsProvider(summary.batchId));
+    final meta = _category.meta(palette);
+    final async = ref.watch(_filesProvider);
 
     return Scaffold(
       backgroundColor: palette.bg,
@@ -209,13 +242,13 @@ class _BatchMaterialScreenState extends ConsumerState<BatchMaterialScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
-              summary.batchName,
+              _title,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(fontSize: 17, fontWeight: AppType.bold, color: palette.text),
             ),
             Text(
-              summary.courseName ?? 'Unlinked course',
+              _subtitle,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(fontSize: AppType.smd, color: palette.textMuted),
@@ -235,7 +268,7 @@ class _BatchMaterialScreenState extends ConsumerState<BatchMaterialScreen> {
                   onTap: () => Navigator.of(context).push(
                     MaterialPageRoute(
                       builder: (_) =>
-                          BatchMaterialScreen(summary: summary, studentPreview: true),
+                          BatchMaterialScreen(summary: widget.summary, course: widget.course, studentPreview: true),
                     ),
                   ),
                 ),
@@ -318,9 +351,9 @@ class _BatchMaterialScreenState extends ConsumerState<BatchMaterialScreen> {
                           child: Text(
                             materials.isEmpty
                                 ? _readOnly
-                                      ? 'No study material has been shared with this batch yet.'
+                                      ? 'No study material has been shared with this $_scopeWord yet.'
                                       : 'No study material yet. Upload notes, audio or images for '
-                                            'this batch below.'
+                                            'this $_scopeWord below.'
                                 : 'No files match this search.',
                             textAlign: TextAlign.center,
                             style: TextStyle(
@@ -337,7 +370,7 @@ class _BatchMaterialScreenState extends ConsumerState<BatchMaterialScreen> {
                             child: _MaterialRow(
                               material: material,
                               accent: meta.color,
-                              studentPreview: _readOnly,
+                              studentPreview: _readOnly || !material.canManage,
                               onOpen: () => _open(material),
                               kebabOpen: _kebabFor == material.id,
                               onToggleKebab: () => setState(

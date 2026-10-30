@@ -82,8 +82,9 @@ class ClassReminderServiceTest {
     @Test
     void needsAttendanceRescheduleOrBatchSchedulingOnTheCourse() {
         given(instance(ClassInstanceStatus.SCHEDULED, LocalDate.now().plusDays(1), null));
-        doThrow(new ForbiddenException("nope")).when(courseFeatureGuard).assertAnyCourseFeature(
-                courseId, FeatureKey.ATTENDANCE, FeatureKey.RESCHEDULE, FeatureKey.BATCH_SCHEDULING);
+        doThrow(new ForbiddenException("nope")).when(courseFeatureGuard).assertBatchAccess(
+                java.util.Set.of(courseId), batchId,
+                FeatureKey.ATTENDANCE, FeatureKey.RESCHEDULE, FeatureKey.BATCH_SCHEDULING);
 
         assertThatThrownBy(() -> service.remind(instanceId)).isInstanceOf(ForbiddenException.class);
         verify(notificationTriggers, never()).classReminder(any());
@@ -93,7 +94,8 @@ class ClassReminderServiceTest {
     void aTrainerGivenOnlyOtherBatchesOfTheCourseIsRefused() {
         given(instance(ClassInstanceStatus.SCHEDULED, LocalDate.now().plusDays(1), null));
         doThrow(new ForbiddenException("outside your batches")).when(courseFeatureGuard)
-                .assertBatchInScope(courseId, batchId);
+                .assertBatchAccess(java.util.Set.of(courseId), batchId,
+                        FeatureKey.ATTENDANCE, FeatureKey.RESCHEDULE, FeatureKey.BATCH_SCHEDULING);
 
         assertThatThrownBy(() -> service.remind(instanceId)).isInstanceOf(ForbiddenException.class);
         verify(notificationTriggers, never()).classReminder(any());

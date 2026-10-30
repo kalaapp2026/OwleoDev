@@ -115,8 +115,10 @@ public class StudentRegistrationService {
         ).stream().collect(Collectors.toMap(Course::getId, c -> c));
         Set<UUID> batchIds = batchMemberRepository.findByMembershipId(membershipId).stream()
                 .map(BatchMember::getBatchId).collect(Collectors.toSet());
-        Map<UUID, String> batchNameByCourse = batchRepository.findAllById(batchIds).stream()
-                .collect(Collectors.toMap(Batch::getCourseId, Batch::getName, (a, b) -> a));
+        Map<UUID, String> batchNameByCourse = new java.util.HashMap<>();
+        for (Batch b : batchRepository.findAllById(batchIds)) {
+            b.allCourseIds().forEach(cid -> batchNameByCourse.putIfAbsent(cid, b.getName()));
+        }
 
         List<StudentCardResponse.EnrolledCourse> courses = enrolments.stream()
                 .map(cm -> {

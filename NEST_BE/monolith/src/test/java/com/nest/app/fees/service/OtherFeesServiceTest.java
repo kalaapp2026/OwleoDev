@@ -89,7 +89,9 @@ class OtherFeesServiceTest {
     void setUp() {
         service = new OtherFeesService(feeTypeRepository, feeTypeBatchRepository, studentFeeRepository,
                 feeTransactionRepository, batchRepository, batchMemberRepository, courseRepository,
-                membershipRepository, userRepository, courseFeatureGuard, amountRepository);
+                membershipRepository, userRepository, courseFeatureGuard, amountRepository,
+                new com.nest.app.enrolment.service.StudentBatchCourses(
+                        org.mockito.Mockito.mock(com.nest.app.identity.repository.CourseMapRepository.class)));
         UUID adminMembershipId = UUID.randomUUID();
         TenantContext.set(new NestPrincipal(UUID.randomUUID(), "meera", Role.ACADEMY_ADMIN,
                 List.of(new MembershipClaim(adminMembershipId, academyId, "Kalakshetra",
@@ -314,7 +316,7 @@ class OtherFeesServiceTest {
         when(courseRepository.findAllById(Set.of(courseId)))
                 .thenReturn(List.of(course(courseId, academyId)));
         doThrow(new ForbiddenException("nope")).when(courseFeatureGuard)
-                .assertCourseFeature(courseId, FeatureKey.FEES_ENTRY);
+                .assertAnyOfCourses(Set.of(courseId), FeatureKey.FEES_ENTRY);
 
         assertThatThrownBy(() -> service.roster(feeTypeId, batchId))
                 .isInstanceOf(ForbiddenException.class);

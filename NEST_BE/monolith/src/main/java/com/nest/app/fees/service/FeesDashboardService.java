@@ -244,10 +244,11 @@ public class FeesDashboardService {
                 if (batch == null) {
                     continue;
                 }
-                if (courseId != null && !batch.getCourseId().equals(courseId)) {
+                if (courseId != null && !batch.coversCourse(courseId)) {
                     continue;
                 }
-                if (visibleCourseIds.isPresent() && !visibleCourseIds.get().contains(batch.getCourseId())) {
+                if (visibleCourseIds.isPresent()
+                        && batch.allCourseIds().stream().noneMatch(visibleCourseIds.get()::contains)) {
                     continue;
                 }
                 if (batchId != null && !batch.getId().equals(batchId)) {

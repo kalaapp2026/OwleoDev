@@ -94,6 +94,65 @@ public class CourseFeatureGuard {
                 + "' permission for this course");
     }
 
+    // ---- Batches that span several courses -------------------------------------------------------
+    //
+    // A batch can cover Basic + Intermediate + Advanced at once. Looking at it, marking its attendance
+    // or working inside it needs the feature on AT LEAST ONE of its courses (and then only the students
+    // of the courses you hold are yours to see); changing the batch itself - its courses, its
+    // existence - needs the feature on EVERY one of them, so a trainer cannot reshape a class that
+    // contains a course they were never given.
+
+    /** The courses among {@code courseIds} on which the caller holds ANY of {@code featureKeys}. */
+    public java.util.Set<UUID> heldCourses(java.util.Collection<UUID> courseIds, String... featureKeys) {
+        java.util.Set<UUID> held = new java.util.LinkedHashSet<>();
+        for (UUID courseId : courseIds) {
+            for (String key : featureKeys) {
+                if (hasCourseFeature(courseId, key)) {
+                    held.add(courseId);
+                    break;
+                }
+            }
+        }
+        return held;
+    }
+
+    /** Passes when the caller holds any of {@code featureKeys} on at least one of {@code courseIds}. */
+    public void assertAnyOfCourses(java.util.Collection<UUID> courseIds, String... featureKeys) {
+        if (heldCourses(courseIds, featureKeys).isEmpty()) {
+            throw new ForbiddenException("You don't have the '" + String.join("' or '", featureKeys)
+                    + "' permission for this batch's course" + (courseIds.size() == 1 ? "" : "s"));
+        }
+    }
+
+    /** Passes only when the caller holds {@code featureKey} on every one of {@code courseIds}. */
+    public void assertAllCourses(java.util.Collection<UUID> courseIds, String featureKey) {
+        for (UUID courseId : courseIds) {
+            assertCourseFeature(courseId, featureKey);
+        }
+    }
+
+    /**
+     * True when the caller may work inside this batch: they hold one of {@code featureKeys} on one of
+     * its courses AND the batch is within the batches they were given for that course. Both halves are
+     * checked per course - a trainer scoped to Batch A on Basic and unrestricted on a course they hold no
+     * grant for must not get Batch B through the second course's "no limit".
+     */
+    public boolean batchAccessible(java.util.Collection<UUID> courseIds, UUID batchId, String... featureKeys) {
+        for (UUID courseId : heldCourses(courseIds, featureKeys)) {
+            if (inScope(batchScope(courseId), batchId)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public void assertBatchAccess(java.util.Collection<UUID> courseIds, UUID batchId, String... featureKeys) {
+        assertAnyOfCourses(courseIds, featureKeys);
+        if (!batchAccessible(courseIds, batchId, featureKeys)) {
+            throw new ForbiddenException("That batch is outside the batches you were given");
+        }
+    }
+
     /**
      * The same check as {@link #assertCourseFeature}, as a question rather than an assertion.
      *

@@ -5,7 +5,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:nest_fe/app/theme/app_tokens.dart';
 import 'package:nest_fe/app/theme/app_typography.dart';
+import 'package:nest_fe/core/auth/feature_keys.dart';
 import 'package:nest_fe/core/design/buttons.dart';
+import 'package:nest_fe/core/design/sheets.dart';
+import 'package:nest_fe/features/curriculum/data/course.dart';
+import 'package:nest_fe/features/curriculum/data/curriculum_api.dart';
 import 'package:nest_fe/core/design/pressable.dart';
 import 'package:nest_fe/core/design/segmented_control.dart';
 import 'package:nest_fe/features/curriculum/data/study_material.dart';
@@ -23,10 +27,14 @@ const _descriptionLimit = 100;
 /// Editing deliberately cannot swap the file: the title, note and permission describe *this*
 /// upload, and silently replacing the bytes under them would leave students who already opened it
 /// with a stale copy and no indication anything changed. Replacing means uploading again.
+///
+/// The audience is any mix of whole courses and batches. Opened from a batch's page it starts on that
+/// batch, from a course's page on that course, and from an existing file on whoever it already goes to.
 class UploadMaterialScreen extends ConsumerStatefulWidget {
-  const UploadMaterialScreen({super.key, required this.summary, this.existing});
+  const UploadMaterialScreen({super.key, this.batch, this.course, this.existing});
 
-  final BatchMaterialSummary summary;
+  final BatchMaterialSummary? batch;
+  final CourseMaterialSummary? course;
   final StudyMaterial? existing;
 
   @override
@@ -51,6 +59,14 @@ class _UploadMaterialScreenState extends ConsumerState<UploadMaterialScreen> {
 
   /// Membership ids of the students a SELECTED material goes to.
   late final Set<String> _studentIds = {...?widget.existing?.studentIds};
+
+  /// Who the file is shared with: whole courses and/or batches.
+  late final Set<String> _courseIds = {
+    if (widget.existing != null) ...widget.existing!.courseTargetIds else if (widget.course != null) widget.course!.courseId,
+  };
+  late final Set<String> _batchIds = {
+    if (widget.existing != null) ...widget.existing!.batchTargetIds else if (widget.batch != null) widget.batch!.batchId,
+  };
 
   /// Same idea for the title - derived from the filename until typed into.
   late bool _titleTouched = widget.existing != null;
@@ -123,6 +139,7 @@ class _UploadMaterialScreenState extends ConsumerState<UploadMaterialScreen> {
       _titleRule.check(_titleController.text) == null &&
       _descriptionRule.check(_descriptionController.text) == null &&
       (_isEditing || _bytes != null) &&
+      (_courseIds.isNotEmpty || _batchIds.isNotEmpty) &&
       // A restricted material with nobody picked would be shared with no one at all, which is
       // never what was meant - and is invisible afterwards, since it shows up on no one's screen.
       (_visibility == StudyMaterialVisibility.all || _studentIds.isNotEmpty);
@@ -131,6 +148,7 @@ class _UploadMaterialScreenState extends ConsumerState<UploadMaterialScreen> {
     if (!_isEditing && _bytes == null) return 'Choose a file to upload.';
     final titleProblem = _titleRule.check(_titleController.text) ?? _descriptionRule.check(_descriptionController.text);
     if (titleProblem != null) return titleProblem;
+    if (_courseIds.isEmpty && _batchIds.isEmpty) return 'Pick at least one course or batch to share this with.';
     return 'Pick who this file is for.';
   }
 
@@ -149,10 +167,13 @@ class _UploadMaterialScreenState extends ConsumerState<UploadMaterialScreen> {
           permission: _permission,
           visibility: _visibility,
           studentIds: _studentIds,
+          courseIds: _courseIds,
+          batchIds: _batchIds,
         );
       } else {
         await api.upload(
-          batchId: widget.summary.batchId,
+          courseIds: _courseIds,
+          batchIds: _batchIds,
           bytes: _bytes!,
           fileName: _fileName!,
           title: _titleController.text.trim(),
@@ -188,7 +209,10 @@ class _UploadMaterialScreenState extends ConsumerState<UploadMaterialScreen> {
             Text(_isEditing ? 'Edit Material' : 'Upload Material',
                 style: TextStyle(
                     fontSize: 17, fontWeight: AppType.bold, color: palette.text)),
-            Text('${widget.summary.batchName} · ${widget.summary.courseName ?? ''}',
+            Text(
+                widget.batch != null
+                    ? '${widget.batch!.batchName} · ${widget.batch!.coursesLabel}'
+                    : widget.course?.courseName ?? 'Shared with courses and batches',
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(fontSize: AppType.smd, color: palette.textMuted)),
@@ -252,11 +276,16 @@ class _UploadMaterialScreenState extends ConsumerState<UploadMaterialScreen> {
             ),
           ),
           _Field(
+            label: 'Share with',
+            hint: 'Pick whole courses to reach every student enrolled in them - even a course with no batch - '
+                'and/or specific batches.',
+            child: _audiencePicker(palette),
+          ),
+          _Field(
             label: 'Who sees this',
             hint: _visibility == StudyMaterialVisibility.all
-                ? 'Everyone in this batch will see it.'
-                : 'Only the students you pick will see it. The rest of the batch will not know '
-                    'it exists.',
+                ? 'Everyone in the courses and batches above will see it.'
+                : 'Only the students you pick will see it. The rest will not know it exists.',
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -420,86 +449,169 @@ class _UploadMaterialScreenState extends ConsumerState<UploadMaterialScreen> {
     );
   }
 
-  /// Explains the audio default rather than leaving it to look like a bug when the control moves
-  /// on its own.
-  /// Chooses which students a restricted material goes to.
-  ///
-  /// Sourced from the batch roster rather than the course: a material belongs to one batch, and
-  /// naming someone outside it grants nothing - the server drops them.
-  Widget _studentPicker(AppPalette palette) {
-    final rosterAsync = ref.watch(batchMembersProvider(widget.summary.batchId));
-    final studentsAsync = widget.summary.courseId == null
-        ? const AsyncValue<List<StudentSummary>>.data([])
-        : ref.watch(studentsForCourseProvider(widget.summary.courseId!));
+  /// Everyone the chosen courses and batches reach, by name: the students enrolled in a chosen course
+  /// plus the members of a chosen batch. What a file can be narrowed to - naming anyone outside the audience
+  /// grants nothing, the server drops them.
+  Future<List<StudentSummary>> _audienceStudents() async {
+    final batches = ref.read(materialBatchesProvider).valueOrNull ?? const <BatchMaterialSummary>[];
+    final chosenBatches = batches.where((b) => _batchIds.contains(b.batchId)).toList();
 
-    return rosterAsync.when(
-      loading: () => LinearProgressIndicator(
-          minHeight: 2,
-          backgroundColor: palette.surfaceHigh,
-          color: palette.violet),
-      error: (e, _) => Text("Couldn't load this batch's students.",
-          style: TextStyle(fontSize: AppType.sm, color: palette.notPaid)),
-      data: (memberIds) {
-        final members = memberIds.toSet();
-        final roster = (studentsAsync.valueOrNull ?? const <StudentSummary>[])
-            .where((s) => members.contains(s.membershipId))
-            .toList();
-
-        if (roster.isEmpty) {
-          return Text(
-            'Nobody is in this batch yet, so there is no one to pick. Add students to the '
-            'batch first.',
-            style: TextStyle(
-                fontSize: AppType.sm, color: palette.textFaint, height: 1.4),
-          );
+    // Names come from every course involved; who is actually in the audience is decided below.
+    final courseIdsToRead = <String>{..._courseIds, for (final b in chosenBatches) ...b.courseIds};
+    final byId = <String, StudentSummary>{};
+    final inChosenCourse = <String>{};
+    for (final courseId in courseIdsToRead) {
+      try {
+        final students = await ref.read(studentsForCourseProvider(courseId).future);
+        for (final student in students) {
+          byId.putIfAbsent(student.membershipId, () => student);
+          if (_courseIds.contains(courseId)) inChosenCourse.add(student.membershipId);
         }
+      } catch (_) {
+        // A course whose student list the caller may not read contributes nobody to pick from.
+      }
+    }
+    final audience = <String>{...inChosenCourse};
+    for (final batchId in _batchIds) {
+      try {
+        audience.addAll(await ref.read(batchMembersProvider(batchId).future));
+      } catch (_) {}
+    }
+    return [for (final id in audience) if (byId[id] != null) byId[id]!];
+  }
 
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            PickerTile(
-              icon: Icons.people_outline,
-              value: _studentIds.isEmpty
-                  ? null
-                  : roster
-                      .where((s) => _studentIds.contains(s.membershipId))
-                      .map((s) => s.fullName)
-                      .join(', '),
-              placeholder: 'Pick the students',
-              accent: palette.violet,
-              trailing: _studentIds.isEmpty ? 'Select' : 'Edit',
-              onTap: () async {
-                final picked = await showPeoplePickerSheet(
-                  context: context,
-                  title: 'Who gets this file',
-                  people: roster
-                      .map((s) => PickablePerson(
-                            id: s.membershipId,
-                            name: s.fullName,
-                            subtitle: '@${s.username}',
-                          ))
-                      .toList(),
-                  initiallySelected: _studentIds,
-                  accentColor: palette.violet,
-                );
-                if (picked == null) return;
-                setState(() {
-                  _studentIds
-                    ..clear()
-                    ..addAll(picked);
-                });
-              },
-            ),
-            if (_studentIds.isEmpty) ...[
-              const SizedBox(height: AppSpacing.xs),
-              Text(
-                'Pick at least one student, or switch back to the whole batch.',
-                style: TextStyle(fontSize: AppType.sm, color: palette.notPaid),
-              ),
-            ],
-          ],
-        );
-      },
+  /// Chooses which students a restricted material goes to, out of everyone the audience reaches.
+  Widget _studentPicker(AppPalette palette) {
+    final noAudience = _courseIds.isEmpty && _batchIds.isEmpty;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        PickerTile(
+          icon: Icons.people_outline,
+          value: _studentIds.isEmpty
+              ? null
+              : '${_studentIds.length} student${_studentIds.length == 1 ? '' : 's'} selected',
+          placeholder: noAudience ? 'Pick courses or batches first' : 'Pick the students',
+          accent: palette.violet,
+          trailing: _studentIds.isEmpty ? 'Select' : 'Edit',
+          onTap: noAudience
+              ? null
+              : () async {
+                  final students = await _audienceStudents();
+                  if (!mounted) return;
+                  final picked = await showPeoplePickerSheet(
+                    context: context,
+                    title: 'Who gets this file',
+                    emptyLabel: 'Nobody is in the courses or batches you picked yet.',
+                    people: students
+                        .map((s) => PickablePerson(
+                              id: s.membershipId,
+                              name: s.fullName,
+                              subtitle: '@${s.username}',
+                            ))
+                        .toList(),
+                    initiallySelected: _studentIds,
+                    accentColor: palette.violet,
+                  );
+                  if (picked == null) return;
+                  setState(() {
+                    _studentIds
+                      ..clear()
+                      ..addAll(picked);
+                  });
+                },
+        ),
+        if (_studentIds.isEmpty) ...[
+          const SizedBox(height: AppSpacing.xs),
+          Text(
+            'Pick at least one student, or switch back to everyone.',
+            style: TextStyle(fontSize: AppType.sm, color: palette.notPaid),
+          ),
+        ],
+      ],
+    );
+  }
+
+  String _namesOf(Iterable<String> ids, String Function(String id) nameOf) =>
+      ids.map(nameOf).join(', ');
+
+  String _courseName(String id, List<Course> courses) {
+    for (final c in courses) {
+      if (c.id == id) return c.name;
+    }
+    for (final t in widget.existing?.targets ?? const <MaterialTarget>[]) {
+      if (t.isCourse && t.id == id) return t.name;
+    }
+    if (widget.course?.courseId == id) return widget.course!.courseName;
+    return 'Course';
+  }
+
+  String _batchName(String id, List<BatchMaterialSummary> batches) {
+    for (final b in batches) {
+      if (b.batchId == id) return b.batchName;
+    }
+    for (final t in widget.existing?.targets ?? const <MaterialTarget>[]) {
+      if (!t.isCourse && t.id == id) return t.name;
+    }
+    if (widget.batch?.batchId == id) return widget.batch!.batchName;
+    return 'Batch';
+  }
+
+  /// Who the file goes to: whole courses and/or batches. Courses reach every student enrolled in them,
+  /// batches reach the students in them.
+  Widget _audiencePicker(AppPalette palette) {
+    final courses = ref.watch(coursesForFeatureProvider(FeatureKeys.syllabusEdit)).valueOrNull ?? const <Course>[];
+    final batches = ref.watch(materialBatchesProvider).valueOrNull ?? const <BatchMaterialSummary>[];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        PickerTile(
+          icon: Icons.menu_book_outlined,
+          value: _courseIds.isEmpty ? null : _namesOf(_courseIds, (id) => _courseName(id, courses)),
+          placeholder: 'Whole courses (every enrolled student)',
+          accent: palette.primary,
+          trailing: _courseIds.isEmpty ? 'Select' : 'Edit',
+          onTap: () async {
+            final picked = await showAppMultiSelectSheet<Course>(
+              context: context,
+              title: 'Share with whole courses',
+              options: courses.where((c) => c.isActive || _courseIds.contains(c.id)).toList(),
+              labelOf: (c) => c.name,
+              initialSelection: courses.where((c) => _courseIds.contains(c.id)).toList(),
+            );
+            if (picked == null) return;
+            setState(() {
+              _courseIds
+                ..clear()
+                ..addAll(picked.map((c) => c.id));
+            });
+          },
+        ),
+        const SizedBox(height: AppSpacing.sm),
+        PickerTile(
+          icon: Icons.groups_outlined,
+          value: _batchIds.isEmpty ? null : _namesOf(_batchIds, (id) => _batchName(id, batches)),
+          placeholder: 'Specific batches',
+          accent: palette.gold,
+          trailing: _batchIds.isEmpty ? 'Select' : 'Edit',
+          onTap: () async {
+            final picked = await showAppMultiSelectSheet<BatchMaterialSummary>(
+              context: context,
+              title: 'Share with batches',
+              options: batches,
+              labelOf: (b) => '${b.batchName} · ${b.coursesLabel}',
+              initialSelection: batches.where((b) => _batchIds.contains(b.batchId)).toList(),
+            );
+            if (picked == null) return;
+            setState(() {
+              _batchIds
+                ..clear()
+                ..addAll(picked.map((b) => b.batchId));
+            });
+          },
+        ),
+      ],
     );
   }
 

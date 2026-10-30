@@ -258,7 +258,7 @@ Study Material is complete as of `ac8db0c`: per-student visibility, cross-batch 
 Image libraries, playlists (drag-reorder, repeat a song, per-entry actions), a file viewer, and a
 practice player with tempo/volume arcs, loop and multi-segment trims saved per person per track.
 
-Suites (re-run 2026-10-24): **462 backend tests** (monolith) + **9** in `common`; Flutter **298** in `NEST_FE`;
+Suites (re-run 2026-10-30): **565 backend tests** (monolith) + **9** in `common`; Flutter **327** in `NEST_FE`;
 **23** in `NEST_ADMIN`.
 
 **Cleanup done 2026-10-24:** the unbuilt microservice split (`gateway/`, 11 `services/*`, `infra/`), the
@@ -323,6 +323,37 @@ accounts; `academy_bank_accounts.merchant_id` already exists for HQ to record on
 Route enabled on the Razorpay account. The mobile (`razorpay_flutter`) path compiles into the app but has not
 been run on a device. Paying the same fee in two tabs posts two payments (the ledger shows a credit).
 `fee_transactions` is append-only (DB trigger): undo a test row with a reversing entry, never a DELETE.
+
+## Multi-course batches, material audiences, course moves (Oct 2026)
+
+Migrations **V69-V71**. These change rules that used to be simple:
+
+- **A batch can span several courses** (Basic + Intermediate + Advanced learning together), Regular or Temporary.
+  `batches.course_id` stays the *primary* course; `batch_courses` lists every course, primary included. **Never use
+  `batch.getCourseId()` for a permission or for "is this batch on course X"** - use `batch.allCourseIds()` /
+  `coversCourse()`. `BatchRepository.findByCourseId(In)` already match any of a batch's courses (and de-duplicate), so
+  every course filter lists the batch under each of its courses.
+- **Permission rule:** *seeing, marking or working inside* a multi-course batch needs the feature on **at least one**
+  of its courses (`CourseFeatureGuard.assertBatchAccess` / `batchAccessible` / `assertAnyOfCourses`); *changing* it
+  (its courses, status, deleting) needs it on **every** one (`assertAllCourses`). A trainer sees only the **students of
+  the courses they hold** - `StudentBatchCourses.inBatch` says which of a batch's courses a student holds (no
+  enrolment in any of them is treated as all, so rules fail safe). `GET /batches/{id}/roster` returns
+  `{students, hiddenCount}`; saving a batch never removes students the editor could not see. The fix for "I need to mark
+  the other course too" is the admin mapping that course to the trainer.
+- **One Regular batch per course per student** is checked on the student's *own* courses within each batch. Temporary
+  batches stay exempt.
+- **Study material is shared with an audience**, not one batch: `study_material_targets` holds courses (every actively
+  enrolled student, in a batch or not) and/or batches; `study_materials.batch_id` is only the "home batch" and is
+  nullable. Manage = SYLLABUS_EDIT on every course reached (a whole-course target also needs the caller not limited to
+  some batches of it); open-as-staff = on at least one; reader = in the audience (and named, if narrowed to chosen
+  students). `POST /study-materials`, `GET /courses/{id}/study-materials`, `GET /study-materials/courses`; each
+  material carries `targets` and `canManage`.
+- **Scheduled course moves** (`student_course_changes`, `CourseChangeService`): Basic -> Advanced from the 1st of next
+  month. Scheduling changes nothing; `CourseChangeJob` applies due moves at 00:20 and on startup (before the 02:00 fee
+  run): the new `course_map` row goes active at the course's default fee, the old one inactive, batches swapped.
+  `FeeSlipService` now bills only **active** enrolments - before this an inactive one was still billed.
+- **Not done:** Event and Broadcast `BY_COURSE` audiences resolve through batches, so an announcement to "Advanced"
+  also reaches the Basic students who share a combined batch; it should resolve through `course_map`.
 
 ## QA round (Oct 2026)
 

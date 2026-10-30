@@ -2,6 +2,7 @@ package com.nest.app.enrolment.controller;
 
 import com.nest.app.enrolment.dto.BatchMemberSummaryResponse;
 import com.nest.app.enrolment.dto.BatchResponse;
+import com.nest.app.enrolment.dto.BatchRosterResponse;
 import com.nest.app.enrolment.dto.CreateBatchRequest;
 import com.nest.app.enrolment.dto.UpdateBatchRequest;
 import com.nest.app.enrolment.entity.BatchStatus;
@@ -94,6 +95,13 @@ public class BatchController {
     @GetMapping("/batches/{id}/members/summary")
     public List<BatchMemberSummaryResponse> listMemberSummaries(@PathVariable UUID id) {
         return batchService.listMemberSummaries(id);
+    }
+
+    /** The roster as the caller may see it, plus how many students are hidden because they belong to a
+     * course the caller does not hold. */
+    @GetMapping("/batches/{id}/roster")
+    public BatchRosterResponse roster(@PathVariable UUID id) {
+        return batchService.getRoster(id);
     }
 
     @DeleteMapping("/batches/{id}/members")

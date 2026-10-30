@@ -56,7 +56,10 @@ public record ScheduleEntryResponse(
         /** The batch's online-class link, so a Join button can sit on the row. Null for in-person batches. */
         String meetingLink,
         /** When someone last pressed Remind on this session, or null if nobody has. */
-        java.time.Instant lastRemindedAt
+        java.time.Instant lastRemindedAt,
+        /** Every course the batch spans (a batch can cover Basic + Intermediate + Advanced), the displayed
+         * {@link #courseName} among them. Just that one for an ordinary batch. */
+        List<String> batchCourseNames
 ) {
     public record PersonRef(UUID membershipId, String name) {
     }

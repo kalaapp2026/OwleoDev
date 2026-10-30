@@ -1,6 +1,7 @@
 package com.nest.app.curriculum.controller;
 
 import com.nest.app.curriculum.dto.BatchMaterialSummary;
+import com.nest.app.curriculum.dto.CourseMaterialSummary;
 import com.nest.app.curriculum.dto.StudyMaterialResponse;
 import com.nest.app.curriculum.dto.UpdateStudyMaterialRequest;
 import com.nest.app.curriculum.entity.StudyMaterialPermission;
@@ -49,6 +50,13 @@ public class StudyMaterialController {
         return studyMaterialService.batchSummaries();
     }
 
+    /** The home screen's courses - every course whose files this caller can browse as a whole.
+     * Ungated for the same reason as the batch list. */
+    @GetMapping("/study-materials/courses")
+    public List<CourseMaterialSummary> courseSummaries() {
+        return studyMaterialService.courseSummaries();
+    }
+
     /** Deliberately not gated by @RequiresFeature: a student reading their own batch's material
      * holds no course grants at all. The service checks batch membership instead. */
     @GetMapping("/batches/{batchId}/study-materials")
@@ -56,18 +64,45 @@ public class StudyMaterialController {
         return studyMaterialService.listForBatch(batchId);
     }
 
-    @PostMapping("/batches/{batchId}/study-materials")
+    /** One course's files, for the course's own page. Ungated like the batch list: a student reads the
+     * files of a course they are enrolled in. */
+    @GetMapping("/courses/{courseId}/study-materials")
+    public List<StudyMaterialResponse> listForCourse(@PathVariable UUID courseId) {
+        return studyMaterialService.listForCourse(courseId);
+    }
+
+    /**
+     * Share a file with an audience: any mix of whole courses ({@code courseIds}) and batches
+     * ({@code batchIds}).
+     */
+    @PostMapping("/study-materials")
     @RequiresFeature(FeatureKey.SYLLABUS_EDIT)
     public StudyMaterialResponse upload(
-            @PathVariable UUID batchId,
             @RequestParam("file") MultipartFile file,
+            @RequestParam(required = false) Set<UUID> courseIds,
+            @RequestParam(required = false) Set<UUID> batchIds,
             @RequestParam(required = false) String title,
             @RequestParam(required = false) String description,
             @RequestParam(required = false) StudyMaterialPermission permission,
             @RequestParam(required = false) StudyMaterialVisibility visibility,
             // Multipart, so the audience arrives as repeated form fields rather than a JSON array.
             @RequestParam(required = false) Set<UUID> studentIds) {
-        return studyMaterialService.upload(batchId, file, title, description, permission,
+        return studyMaterialService.upload(batchIds, courseIds, file, title, description, permission,
+                visibility, studentIds);
+    }
+
+    /** The original, batch-first way in - shares with just this one batch. */
+    @PostMapping("/batches/{batchId}/study-materials")
+    @RequiresFeature(FeatureKey.SYLLABUS_EDIT)
+    public StudyMaterialResponse uploadToBatch(
+            @PathVariable UUID batchId,
+            @RequestParam("file") MultipartFile file,
+            @RequestParam(required = false) String title,
+            @RequestParam(required = false) String description,
+            @RequestParam(required = false) StudyMaterialPermission permission,
+            @RequestParam(required = false) StudyMaterialVisibility visibility,
+            @RequestParam(required = false) Set<UUID> studentIds) {
+        return studyMaterialService.upload(Set.of(batchId), Set.of(), file, title, description, permission,
                 visibility, studentIds);
     }
 

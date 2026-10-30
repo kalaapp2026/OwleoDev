@@ -73,7 +73,9 @@ class AttendanceServiceTest {
         attendanceService = new AttendanceService(attendanceRepository, classInstanceRepository, batchRepository, courseRepository, courseFeatureGuard,
                 org.mockito.Mockito.mock(com.nest.app.notification.service.NotificationTriggers.class),
                 org.mockito.Mockito.mock(com.nest.app.enrolment.repository.BatchMemberRepository.class),
-                org.mockito.Mockito.mock(com.nest.app.identity.repository.UserRepository.class));
+                org.mockito.Mockito.mock(com.nest.app.identity.repository.UserRepository.class),
+                new com.nest.app.enrolment.service.StudentBatchCourses(
+                        org.mockito.Mockito.mock(com.nest.app.identity.repository.CourseMapRepository.class)));
         // lenient: only submitSheet/forClassInstance resolve via findById - historyForStudent and
         // detailedHistory resolve via findAllById instead, so these two are unused there.
         lenient().when(classInstanceRepository.findById(classInstanceId))
@@ -118,7 +120,7 @@ class AttendanceServiceTest {
         newService();
         actingAs(Role.TRAINER);
         doThrow(new ForbiddenException("nope")).when(courseFeatureGuard)
-                .assertCourseFeature(courseId, FeatureKey.ATTENDANCE);
+                .assertBatchAccess(Set.of(courseId), batchId, FeatureKey.ATTENDANCE);
 
         var sheet = new SubmitAttendanceSheetRequest(List.of(new AttendanceEntry(membershipId, AttendanceStatus.ABSENT, null)));
 
@@ -164,7 +166,7 @@ class AttendanceServiceTest {
     void forClassInstanceIsRejectedWhenCallerLacksAttendanceOnThisCourse() {
         newService();
         actingAs(Role.TRAINER);
-        doThrow(new ForbiddenException("nope")).when(courseFeatureGuard).assertCourseFeature(courseId, FeatureKey.ATTENDANCE);
+        doThrow(new ForbiddenException("nope")).when(courseFeatureGuard).assertBatchAccess(Set.of(courseId), batchId, FeatureKey.ATTENDANCE);
 
         assertThatThrownBy(() -> attendanceService.forClassInstance(classInstanceId))
                 .isInstanceOf(ForbiddenException.class);
@@ -200,7 +202,7 @@ class AttendanceServiceTest {
         when(classInstanceRepository.findAllById(any()))
                 .thenReturn(List.of(ClassInstance.builder().id(classInstanceId).batchId(batchId).build()));
         when(batchRepository.findAllById(any())).thenReturn(List.of(Batch.builder().id(batchId).courseId(courseId).build()));
-        when(courseFeatureGuard.hasCourseFeature(courseId, FeatureKey.ATTENDANCE)).thenReturn(false);
+        when(courseFeatureGuard.batchAccessible(Set.of(courseId), batchId, FeatureKey.ATTENDANCE)).thenReturn(false);
 
         assertThat(attendanceService.historyForStudent(membershipId)).isEmpty();
     }
@@ -215,7 +217,7 @@ class AttendanceServiceTest {
         when(classInstanceRepository.findAllById(any()))
                 .thenReturn(List.of(ClassInstance.builder().id(classInstanceId).batchId(batchId).build()));
         when(batchRepository.findAllById(any())).thenReturn(List.of(Batch.builder().id(batchId).courseId(courseId).build()));
-        when(courseFeatureGuard.hasCourseFeature(courseId, FeatureKey.ATTENDANCE)).thenReturn(true);
+        when(courseFeatureGuard.batchAccessible(Set.of(courseId), batchId, FeatureKey.ATTENDANCE)).thenReturn(true);
 
         assertThat(attendanceService.historyForStudent(membershipId)).hasSize(1);
     }
@@ -246,7 +248,7 @@ class AttendanceServiceTest {
                 List.of(ClassInstance.builder().id(classInstanceId).batchId(batchId).date(java.time.LocalDate.now()).build()));
         when(batchRepository.findAllById(any())).thenReturn(List.of(Batch.builder().id(batchId).courseId(courseId).build()));
         when(courseRepository.findAllById(any())).thenReturn(List.of(Course.builder().id(courseId).build()));
-        when(courseFeatureGuard.hasCourseFeature(courseId, FeatureKey.ATTENDANCE)).thenReturn(false);
+        when(courseFeatureGuard.batchAccessible(Set.of(courseId), batchId, FeatureKey.ATTENDANCE)).thenReturn(false);
 
         assertThat(attendanceService.detailedHistory(membershipId, null)).isEmpty();
     }
@@ -262,7 +264,7 @@ class AttendanceServiceTest {
                 List.of(ClassInstance.builder().id(classInstanceId).batchId(batchId).date(java.time.LocalDate.now()).build()));
         when(batchRepository.findAllById(any())).thenReturn(List.of(Batch.builder().id(batchId).courseId(courseId).build()));
         when(courseRepository.findAllById(any())).thenReturn(List.of(Course.builder().id(courseId).build()));
-        when(courseFeatureGuard.hasCourseFeature(courseId, FeatureKey.ATTENDANCE)).thenReturn(true);
+        when(courseFeatureGuard.batchAccessible(Set.of(courseId), batchId, FeatureKey.ATTENDANCE)).thenReturn(true);
 
         assertThat(attendanceService.detailedHistory(membershipId, null)).hasSize(1);
     }

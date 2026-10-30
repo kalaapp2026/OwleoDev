@@ -67,7 +67,7 @@ class StudentMaterialStrip extends ConsumerWidget {
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: palette.text)),
                     const SizedBox(height: 2),
-                    Text([if (courseByBatch[m.batchId] != null) courseByBatch[m.batchId]!, m.fileType.label].join(' · '),
+                    Text([if (m.targets.isNotEmpty) m.targets.first.name else if (courseByBatch[m.batchId] != null) courseByBatch[m.batchId]!, m.fileType.label].join(' · '),
                         style: TextStyle(fontSize: 10, color: palette.textFaint)),
                   ]),
                 ),

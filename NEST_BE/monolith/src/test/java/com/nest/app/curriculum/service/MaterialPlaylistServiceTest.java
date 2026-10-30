@@ -95,7 +95,7 @@ class MaterialPlaylistServiceTest {
         return new StudyMaterialResponse(id, UUID.randomUUID(), "Track", null,
                 "/uploads/t.mp3", "t.mp3", "audio/mpeg", StudyMaterialType.AUDIO, 100,
                 StudyMaterialPermission.VIEW_ONLY, StudyMaterialVisibility.ALL, Set.of(),
-                UUID.randomUUID(), "Meera", Instant.now());
+                UUID.randomUUID(), "Meera", Instant.now(), List.of(), false);
     }
 
     /** Wires the reads that every path through get() performs. */

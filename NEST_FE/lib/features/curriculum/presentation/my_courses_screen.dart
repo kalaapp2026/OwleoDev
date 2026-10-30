@@ -94,7 +94,7 @@ class _MyCoursesState extends ConsumerState<MyCoursesScreen> {
       rows: [
         for (final c in data.courses)
           () {
-            final batches = data.batches.where((b) => b.courseId == c.id).toList();
+            final batches = data.batches.where((b) => b.coversCourse(c.id)).toList();
             final marked = records.where((r) => r.courseId == c.id).toList();
             final present = marked.where((r) => r.status == AttendanceStatus.present).length;
             return [
@@ -183,7 +183,7 @@ class _MyCoursesState extends ConsumerState<MyCoursesScreen> {
                         padding: const EdgeInsets.only(bottom: 12),
                         child: _CourseCard(
                           course: c,
-                          batches: data.batches.where((b) => b.courseId == c.id).toList(),
+                          batches: data.batches.where((b) => b.coversCourse(c.id)).toList(),
                           records: records.where((r) => r.courseId == c.id).toList(),
                           joined: joined,
                         ),
@@ -606,9 +606,9 @@ class _CourseDetailState extends ConsumerState<_CourseDetail> {
     final total = widget.records.length;
     final pct = total == 0 ? 0.0 : present / total * 100;
     final ringColor = pct >= 85 ? palette.paidManual : pct >= 70 ? palette.partial : palette.notPaid;
-    final materials = ref.watch(materialBatchesProvider).valueOrNull ?? const <BatchMaterialSummary>[];
-    final batchIds = widget.batches.map((b) => b.id).toSet();
-    final fileCount = materials.where((m) => batchIds.contains(m.batchId)).fold<int>(0, (a, m) => a + m.fileCount);
+    // Every file that reaches this course - shared with all of it, or with a batch that covers it.
+    final courseMaterials = ref.watch(materialCoursesProvider).valueOrNull ?? const <CourseMaterialSummary>[];
+    final fileCount = courseMaterials.where((c) => c.courseId == course.id).fold<int>(0, (a, c) => a + c.fileCount);
 
     return DraggableScrollableSheet(
       expand: false,

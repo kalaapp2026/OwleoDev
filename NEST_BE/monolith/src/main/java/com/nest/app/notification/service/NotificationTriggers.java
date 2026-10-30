@@ -100,7 +100,9 @@ public class NotificationTriggers {
     public ReminderReach classReminder(ClassInstance instance) {
         Batch batch = batchRepository.findById(instance.getBatchId()).orElse(null);
         if (batch == null) return new ReminderReach(0, 0);
-        String courseName = courseRepository.findById(batch.getCourseId()).map(Course::getName).orElse("your course");
+        String courseName = courseRepository.findAllById(batch.allCourseIds()).stream()
+                .map(Course::getName).sorted().collect(java.util.stream.Collectors.joining(", "));
+        if (courseName.isBlank()) courseName = "your course";
 
         Set<UUID> studentUserIds = new java.util.HashSet<>(batchStudentUserIds(batch.getId()));
         Collection<UUID> trainerMembershipIds = instance.getSubstituteTrainerMembershipId() != null

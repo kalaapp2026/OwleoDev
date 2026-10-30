@@ -84,7 +84,7 @@ public class EventService {
         if (audienceType == EventAudienceType.BY_COURSE) {
             targetCourseIds.addAll(courseIds);
         } else if (audienceType == EventAudienceType.BY_BATCH && !batchIds.isEmpty()) {
-            batchRepository.findAllById(batchIds).forEach(b -> targetCourseIds.add(b.getCourseId()));
+            batchRepository.findAllById(batchIds).forEach(b -> targetCourseIds.addAll(b.allCourseIds()));
         }
         targetCourseIds.forEach(cid -> courseFeatureGuard.assertCourseFeature(cid, FeatureKey.EVENT_MANAGEMENT));
     }
@@ -216,7 +216,7 @@ public class EventService {
                     yield myBatchIds.stream().anyMatch(e.getBatchIds()::contains);
                 }
                 yield batchRepository.findAllById(myBatchIds).stream()
-                        .anyMatch(b -> e.getCourseIds().contains(b.getCourseId()));
+                        .anyMatch(b -> b.allCourseIds().stream().anyMatch(e.getCourseIds()::contains));
             }
         };
     }

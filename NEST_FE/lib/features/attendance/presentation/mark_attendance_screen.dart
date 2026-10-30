@@ -140,12 +140,17 @@ class _MarkAttendanceScreenState extends ConsumerState<MarkAttendanceScreen> {
       body: rosterAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => _error(palette, e),
-        data: (roster) => existingAsync.when(
+        data: (rosterData) => existingAsync.when(
           loading: () => const Center(child: CircularProgressIndicator()),
           error: (e, _) => _error(palette, e),
           data: (existing) {
             _seedFrom(existing);
 
+            final roster = rosterData.students;
+            // Tag each name with its course when the batch spans more than one, so a mixed class reads
+            // at a glance. An ordinary single-course batch looks exactly as it always did.
+            final showCourse = entry.batchCourseNames.length > 1 ||
+                roster.map((s) => s.courseId).whereType<String>().toSet().length > 1;
             final q = _query.trim().toLowerCase();
             final visible = q.isEmpty
                 ? roster
@@ -218,6 +223,7 @@ class _MarkAttendanceScreenState extends ConsumerState<MarkAttendanceScreen> {
                                 isAbsent: _absentIds.contains(student.membershipId),
                                 enabled: _canMark,
                                 accent: meta.color,
+                                showCourse: showCourse,
                                 onToggle: () => setState(() {
                                   if (!_absentIds.remove(student.membershipId)) {
                                     _absentIds.add(student.membershipId);
@@ -233,6 +239,7 @@ class _MarkAttendanceScreenState extends ConsumerState<MarkAttendanceScreen> {
                               ),
                             ),
                       ],
+                      if (rosterData.hiddenCount > 0) _hiddenNote(palette, rosterData.hiddenCount),
                     ],
                   ),
                 ),
@@ -253,6 +260,37 @@ class _MarkAttendanceScreenState extends ConsumerState<MarkAttendanceScreen> {
               ],
             );
           },
+        ),
+      ),
+    );
+  }
+
+  /// A batch can span several courses and a trainer sees only the students of the courses they hold.
+  /// This says how many are not shown - a count, never names - and how to see them.
+  Widget _hiddenNote(AppPalette palette, int count) {
+    return Padding(
+      padding: const EdgeInsets.only(top: AppSpacing.md),
+      child: Container(
+        padding: const EdgeInsets.all(AppSpacing.lg),
+        decoration: BoxDecoration(
+          color: palette.surfaceRaised,
+          borderRadius: AppRadii.all(AppRadii.xl),
+          border: Border.all(color: palette.borderSoft),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(Icons.visibility_off_outlined, size: 15, color: palette.textMuted),
+            const SizedBox(width: AppSpacing.md),
+            Expanded(
+              child: Text(
+                '$count student${count == 1 ? '' : 's'} from other courses '
+                '${count == 1 ? 'is' : 'are'} not shown. If you take their attendance too, ask the admin to '
+                'map that course to you.',
+                style: TextStyle(fontSize: AppType.sm, color: palette.textMuted, height: 1.45),
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -405,6 +443,7 @@ class _StudentRow extends StatelessWidget {
     required this.isAbsent,
     required this.enabled,
     required this.accent,
+    required this.showCourse,
     required this.onToggle,
     required this.onOpenProfile,
   });
@@ -413,6 +452,9 @@ class _StudentRow extends StatelessWidget {
   final bool isAbsent;
   final bool enabled;
   final Color accent;
+
+  /// Whether to tag the name with the student's course - on for a batch that spans several.
+  final bool showCourse;
   final VoidCallback onToggle;
   final VoidCallback onOpenProfile;
 
@@ -439,13 +481,27 @@ class _StudentRow extends StatelessWidget {
                 name: student.fullName, seed: student.membershipId, size: 34),
             const SizedBox(width: AppSpacing.md),
             Expanded(
-              child: Text(student.fullName,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                      fontSize: AppType.xxl,
-                      fontWeight: AppType.semi,
-                      color: palette.text)),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(student.fullName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                          fontSize: AppType.xxl,
+                          fontWeight: AppType.semi,
+                          color: palette.text)),
+                  if (showCourse && student.courseName != null)
+                    Text(student.courseName!,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                            fontSize: AppType.xs,
+                            fontWeight: AppType.semi,
+                            color: accent)),
+                ],
+              ),
             ),
             const SizedBox(width: AppSpacing.sm),
             Icon(

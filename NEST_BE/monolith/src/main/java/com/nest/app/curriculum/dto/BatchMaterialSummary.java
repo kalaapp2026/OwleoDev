@@ -13,6 +13,9 @@ public record BatchMaterialSummary(
         com.nest.app.curriculum.entity.CourseCategory courseCategory,
         com.nest.app.enrolment.entity.BatchStatus batchStatus,
         int fileCount,
+        /** Every course the batch spans, primary first, with their names alongside (same order). */
+        java.util.List<UUID> courseIds,
+        java.util.List<String> courseNames,
         /** Null when nothing has been shared yet - distinct from an old date, and the list says
          * "No files yet" rather than showing a stale timestamp. */
         Instant lastUploadedAt

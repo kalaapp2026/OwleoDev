@@ -15,5 +15,8 @@ public interface BatchTrainerRepository extends JpaRepository<BatchTrainer, Batc
      * queries for trainer names. */
     List<BatchTrainer> findByBatchIdIn(Collection<UUID> batchIds);
 
+    /** The batches a trainer is on - study material is open to whoever teaches a batch it is aimed at. */
+    List<BatchTrainer> findByTrainerMembershipId(UUID trainerMembershipId);
+
     void deleteByBatchId(UUID batchId);
 }

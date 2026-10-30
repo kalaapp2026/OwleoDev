@@ -9,12 +9,16 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Editing a batch. Neither the course nor the batch type is changeable: both determine how the
- * batch's fees and schedule were set up, and switching either after students are enrolled would
- * silently re-scope history that has already been billed and attended against.
+ * Editing a batch. The batch type is not changeable: it determines how the batch's schedule and
+ * rules were set up, and switching it after students are enrolled would silently re-scope history
+ * that has already been attended against.
  */
 public record UpdateBatchRequest(
         @NotBlank String name,
+        /** The courses the batch spans, the first being its primary. Null leaves them as they are, which
+         * is what a client that predates multi-course batches sends. Adding a course needs the batch
+         * permission on it; dropping one is refused while a student of that course is still in the batch. */
+        List<UUID> courseIds,
         String description,
         List<UUID> trainerMembershipIds,
         LocalDate startDate,

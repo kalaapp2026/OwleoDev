@@ -40,12 +40,18 @@ class BatchMemberSummary {
   final String fullName;
   final String? profileImageUrl;
 
+  /// Which of the batch's courses this student is on - null if the server could not resolve it.
+  final String? courseId;
+  final String? courseName;
+
   const BatchMemberSummary({
     required this.membershipId,
     required this.userId,
     required this.username,
     required this.fullName,
     required this.profileImageUrl,
+    this.courseId,
+    this.courseName,
   });
 
   factory BatchMemberSummary.fromJson(Map<String, dynamic> json) => BatchMemberSummary(
@@ -54,6 +60,24 @@ class BatchMemberSummary {
         username: json['username'] as String,
         fullName: json['fullName'] as String,
         profileImageUrl: json['profileImageUrl'] as String?,
+        courseId: json['courseId'] as String?,
+        courseName: json['courseName'] as String?,
+      );
+}
+
+/// A batch's roster as the caller may see it. A batch can span several courses and a trainer sees
+/// only the students of the courses they hold; [hiddenCount] is how many others are in the batch.
+class BatchRoster {
+  const BatchRoster({required this.students, required this.hiddenCount});
+
+  final List<BatchMemberSummary> students;
+  final int hiddenCount;
+
+  factory BatchRoster.fromJson(Map<String, dynamic> json) => BatchRoster(
+        students: ((json['students'] as List?) ?? const [])
+            .map((e) => BatchMemberSummary.fromJson(e as Map<String, dynamic>))
+            .toList(),
+        hiddenCount: (json['hiddenCount'] as num?)?.toInt() ?? 0,
       );
 }
 

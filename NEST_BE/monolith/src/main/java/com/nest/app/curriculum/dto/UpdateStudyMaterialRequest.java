@@ -19,6 +19,11 @@ public record UpdateStudyMaterialRequest(
         StudyMaterialVisibility visibility,
 
         /** Membership ids, honoured only when visibility is SELECTED. */
-        Set<UUID> studentIds
+        Set<UUID> studentIds,
+
+        /** Who it is for. Both null leaves the audience as it is (an older client); otherwise the pair is
+         * the complete new audience - at least one course or batch between them. */
+        Set<UUID> courseIds,
+        Set<UUID> batchIds
 ) {
 }

@@ -122,12 +122,17 @@ class _BatchListScreenState extends ConsumerState<BatchListScreen> {
 
     final filtered = all.where((b) {
       final course = coursesById[b.courseId];
-      if (_categoryFilter != null && course?.category != _categoryFilter) return false;
+      // A batch spanning several courses answers to a category if any of its courses is in it.
+      if (_categoryFilter != null &&
+          !b.courseIds.any((id) => coursesById[id]?.category == _categoryFilter)) {
+        return false;
+      }
       if (_pill == BatchPill.inactive && b.isActive) return false;
       if (_pill == BatchPill.regular && b.isTemporary) return false;
       if (_pill == BatchPill.temporary && !b.isTemporary) return false;
       if (query.isNotEmpty) {
-        final haystack = '${b.name} ${course?.name ?? ''}'.toLowerCase();
+        final names = b.courseIds.map((id) => coursesById[id]?.name ?? '').join(' ');
+        final haystack = '${b.name} ${names.trim().isEmpty ? (course?.name ?? '') : names}'.toLowerCase();
         if (!haystack.contains(query)) return false;
       }
       return true;
@@ -736,7 +741,7 @@ class _BatchRow extends StatelessWidget {
                         opacity: inactive ? 0.5 : 1,
                         child: Text.rich(
                           TextSpan(
-                            text: course?.name ?? 'Unlinked course',
+                            text: batch.courseNamesSummary ?? course?.name ?? 'Unlinked course',
                             style: TextStyle(
                               fontSize: AppType.smd,
                               fontWeight: AppType.medium,

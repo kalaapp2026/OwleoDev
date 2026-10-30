@@ -142,12 +142,15 @@ public class ScheduleFeedService {
         // A trainer given only some batches of a course sees only those batches' classes: the course
         // permission above says which course, this says which batches within it.
         Map<UUID, java.util.Optional<java.util.Set<UUID>>> scopeByCourse = new HashMap<>();
+        // A batch spanning several courses is in the feed once, through any visible course that has it
+        // within the batches the person was given.
         List<Batch> batches = batchRepository.findByCourseIdIn(coursesById.keySet()).stream()
                 .filter(b -> b.getStatus() == BatchStatus.ACTIVE)
                 .filter(b -> student
                         ? myBatchIds.contains(b.getId())
-                        : CourseFeatureGuard.inScope(
-                                scopeByCourse.computeIfAbsent(b.getCourseId(), courseFeatureGuard::batchScope), b.getId()))
+                        : b.allCourseIds().stream().filter(coursesById::containsKey).anyMatch(c ->
+                                CourseFeatureGuard.inScope(
+                                        scopeByCourse.computeIfAbsent(c, courseFeatureGuard::batchScope), b.getId())))
                 .toList();
         if (batches.isEmpty()) {
             return List.of();
@@ -190,19 +193,30 @@ public class ScheduleFeedService {
             rosterSizes.merge(member.getBatchId(), 1, Integer::sum);
         }
 
+        Map<UUID, String> courseNamesById = courseRepository
+                .findAllById(batches.stream().flatMap(b -> b.allCourseIds().stream()).collect(Collectors.toSet()))
+                .stream().collect(Collectors.toMap(Course::getId, Course::getName, (a, b) -> a));
+
         List<ScheduleEntryResponse> rows = new ArrayList<>();
         for (ClassInstance instance : instances) {
             Batch batch = batchesById.get(instance.getBatchId());
             if (batch == null) {
                 continue;
             }
-            Course course = coursesById.get(batch.getCourseId());
+            // The course shown for a multi-course batch: the one being filtered on, else its first visible one.
+            Course course = batch.allCourseIds().stream()
+                    .filter(c -> courseId != null && c.equals(courseId) && coursesById.containsKey(c))
+                    .findFirst()
+                    .or(() -> batch.allCourseIds().stream().filter(coursesById::containsKey).findFirst())
+                    .map(coursesById::get)
+                    .orElse(null);
             if (course == null) {
                 continue;
             }
             rows.add(toRow(instance, batch, course, trainerIdsByBatch, namesByMembership, partners,
                     markedInstanceIds.contains(instance.getId()),
-                    rosterSizes.getOrDefault(batch.getId(), 0)));
+                    rosterSizes.getOrDefault(batch.getId(), 0),
+                    batch.allCourseIds().stream().map(id -> courseNamesById.getOrDefault(id, "")).toList()));
         }
 
         rows.sort(Comparator.comparing(ScheduleEntryResponse::date)
@@ -215,7 +229,8 @@ public class ScheduleFeedService {
                                          Map<UUID, String> namesByMembership,
                                          Partners partners,
                                          boolean attendanceMarked,
-                                         int studentCount) {
+                                         int studentCount,
+                                         List<String> batchCourseNames) {
         List<ScheduleEntryResponse.PersonRef> regulars =
                 trainerIdsByBatch.getOrDefault(batch.getId(), List.of()).stream()
                         .map(id -> new ScheduleEntryResponse.PersonRef(id, namesByMembership.get(id)))
@@ -268,7 +283,7 @@ public class ScheduleFeedService {
                 course.getId(), course.getName(), course.getCategory(), course.getIconKey(),
                 teaching, swapped ? regulars : List.of(),
                 reason, movedTo, movedFrom, attendanceMarked, studentCount, batch.getMeetingLink(),
-                instance.getLastReminderAt());
+                instance.getLastReminderAt(), batchCourseNames);
     }
 
     /**

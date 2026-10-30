@@ -3,6 +3,7 @@ import 'package:nest_fe/core/design/time_picker_sheet.dart';
 import 'package:nest_fe/features/enrolment/data/batch.dart';
 
 void main() {
+  multiCourseBatchTests();
   group('ClockTime parsing', () {
     test('accepts HH:mm and HH:mm:ss', () {
       // The schedule API returns seconds; the batch form writes without them. Both have to land
@@ -189,6 +190,46 @@ void main() {
       expect(batch.trainers, isEmpty);
       expect(batch.studentCount, 0);
       expect(batch.isTemporary, isFalse);
+    });
+  });
+}
+
+void multiCourseBatchTests() {
+  Map<String, dynamic> json({List<Map<String, dynamic>>? courses}) => {
+        'id': 'b1',
+        'courseId': 'basic',
+        'name': 'Saturday',
+        'batchType': 'REGULAR',
+        'status': 'ACTIVE',
+        'courses': ?courses,
+      };
+
+  group('A batch spanning several courses', () {
+    final multi = Batch.fromJson(json(courses: [
+      {'id': 'basic', 'name': 'Guitar Basic'},
+      {'id': 'inter', 'name': 'Guitar Intermediate'},
+      {'id': 'adv', 'name': 'Guitar Advanced'},
+    ]));
+
+    test('lists every course, primary first', () {
+      expect(multi.courseIds, ['basic', 'inter', 'adv']);
+      expect(multi.isMultiCourse, isTrue);
+      expect(multi.courseNamesSummary, 'Guitar Basic, Guitar Intermediate, Guitar Advanced');
+    });
+
+    test('belongs under each of its courses in a course filter, and no other', () {
+      expect(multi.coversCourse('basic'), isTrue);
+      expect(multi.coversCourse('adv'), isTrue);
+      expect(multi.coversCourse('vocals'), isFalse);
+      expect(multi.coversCourse(null), isFalse);
+    });
+
+    test('an older server that sends no course list still has its one course', () {
+      final single = Batch.fromJson(json());
+      expect(single.courseIds, ['basic']);
+      expect(single.coversCourse('basic'), isTrue);
+      expect(single.isMultiCourse, isFalse);
+      expect(single.courseNamesSummary, isNull);
     });
   });
 }
